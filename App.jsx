@@ -3217,6 +3217,7 @@ function GlobalStyle() {
 /* ============================== AUTH SCREEN ============================== */
 
 function AuthScreen() {
+  const [theme, setTheme] = useState("dark");
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -3243,44 +3244,50 @@ function AuthScreen() {
   };
 
   return (
-    <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
-      <div className="logo-block">
-        <GrapplingMark opacity={0.14} />
-        <div className="brand-title" style={{ position: "relative" }}>KC Grappling Protocol</div>
+    <div className="app-shell" data-theme={theme}>
+      <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
+        <div className="logo-block">
+          <GrapplingMark opacity={0.14} />
+          <div className="brand-title" style={{ position: "relative" }}>KC Grappling Protocol</div>
+        </div>
+        <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>{mode === "signup" ? "Create Your Account" : "Sign In"}</div>
+        <p className="muted" style={{ marginBottom: 20 }}>
+          {mode === "signup" ? "Your own account, your own data, saved permanently and available on any device." : "Welcome back."}
+        </p>
+        <form onSubmit={submit}>
+          <label className="labeled-input">
+            <span><Mail size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Email</span>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+          </label>
+          <label className="labeled-input">
+            <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Password</span>
+            <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
+          </label>
+          {error && <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>{error}</div>}
+          {info && <div className="adjust-box" style={{ borderColor: "var(--green)", marginBottom: 12 }}>{info}</div>}
+          <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create Account" : "Sign In"}</button>
+        </form>
+        <button className="btn-ghost wide" onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setInfo(""); }}>
+          {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
+        </button>
       </div>
-      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>{mode === "signup" ? "Create Your Account" : "Sign In"}</div>
-      <p className="muted" style={{ marginBottom: 20 }}>
-        {mode === "signup" ? "Your own account, your own data, saved permanently and available on any device." : "Welcome back."}
-      </p>
-      <form onSubmit={submit}>
-        <label className="labeled-input">
-          <span><Mail size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Email</span>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-        </label>
-        <label className="labeled-input">
-          <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Password</span>
-          <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
-        </label>
-        {error && <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>{error}</div>}
-        {info && <div className="adjust-box" style={{ borderColor: "var(--green)", marginBottom: 12 }}>{info}</div>}
-        <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create Account" : "Sign In"}</button>
-      </form>
-      <button className="btn-ghost wide" onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(""); setInfo(""); }}>
-        {mode === "signup" ? "Already have an account? Sign in" : "New here? Create an account"}
-      </button>
+      <GlobalStyle />
     </div>
   );
 }
 
 function ConfigMissingScreen() {
   return (
-    <div className="pad" style={{ paddingTop: 60, maxWidth: 460, margin: "0 auto" }}>
-      <div className="program-title" style={{ fontSize: 20, marginBottom: 10 }}>Setup Needed</div>
-      <p className="muted">
-        This app needs a Supabase project connected before anyone can create an account. Add
-        VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as environment variables in your Vercel
-        project settings, then redeploy.
-      </p>
+    <div className="app-shell" data-theme="dark">
+      <div className="pad" style={{ paddingTop: 60, maxWidth: 460, margin: "0 auto" }}>
+        <div className="program-title" style={{ fontSize: 20, marginBottom: 10 }}>Setup Needed</div>
+        <p className="muted">
+          This app needs a Supabase project connected before anyone can create an account. Add
+          VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as environment variables in your Vercel
+          project settings, then redeploy.
+        </p>
+      </div>
+      <GlobalStyle />
     </div>
   );
 }
