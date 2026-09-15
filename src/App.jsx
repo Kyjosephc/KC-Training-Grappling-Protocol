@@ -17,6 +17,8 @@ import {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
+const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 
 /* ============================== STORAGE HELPERS ============================== */
 // These five functions are the ONLY place the rest of the app talks to storage.
@@ -800,12 +802,41 @@ function defaultWeeklySchedule() {
     sun: "6:00–7:00 AM Strength & Conditioning",
   };
 }
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel }) {
+function buildProgramVariant(variant) {
+  const base = JSON.parse(JSON.stringify(conjugateProgram));
+  if (variant === "A") {
+    base.name = "Condensed Conjugate — Twelve-Week Program (Program A)";
+    base.variant = "A";
+    base.phases.forEach((phase) => {
+      const isDeload = phase.name.toLowerCase().includes("deload");
+      if (isDeload) return; // deload weeks stay Dynamic-Effort-free, same as the rest of the program
+      const dePct = parseInt(phase.dePercent, 10) || 50;
+      phase.days.forEach((day) => {
+        if (day.label === "1" && day.name.includes("Max Effort Lower")) {
+          day.name = day.name.replace("Max Effort Lower", "Max Effort Lower + Dynamic Effort Upper");
+          day.intent = "Two qualities in one session, Settlage-style — a true max effort on the lower body lift, then explosive speed work on the upper body press. Keep the Dynamic Effort set genuinely fast, not just lighter.";
+          day.sections.splice(1, 0, { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [deBench(dePct)] });
+        }
+        if (day.label === "2" && day.name.includes("Max Effort Upper")) {
+          day.name = day.name.replace("Max Effort Upper", "Max Effort Upper + Dynamic Effort Lower");
+          day.intent = "Same idea in reverse — max effort on the press, then explosive speed work on the lower body. Two qualities trained per session so three days a week covers everything.";
+          day.sections.splice(1, 0, { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [deSquat(dePct)] });
+        }
+      });
+    });
+  } else {
+    base.name = "Traditional Split — Twelve-Week Program (Program B)";
+    base.variant = "B";
+  }
+  return base;
+}
+
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     createdAt: todayStr(),
-    program: useTemplate ? JSON.parse(JSON.stringify(conjugateProgram)) : blankProgram(),
+    program: useTemplate ? buildProgramVariant(programVariant === "A" ? "A" : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -961,7 +992,7 @@ function MainApp({ userId, onSignOut }) {
   };
   const refreshProgramTemplate = async () => {
     if (!client) return;
-    const updated = { ...client, program: JSON.parse(JSON.stringify(conjugateProgram)) };
+    const updated = { ...client, program: buildProgramVariant(client.program?.variant === "A" ? "A" : "B") };
     await persistClient(updated);
   };
 
@@ -1080,6 +1111,7 @@ function OnboardingScreen({ onSubmit }) {
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [beltLevel, setBeltLevel] = useState("White");
+  const [programVariant, setProgramVariant] = useState("B");
   const [logoImageOk, setLogoImageOk] = useState(true);
   const canSubmit = firstName.trim() && lastName.trim() && weight;
 
@@ -1108,8 +1140,17 @@ function OnboardingScreen({ onSubmit }) {
           {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
       </label>
+      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</div>
+      <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")}>
+        <div className="program-choice-title">Program A — Condensed Conjugate</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Day 1: Max Effort Lower + Dynamic Effort Upper. Day 2: Max Effort Upper + Dynamic Effort Lower. Day 3: Full Body Dynamic Effort. Both qualities trained every session — best if you want maximum coverage in three days a week.</p>
+      </div>
+      <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
+        <div className="program-choice-title">Program B — Traditional Split</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Day 1: Max Effort Lower. Day 2: Max Effort Upper. Day 3: Full Body Dynamic Effort. One quality per session — more recovery room around each lift, best if your BJJ volume is already high.</p>
+      </div>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant })}>
         Get started
       </button>
     </div>
@@ -3000,6 +3041,9 @@ function GlobalStyle() {
       .logo-block .brand-title { font-size: 32px; margin-bottom: 0; }
       .sisyphus-mark { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--accent); pointer-events: none; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
+      .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
+      .program-choice-card.active { border-color: var(--accent); }
+      .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
       .topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
       .topbar-brand { font-family: 'Bebas Neue', 'Oswald', sans-serif; font-size: 17px; letter-spacing: 0.01em; color: var(--accent); line-height: 1.1; max-width: 220px; }
       .topbar-name-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
@@ -3224,6 +3268,8 @@ function AuthScreen() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [qrOk, setQrOk] = useState(true);
+  const hasPaymentInfo = coachVenmo || coachCashApp;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -3254,6 +3300,15 @@ function AuthScreen() {
         <p className="muted" style={{ marginBottom: 20 }}>
           {mode === "signup" ? "Your own account, your own data, saved permanently and available on any device." : "Welcome back."}
         </p>
+        {mode === "signup" && hasPaymentInfo && (
+          <div className="card" style={{ marginBottom: 18, textAlign: "center" }}>
+            <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Please send payment before starting your program.</p>
+            {qrOk && <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />}
+            {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
+            {coachCashApp && <div style={{ fontSize: 13.5 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+          </div>
+        )}
         <form onSubmit={submit}>
           <label className="labeled-input">
             <span><Mail size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Email</span>
