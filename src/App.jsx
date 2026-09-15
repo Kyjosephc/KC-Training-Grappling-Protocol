@@ -338,13 +338,22 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
       return { ...sec, exercises: [], skipped: true };
     }
     if (color === "RED" && (sec.type === "strength" || sec.type === "power")) {
-      exs = exs.map((e) => ({ ...e, rir: Math.max(e.rir || 0, 3), cues: `${e.cues || ""} Today: cap effort well short of a max — technical rehearsal only given low readiness.`.trim() }));
+      exs = exs.map((e) => ({
+        ...e, rir: Math.max(e.rir || 0, 3),
+        cues: `${e.cues || ""} Today: cap effort well short of a max — technical rehearsal only given low readiness.`.trim(),
+        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 85) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 90 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
+        pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 85) : e.pct1rmFlat,
+      }));
     }
     if (color === "RED" && sec.type === "conditioning") {
       exs = exs.map((e) => ({ ...e, reps: "easy pace, roughly half the normal duration" }));
     }
     if (color === "YELLOW" && (sec.type === "strength" || sec.type === "power")) {
-      exs = exs.map((e) => ({ ...e, rir: (e.rir || 0) + 1 }));
+      exs = exs.map((e) => ({
+        ...e, rir: (e.rir || 0) + 1,
+        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, rir: t.rir + 1, pct1rm: t.pct1rm ? Math.max(50, t.pct1rm - 5) : t.pct1rm })) : e.perSetTargets,
+        pct1rmFlat: e.pct1rmFlat ? Math.max(50, e.pct1rmFlat - 5) : e.pct1rmFlat,
+      }));
     }
     if (color === "YELLOW" && (sec.type === "durability" || sec.type === "arms_core")) {
       exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.7)) }));
@@ -355,8 +364,8 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     return { ...sec, exercises: exs, skipped };
   });
 
-  if (color === "RED") notes.push("Red readiness: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.");
-  else if (color === "YELLOW") notes.push("Yellow readiness: one extra rep in reserve added to strength and power work, durability and arm/core volume trimmed.");
+  if (color === "RED") notes.push("Red readiness: agility, durability, and arm/core work skipped. Strength capped at 3+ reps in reserve and 85% of your One-Rep Max at most — no true max attempts today, technical rehearsal only. Conditioning trimmed.");
+  else if (color === "YELLOW") notes.push("Yellow readiness: one extra rep in reserve added and roughly 5% taken off every Max Effort and Dynamic Effort percentage. Durability and arm/core volume trimmed.");
   if (bjjHard) notes.push("Hard grappling flagged: conditioning trimmed since training already supplied that stimulus today.");
 
   return { sections: adjusted, adjustedNote: notes.length ? notes.join(" ") : null };
@@ -848,6 +857,40 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
 }
 
 const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purple", "Brown", "Black"];
+
+const MENTAL_COACHING_LIBRARY = [
+  { title: "Getting tapped is data, not a verdict", body: "A tap tells you exactly one thing: that specific position, against that specific person, on that specific day, didn't work. It says nothing about your worth as a grappler. The athletes who improve fastest treat every tap as free information about a hole in their game, then go close that hole — instead of spiraling about what it means about them." },
+  { title: "Breathe before you decide", body: "Under real pressure — bad position, gassed, opponent surging — your first impulse is almost always panic, not strategy. Build the habit of one slow exhale before you commit to an escape or a scramble. That half-second doesn't cost you the position. It's usually what saves it." },
+  { title: "You're allowed to be bad at new things forever", body: "Every belt promotion quietly demotes you back to white belt at the next level of the game. That feeling of being clumsy again isn't a sign you're regressing — it's the actual mechanism of getting better. The athletes who plateau are usually the ones who stopped being willing to feel incompetent." },
+  { title: "Rolling with lower belts isn't a threat to your ego", body: "If a white belt catches you, that's not evidence you're bad — it's evidence they found a gap everyone has and you happened to be the one training with them that day. Treat it as free coaching. The moment ego enters the room, learning leaves it." },
+  { title: "Competition nerves are just excitement without a story", body: "Physiologically, fear and excitement are almost the same signal — racing heart, tight chest, adrenaline. The difference is entirely the story you tell yourself about it. Before you step on the mat, try relabeling it out loud: 'I'm excited,' not 'I'm scared.' Your body won't know the difference, but your mind will." },
+  { title: "Play the position, not the outcome", body: "Thinking about winning the match while you're still in guard is a distraction from the only thing that actually determines the outcome — winning this exchange, right now. Narrow your focus to the frame, the grip, the base in front of you. The scoreboard takes care of itself when the details do." },
+  { title: "Plateaus are where the actual adaptation happens", body: "The weeks where nothing feels like it's improving are usually exactly when your nervous system is consolidating the last six months of reps. Visible progress and actual progress are not the same timeline. Trust the process specifically during the stretch where it stops feeling like progress." },
+  { title: "Losing a scramble is not losing the round", body: "Grapplers with real composure treat a bad scramble as one exchange among dozens in a round, not a referendum on the whole roll. The athletes who lose their composure after one bad exchange usually lose two or three more chasing the feeling of having 'fixed' it immediately. Reset, breathe, next exchange." },
+  { title: "Visualize the specific problem, not just success", body: "Generic visualization — 'I win the match' — does almost nothing for performance. Specific visualization — rehearsing exactly how you'll answer a collar tie, or what you'll do when someone stalls in your guard — genuinely primes the same neural pathways as physical repetition. Be precise about what you rehearse." },
+  { title: "Your training partners are not your opponents", body: "The number one predictor of long-term improvement in grappling isn't talent, it's whether you stay in a gym long enough to build real training relationships. Protect those relationships — roll hard, but never at the cost of someone else's safety or willingness to keep training with you." },
+  { title: "Discomfort is the actual curriculum", body: "If a position feels easy, you're probably not the one being tested in it. Seek out the rolls and drills that make you uncomfortable — bad position, worse grips, tougher partner — since that's precisely the stimulus your game is missing. Comfortable training produces comfortable, stagnant results." },
+  { title: "Frustration is information about your standards, not your ability", body: "Getting frustrated in a roll usually means you expect more from yourself than you're currently delivering — which is actually a sign you're improving, not failing. The skill isn't eliminating frustration, it's noticing it quickly and returning attention to the next single detail in front of you." },
+  { title: "The mat doesn't care about your bad day", body: "Walking in stressed, tired, or distracted and expecting your body to perform like nothing happened is unrealistic — but so is skipping training every time life gets hard. The middle path: show up, lower your expectations for that specific session, and let it be maintenance rather than a personal record attempt." },
+  { title: "Confidence is built in rehearsal, not granted by belief", body: "Telling yourself 'I'm confident' rarely works under real pressure if you haven't actually drilled the response enough times to trust your body. Real competition confidence comes from having done the specific movement — the escape, the pass, the submission — enough times that your body doesn't need permission from your mind to execute it." },
+  { title: "You can't out-technique panic", body: "The best technical game in the world falls apart if your nervous system floods with panic the moment things go wrong. Train your ability to stay calm in bad positions on purpose — start rolls from the worst spot, hold mount bottom longer than comfortable — so panic stops being the default response when it happens for real." },
+  { title: "Injuries test who you actually are as a training partner", body: "How you roll with an injured or clearly overmatched partner reveals more about your character than any tournament medal. Control is not the same as domination. The grapplers everyone wants to train with long-term are the ones who can go hard without ever needing to prove it against someone who can't defend themselves." },
+  { title: "Separate the loss from the story about the loss", body: "Losing a match or getting submitted repeatedly by the same person triggers a story — 'I'm not good enough,' 'I'll never beat them' — that's almost always bigger and more permanent-sounding than the actual event. Write down what literally happened, technically, without the narrative. The gap between the two is usually where your anxiety is actually living." },
+  { title: "Pressure reveals your training, it doesn't create weakness", body: "Whatever shows up when you're tired, losing, or under a strong opponent isn't a new flaw appearing — it's an existing gap becoming visible because there's no energy left to mask it. Treat competition and hard rounds as the most honest diagnostic tool you have, not as unfair tests of character." },
+  { title: "Slow is a skill, not a consolation prize", body: "Grapplers chasing speed and explosiveness before they have real control usually plateau early, because speed without precision just means making mistakes faster. Deliberately slow rolling — where you could stop and explain every grip and weight distribution — builds the base that speed eventually gets layered onto." },
+  { title: "The person you're most afraid to roll with is your best teacher", body: "Avoidance of a specific training partner is almost always a signal, not a preference. Notice who you quietly try not to roll with, and ask honestly why. That roll — not the comfortable ones — is usually where the actual next lesson is waiting." },
+  { title: "Recovery is part of the technique, not separate from it", body: "Showing up exhausted and forcing a hard round doesn't build toughness, it builds bad movement patterns your body will default to under pressure later. Real mental toughness sometimes looks like tapping into your ego and taking the lighter round, or the day off, because you can tell the difference between fatigue and weakness." },
+  { title: "Compare yourself to your last version, not to your training partners", body: "Everyone in the room started at a different point, with a different body, a different schedule, and different life stress outside the gym. The only fair comparison is you six months ago. If that person would be impressed with where you are now, you're on track — regardless of who's currently tapping you." },
+  { title: "Name the emotion before it runs the roll", body: "Frustration, fear, and anger all narrow your attention and make you fight the position instead of solving it. The fastest way out of an emotional spiral mid-roll is silently naming it — 'this is frustration' — which genuinely reactivates the thinking part of your brain that panic and anger shut off." },
+  { title: "A bad camp doesn't mean a bad competitor", body: "If your training leading into a competition was disrupted — injury, work, life — walk in with adjusted goals instead of abandoning the goal entirely. 'Survive and learn' is a completely legitimate competition objective. Showing up under-prepared and competing anyway builds more resilience than skipping it would." },
+  { title: "Your ego and your growth want different things", body: "Ego wants to win every round, submit everyone, never look bad in front of the gym. Growth wants you in bad positions, against tougher partners, failing in front of people. Notice which one is choosing your training partners and your rolling intensity on a given day — and deliberately let growth win more often than ego does." },
+];
+
+function mentalTipForDate(dateStr) {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  return MENTAL_COACHING_LIBRARY[hash % MENTAL_COACHING_LIBRARY.length];
+}
 
 /* ============================== READINESS ============================== */
 
@@ -1532,6 +1575,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const [viewIndex, setViewIndex] = useState(client.sessionsCompleted || 0);
   const [showPreview, setShowPreview] = useState(false);
   const [showJumpPicker, setShowJumpPicker] = useState(false);
+  const [showMentalLibrary, setShowMentalLibrary] = useState(false);
+  const todaysMentalTip = useMemo(() => mentalTipForDate(todayStr()), []);
   useEffect(() => { setViewIndex(client.sessionsCompleted || 0); }, [client.sessionsCompleted, client.id]);
 
   const today = todayStr();
@@ -1584,6 +1629,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           <p className="muted" style={{ marginBottom: 10 }}>You've hit every milestone there is. Incredible.</p>
         )}
         <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
+      </Card>
+
+      <Card title="Mental Game" subtitle="A new one every day">
+        <div className="log-exercise-name" style={{ fontSize: 14, marginBottom: 6 }}>{todaysMentalTip.title}</div>
+        <p className="muted" style={{ marginBottom: 10 }}>{todaysMentalTip.body}</p>
+        <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Mental Game Entries</button>
       </Card>
 
       <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color }}>{readinessToday.color}</span> : null}>
@@ -1683,6 +1734,17 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           }} />
       )}
       {showAccomplishments && <AccomplishmentsPage client={client} onClose={() => setShowAccomplishments(false)} />}
+      {showMentalLibrary && (
+        <ModalShell onClose={() => setShowMentalLibrary(false)} title="Mental Game Library">
+          <p className="muted" style={{ marginBottom: 14 }}>Every entry in the rotation — today's is highlighted.</p>
+          {MENTAL_COACHING_LIBRARY.map((tip) => (
+            <div key={tip.title} className="card" style={{ marginBottom: 10, borderColor: tip.title === todaysMentalTip.title ? "var(--accent)" : "var(--border)" }}>
+              <div className="log-exercise-name" style={{ fontSize: 14, marginBottom: 6 }}>{tip.title}</div>
+              <p className="muted" style={{ marginBottom: 0 }}>{tip.body}</p>
+            </div>
+          ))}
+        </ModalShell>
+      )}
     </div>
   );
 }
@@ -1851,6 +1913,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   const [summary, setSummary] = useState(null);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [prHint, setPrHint] = useState(null);
+  const [showFirstSetHelp, setShowFirstSetHelp] = useState(client.logs.length === 0);
   const [editingName, setEditingName] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
 
@@ -2043,6 +2106,13 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
           <button className="rest-dismiss" onClick={() => setPrHint(null)}><X size={14} /></button>
         </div>
       )}
+      {showFirstSetHelp && (
+        <div className="rest-banner" style={{ background: "var(--green)" }}>
+          <Info size={16} />
+          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. Reps in Reserve is already filled in for you — you don't need to touch it. Tap the checkmark once you've finished the set, and the trophy only if it's a genuine Personal Record.</span>
+          <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
+        </div>
+      )}
       {day.intent && <div className="intent-box" style={{ marginBottom: 12 }}>{day.intent}</div>}
       {adjustedNote && <div className="adjust-box" style={{ marginBottom: 12 }}>{adjustedNote}</div>}
 
@@ -2141,7 +2211,12 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                         </div>
                         {effectivePct && (
                           <div className="pct-1rm-row">
-                            Set {setIdx + 1}: {effectivePct}% of your One-Rep Max{targetWeight ? ` — try about ${targetWeight} lb` : " — log a set to unlock a suggested weight"}
+                            Set {setIdx + 1}: {effectivePct}% of your One-Rep Max
+                            {targetWeight
+                              ? ` — try about ${targetWeight} lb`
+                              : setIdx === 0
+                                ? " — once you log this exercise once, future sessions will suggest an exact weight"
+                                : ""}
                           </div>
                         )}
                       </React.Fragment>
