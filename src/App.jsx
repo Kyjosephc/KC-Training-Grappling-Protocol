@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
   Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock
+  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -288,8 +288,19 @@ function resolveExercise(e, weekNumber, program, phase) {
 function resolveSectionExercises(section, weekNumber, program, phase) {
   return section.exercises.map((e) => resolveExercise(e, weekNumber, program, phase));
 }
-function resolveDaySections(day, weekNumber, program, phase) {
-  return day.sections.map((sec) => ({ ...sec, exercises: resolveSectionExercises(sec, weekNumber, program, phase) }));
+function resolveDaySections(day, weekNumber, program, phase, veteranMode) {
+  const isDeload = (phase?.name || "").toLowerCase().includes("deload");
+  return day.sections.map((sec) => {
+    let exercises = resolveSectionExercises(sec, weekNumber, program, phase);
+    if (veteranMode && isDeload && sec.type === "strength") {
+      exercises = exercises.map((e) => ({
+        ...e,
+        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, pct1rm: t.pct1rm ? Math.max(35, t.pct1rm - 10) : t.pct1rm, rir: t.rir + 1 })) : e.perSetTargets,
+        cues: `${e.cues || ""} Veteran Athlete Mode: this deload is deeper than standard — every set trimmed further and with an extra rep in reserve, since accumulated training age benefits from more genuine unloading here.`.trim(),
+      }));
+    }
+    return { ...sec, exercises };
+  });
 }
 function primaryLiftName(day, weekNumber, program, phase) {
   for (const sec of day.sections) {
@@ -346,7 +357,7 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
       }));
     }
     if (color === "RED" && sec.type === "conditioning") {
-      exs = exs.map((e) => ({ ...e, reps: "easy pace, roughly half the normal duration" }));
+      exs = exs.map((e) => ({ ...e, reps: "easy pace, roughly half the normal duration", cues: "Red readiness overrides today's usual protocol, whatever it normally calls for — easy pace only, no hard effort, roughly half the normal duration. This applies the same whether today was aerobic base, VO2max intervals, or sustained effort." }));
     }
     if (color === "YELLOW" && (sec.type === "strength" || sec.type === "power")) {
       exs = exs.map((e) => ({
@@ -358,14 +369,17 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     if (color === "YELLOW" && (sec.type === "durability" || sec.type === "arms_core")) {
       exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.7)) }));
     }
+    if (color === "YELLOW" && sec.type === "conditioning") {
+      exs = exs.map((e) => ({ ...e, cues: `${e.cues || ""} Yellow readiness: back today's effort off slightly from what the protocol normally asks for — moderate rather than maximal, whichever modality this is.`.trim() }));
+    }
     if (bjjHard && sec.type === "conditioning") {
       exs = exs.map((e) => ({ ...e, sets: 1, reps: "optional — trim or skip, hard grappling already supplied today's conditioning stimulus" }));
     }
     return { ...sec, exercises: exs, skipped };
   });
 
-  if (color === "RED") notes.push("Red readiness: agility, durability, and arm/core work skipped. Strength capped at 3+ reps in reserve and 85% of your One-Rep Max at most — no true max attempts today, technical rehearsal only. Conditioning trimmed.");
-  else if (color === "YELLOW") notes.push("Yellow readiness: one extra rep in reserve added and roughly 5% taken off every Max Effort and Dynamic Effort percentage. Durability and arm/core volume trimmed.");
+  if (color === "RED") notes.push("Red: capped at 85% max, agility/durability/arm-core skipped, conditioning trimmed.");
+  else if (color === "YELLOW") notes.push("Yellow: −5% off every set, extra rep in reserve, durability/arm-core trimmed, conditioning effort backed off slightly.");
   if (bjjHard) notes.push("Hard grappling flagged: conditioning trimmed since training already supplied that stimulus today.");
 
   return { sections: adjusted, adjustedNote: notes.length ? notes.join(" ") : null };
@@ -445,8 +459,9 @@ const bicepAltPool = [
   { name: "Face-Away Behind-the-Back Cable Curl", notes: "Face away from a low cable and curl behind the body — loads the biceps in a deep stretched position most curls never reach" },
 ];
 const conditioningIntervalPool = [
-  { name: "Assault Bike, Treadmill, or Weighted-Vest Backward Walk — Extensive Tempo Intervals", notes: "Jamieson's extensive tempo method — repeated short efforts that build repeat-effort work capacity and clear lactate between hard training days, without the glycolytic or nervous-system cost of true sprints or true VO2max work. The weighted-vest backward treadmill walk is the sled-substitute version of this same interval, and also unloads the knees eccentrically", reps: "15 rounds of 15 seconds moderate effort, 15 seconds easy", cues: "Work effort should feel like about a 6 to 7 out of 10 — brisk and purposeful, not a sprint. Heart rate should stay under roughly 155 beats per minute throughout the whole set; if you can check it, it should visibly rise during each 15-second work period and come back down during the 15-second rest, not climb higher every single round. Rest exactly 15 seconds — stay on your feet and keep moving lightly rather than sitting down, since the point is repeated effort under mild fatigue, not full recovery between rounds. If you can't hold a light jog pace or can't speak at all by round 5, the effort is too high for this protocol — back it off." },
-  { name: "Assault Bike or Treadmill — Aerobic Power Intervals (Jamieson VO2max Protocol)", notes: "Jamieson's actual aerobic power interval method for raising VO2max — hard enough that heart rate climbs to roughly 90 percent of your max by the end of each work interval. This is genuinely demanding, which is exactly why it only shows up here every other week rather than every session", reps: "5 rounds of 2 to 3 minutes hard effort, equal time easy between rounds", cues: "Each work interval should be hard enough that you could not hold a conversation, and your heart rate should be climbing to roughly 90 percent of your estimated max (a rough estimate is 220 minus your age, though this varies person to person) by the time the interval ends — that is the actual point of this protocol, so don't undershoot it. Rest exactly as long as the work interval lasted — a 2-minute work round gets a full 2 minutes of easy rest, a 3-minute round gets 3 minutes — and use that rest to genuinely recover, walking or pedaling easily rather than stopping dead, letting heart rate come back down as much as it will before the next round starts. If your heart rate isn't climbing that high by the end of a work interval, the pace was too easy for what this protocol is built to train. Because this is demanding, it only appears every other week — treat the in-between week's extensive tempo work as the recovery, not a second dose of this." },
+  { name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "45 to 60 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct." },
+  { name: "Assault Bike or Treadmill — VO2max 4x4 Intervals", notes: "The 4x4 interval method for raising VO2max — 4 rounds of 4 minutes at 90 percent maximum effort, with 4 minutes of easy rest between each round. This is genuinely demanding, which is exactly why it's balanced against an easy aerobic-base week and a sustained-effort week in the rotation rather than showing up every single week", reps: "4 rounds of 4 minutes at 90 percent maximum effort, 4 minutes easy rest between each round", cues: "90 percent maximum EFFORT here means output — how hard you're actually pushing the bike or the pace — not 90 percent of your max heart rate. Your heart rate will climb on its own as a result of the effort, but don't pace off a heart rate number; pace off how hard you're genuinely working. Each 4-minute round should be close to all you can sustain for the full 4 minutes without falling apart before the end — if you're finishing rounds feeling fresh, push harder next time. Take the full 4 minutes of rest between rounds, easy movement or complete rest, so you can bring real effort to the next round instead of just surviving it." },
+  { name: "Assault Bike or Treadmill — Sustained Effort", notes: "Sustained effort training to build work capacity and the ability to hold a hard, honest pace for an extended stretch — a different stimulus than short VO2max intervals or easy aerobic base work, closer to what a long, hard round or a grueling match actually demands", reps: "1 continuous effort, 15 to 20 minutes at a hard, sustainable pace", cues: "This should be hard — noticeably harder than the aerobic base session — but paced so you can actually hold it for the full 15 to 20 minutes without blowing up halfway through. A good gauge: you could speak only in short phrases, not full sentences. If you have to stop or drop the pace significantly before time is up, you started too fast — that's useful information for next time, not a failure this time." },
 ];
 
 function meLowerDeloadBlock() {
@@ -535,16 +550,15 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
-              ex({ name: "Single-Leg Hip Thrust (Dumbbell, bench-supported)", sets: 3, reps: "8 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Posterior chain and single-leg stability", quality: "Accessory" }),
+              ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "8 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
               ex({ name: "Hanging Leg Raise", sets: 3, reps: "10", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Trunk flexion strength", quality: "Trunk" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells, add the weighted vest for extra load if grip becomes the limiter", rir: 1, rest: "2 minutes", purpose: "Grip and trunk bracing under load", quality: "Grip/Trunk" }),
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor strength and durability — directly protective for guard retention and hip health", quality: "Durability" }),
-              ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Tendon-loading isometric for knee health", quality: "Durability" }),
+              ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Bottom-range tendon-loading isometric for knee health — grapplers get stuck fighting from compromised positions, and end-range strength has more carryover than mid-range work", quality: "Durability" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" }),
-              ex({ name: "Foot Crunches (Toe Scrunches)", sets: 2, reps: "15", load: "bodyweight, or scrunching a small towel with your toes", rir: 2, rest: "30 seconds", purpose: "Strengthens the intrinsic muscles of the foot — foot mobility and control matter directly for barefoot grappling on the mat", quality: "Foot Mobility" }),
-              ex({ name: "Metatarsal Spread (Toe Splay)", sets: 2, reps: "15", load: "bodyweight", rir: 2, rest: "30 seconds", purpose: "Trains active spreading of the toes and forefoot — foot mobility and base stability for scrambles and takedown defense", quality: "Foot Mobility" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
@@ -563,6 +577,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip" }),
+              ex({ name: "Paused Bottom-Position Bench Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength — grapplers get stuck pressing out of compromised, stretched positions under load, and this trains exactly that range instead of just the mid-range most pressing already covers", quality: "Durability" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
               ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through a full range of motion — protective against neck cranks, guillotines, and posture under pressure", quality: "Durability" }),
             ]},
@@ -582,13 +597,13 @@ const conjugateProgram = {
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
               deSquat(50), deBench(50),
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles", quality: "Rotational Power" }),
+              ex({ name: "Heavy Landmine Anti-Rotation Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort, not light", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded rotation — grappling is a rotational sport, and this is the missing piece next to the rotational power work above: real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Jamieson Zone 1)", sets: 1, reps: "15 to 20 minutes", load: "heart rate held at 120 to 150 beats per minute — conversational, nasal-breathing pace", rir: 0, rest: "none", purpose: "General aerobic base development — the foundation of Jamieson's energy-system model. This is the qualifying work: staying inside that heart-rate window, not the pace, is what builds the aerobic engine. Add the weighted vest on the treadmill for a heavier, sled-style version of this same stimulus", quality: "Conditioning",
-                cues: "A rough estimate for max heart rate is 220 minus your age, though this varies quite a bit person to person — 120 to 150 beats per minute typically lands in the 65 to 75 percent range of that number for most adults. No rest during this one, it's continuous — the whole 15 to 20 minutes stays inside that heart-rate window. If you don't have a heart rate monitor, use the talk test: you should be able to speak in full sentences without gasping for air, but it shouldn't feel as easy as sitting and chatting. If you can't finish a sentence without stopping to breathe, you've drifted above the zone — slow down. If you could comfortably hold a full conversation for the entire 20 minutes without your breathing rate ever picking up at all, you're below the zone — pick the pace up slightly." }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -609,14 +624,13 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
-              ex({ name: "Single-Leg Hip Thrust (Dumbbell, bench-supported)", sets: 3, reps: "6 per leg", load: "moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Posterior chain strength", quality: "Accessory" }),
+              ex({ name: "Front-Foot-Elevated Split Squat (dumbbells)", sets: 3, reps: "6 per leg", load: "moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — a different single-leg loading angle than the base phase to keep the movement fresh while still training the pattern a sprawl or single-leg takedown defense relies on", quality: "Accessory" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor durability for guard retention", quality: "Durability" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" }),
-              ex({ name: "Foot Crunches (Toe Scrunches)", sets: 2, reps: "15", load: "bodyweight, or scrunching a small towel with your toes", rir: 2, rest: "30 seconds", purpose: "Intrinsic foot strength for barefoot grappling", quality: "Foot Mobility" }),
-              ex({ name: "Metatarsal Spread (Toe Splay)", sets: 2, reps: "15", load: "bodyweight", rir: 2, rest: "30 seconds", purpose: "Foot mobility and base stability for scrambles", quality: "Foot Mobility" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
@@ -632,6 +646,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" }),
+              ex({ name: "Paused Bottom-Position Incline Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength at a different pressing angle than the base phase — grapplers get stuck pressing out of compromised, stretched positions under load", quality: "Durability" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
               ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Neck strength and durability", quality: "Durability" }),
             ]},
@@ -651,13 +666,14 @@ const conjugateProgram = {
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
               deSquat(55), deBench(55),
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power for throws and scrambles", quality: "Rotational Power" }),
+              ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
               ex({ name: "Trap Bar High Pull", sets: 4, reps: "5", load: "moderate, explosive intent", rir: 1, rest: "2 minutes", purpose: "Total-body explosive triple extension and grip demand — the closest barbell-based equivalent to a loaded sandbag or sled push without either", quality: "Power" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Alternates every 2 weeks between Jamieson's extensive tempo method and his actual aerobic power interval protocol for raising VO2max, so both energy systems get trained without every single week being maximally fatiguing", quality: "Conditioning" }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system actually gets trained across the block instead of the same stimulus every week", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -678,6 +694,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 2, reps: "20 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk maintenance, low volume for freshness", quality: "Grip/Trunk" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 1, reps: "6 per direction, slow and controlled", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability" }),
               ex({ name: "Hanging Leg Raise", sets: 2, reps: "10", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Trunk flexion strength, kept brief to protect freshness", quality: "Trunk" }),
             ]},
           ]},
@@ -754,7 +771,6 @@ function defaultWarmup() {
       { id: uid(), name: "Hip Circles", detail: "8 reps per direction per side", videoUrl: "" },
       { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "8 reps per side", videoUrl: "" },
       { id: uid(), name: "Cable Pull-Apart (light, rope attachment)", detail: "15 reps", videoUrl: "" },
-      { id: uid(), name: "Toe Yoga (big toe and little toe isolation)", detail: "10 reps per foot, barefoot", videoUrl: "" },
     ]},
     { id: uid(), block: "Fascial & Multi-Planar Preparation", duration: "3 to 4 minutes", items: [
       { id: uid(), name: "Multi-Planar Lunge Matrix", detail: "Forward, lateral, and rotational lunge, each direction, bodyweight", videoUrl: "" },
@@ -823,16 +839,42 @@ function buildProgramVariant(variant) {
       phase.days.forEach((day) => {
         if (day.label === "1" && day.name.includes("Max Effort Lower")) {
           day.name = day.name.replace("Max Effort Lower", "Max Effort Lower + Dynamic Effort Upper");
-          day.intent = "Two qualities in one session, Settlage-style — a true max effort on the lower body lift, then explosive speed work on the upper body press. Keep the Dynamic Effort set genuinely fast, not just lighter.";
-          day.sections.splice(1, 0, { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [deBench(dePct)] });
+          day.intent = "Two qualities in one session, Settlage-style — a true max effort on the lower body lift first while you're fresh, then explosive speed work on the upper body press once the main lift is done. Keep the Dynamic Effort set genuinely fast, not just lighter.";
+          const strengthIdx = day.sections.findIndex((s) => s.type === "strength");
+          day.sections.splice(strengthIdx + 1, 0, { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [deBench(dePct)] });
         }
         if (day.label === "2" && day.name.includes("Max Effort Upper")) {
           day.name = day.name.replace("Max Effort Upper", "Max Effort Upper + Dynamic Effort Lower");
-          day.intent = "Same idea in reverse — max effort on the press, then explosive speed work on the lower body. Two qualities trained per session so three days a week covers everything.";
-          day.sections.splice(1, 0, { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [deSquat(dePct)] });
+          day.intent = "Same idea in reverse — max effort on the press first while you're fresh, then explosive speed work on the lower body once the main lift is done. Two qualities trained per session so three days a week covers everything.";
+          const strengthIdx = day.sections.findIndex((s) => s.type === "strength");
+          day.sections.splice(strengthIdx + 1, 0, { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [deSquat(dePct)] });
         }
       });
     });
+  } else if (variant === "C") {
+    base.name = "Offseason Strength Build — Twelve-Week Program (Program C)";
+    base.variant = "C";
+    base.objective = "No competition on the calendar to peak for — every phase in this program, including the last one, keeps building. The goal is simple: get as strong as possible for jiu-jitsu, without ever backing off volume to be fresh for a tournament that isn't happening.";
+    const peakIdx = base.phases.findIndex((p) => p.name.includes("Peak"));
+    if (peakIdx !== -1) {
+      // Clone the Intensification phase's fuller day structure instead of the tapered peak-phase one
+      const offseason = JSON.parse(JSON.stringify(base.phases[1]));
+      offseason.id = uid();
+      offseason.name = "Offseason Strength Build — Weeks 9 to 11";
+      offseason.weekStart = base.phases[peakIdx].weekStart;
+      offseason.weekEnd = base.phases[peakIdx].weekEnd;
+      offseason.objective = "This is the third and final strength block before your next deload — and because there's no competition to taper for, nothing here gets trimmed down. Durability, arms and core, and conditioning all stay at full volume, same as the first two blocks. The only thing that changes is the weight on the bar goes up.";
+      offseason.intensityNote = "Max Effort days work up to a true heavy top single or triple, same as always. Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max — normally that jump comes with a taper in everything else, but not here. Keep training like weeks 5 through 7, just heavier.";
+      offseason.dePercent = "60 to 65%";
+      offseason.days.forEach((day) => {
+        day.sections.forEach((sec) => {
+          if (sec.type === "power") {
+            sec.exercises.forEach((e) => { if (typeof e.pct1rmFlat === "number") e.pct1rmFlat = 62; });
+          }
+        });
+      });
+      base.phases[peakIdx] = offseason;
+    }
   } else {
     base.name = "Traditional Split — Twelve-Week Program (Program B)";
     base.variant = "B";
@@ -845,7 +887,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     createdAt: todayStr(),
-    program: useTemplate ? buildProgramVariant(programVariant === "A" ? "A" : "B") : blankProgram(),
+    program: useTemplate ? buildProgramVariant(["A", "B", "C"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -857,33 +899,39 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
 }
 
 const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purple", "Brown", "Black"];
+const PROGRAM_VARIANT_LABELS = {
+  A: "Program A — Condensed Conjugate",
+  B: "Program B — Traditional Split",
+  C: "Program C — Offseason Strength Build",
+};
 
 const MENTAL_COACHING_LIBRARY = [
-  { title: "Getting tapped is data, not a verdict", body: "A tap tells you exactly one thing: that specific position, against that specific person, on that specific day, didn't work. It says nothing about your worth as a grappler. The athletes who improve fastest treat every tap as free information about a hole in their game, then go close that hole — instead of spiraling about what it means about them." },
-  { title: "Breathe before you decide", body: "Under real pressure — bad position, gassed, opponent surging — your first impulse is almost always panic, not strategy. Build the habit of one slow exhale before you commit to an escape or a scramble. That half-second doesn't cost you the position. It's usually what saves it." },
-  { title: "You're allowed to be bad at new things forever", body: "Every belt promotion quietly demotes you back to white belt at the next level of the game. That feeling of being clumsy again isn't a sign you're regressing — it's the actual mechanism of getting better. The athletes who plateau are usually the ones who stopped being willing to feel incompetent." },
-  { title: "Rolling with lower belts isn't a threat to your ego", body: "If a white belt catches you, that's not evidence you're bad — it's evidence they found a gap everyone has and you happened to be the one training with them that day. Treat it as free coaching. The moment ego enters the room, learning leaves it." },
-  { title: "Competition nerves are just excitement without a story", body: "Physiologically, fear and excitement are almost the same signal — racing heart, tight chest, adrenaline. The difference is entirely the story you tell yourself about it. Before you step on the mat, try relabeling it out loud: 'I'm excited,' not 'I'm scared.' Your body won't know the difference, but your mind will." },
-  { title: "Play the position, not the outcome", body: "Thinking about winning the match while you're still in guard is a distraction from the only thing that actually determines the outcome — winning this exchange, right now. Narrow your focus to the frame, the grip, the base in front of you. The scoreboard takes care of itself when the details do." },
-  { title: "Plateaus are where the actual adaptation happens", body: "The weeks where nothing feels like it's improving are usually exactly when your nervous system is consolidating the last six months of reps. Visible progress and actual progress are not the same timeline. Trust the process specifically during the stretch where it stops feeling like progress." },
-  { title: "Losing a scramble is not losing the round", body: "Grapplers with real composure treat a bad scramble as one exchange among dozens in a round, not a referendum on the whole roll. The athletes who lose their composure after one bad exchange usually lose two or three more chasing the feeling of having 'fixed' it immediately. Reset, breathe, next exchange." },
-  { title: "Visualize the specific problem, not just success", body: "Generic visualization — 'I win the match' — does almost nothing for performance. Specific visualization — rehearsing exactly how you'll answer a collar tie, or what you'll do when someone stalls in your guard — genuinely primes the same neural pathways as physical repetition. Be precise about what you rehearse." },
-  { title: "Your training partners are not your opponents", body: "The number one predictor of long-term improvement in grappling isn't talent, it's whether you stay in a gym long enough to build real training relationships. Protect those relationships — roll hard, but never at the cost of someone else's safety or willingness to keep training with you." },
-  { title: "Discomfort is the actual curriculum", body: "If a position feels easy, you're probably not the one being tested in it. Seek out the rolls and drills that make you uncomfortable — bad position, worse grips, tougher partner — since that's precisely the stimulus your game is missing. Comfortable training produces comfortable, stagnant results." },
-  { title: "Frustration is information about your standards, not your ability", body: "Getting frustrated in a roll usually means you expect more from yourself than you're currently delivering — which is actually a sign you're improving, not failing. The skill isn't eliminating frustration, it's noticing it quickly and returning attention to the next single detail in front of you." },
-  { title: "The mat doesn't care about your bad day", body: "Walking in stressed, tired, or distracted and expecting your body to perform like nothing happened is unrealistic — but so is skipping training every time life gets hard. The middle path: show up, lower your expectations for that specific session, and let it be maintenance rather than a personal record attempt." },
-  { title: "Confidence is built in rehearsal, not granted by belief", body: "Telling yourself 'I'm confident' rarely works under real pressure if you haven't actually drilled the response enough times to trust your body. Real competition confidence comes from having done the specific movement — the escape, the pass, the submission — enough times that your body doesn't need permission from your mind to execute it." },
-  { title: "You can't out-technique panic", body: "The best technical game in the world falls apart if your nervous system floods with panic the moment things go wrong. Train your ability to stay calm in bad positions on purpose — start rolls from the worst spot, hold mount bottom longer than comfortable — so panic stops being the default response when it happens for real." },
-  { title: "Injuries test who you actually are as a training partner", body: "How you roll with an injured or clearly overmatched partner reveals more about your character than any tournament medal. Control is not the same as domination. The grapplers everyone wants to train with long-term are the ones who can go hard without ever needing to prove it against someone who can't defend themselves." },
-  { title: "Separate the loss from the story about the loss", body: "Losing a match or getting submitted repeatedly by the same person triggers a story — 'I'm not good enough,' 'I'll never beat them' — that's almost always bigger and more permanent-sounding than the actual event. Write down what literally happened, technically, without the narrative. The gap between the two is usually where your anxiety is actually living." },
-  { title: "Pressure reveals your training, it doesn't create weakness", body: "Whatever shows up when you're tired, losing, or under a strong opponent isn't a new flaw appearing — it's an existing gap becoming visible because there's no energy left to mask it. Treat competition and hard rounds as the most honest diagnostic tool you have, not as unfair tests of character." },
-  { title: "Slow is a skill, not a consolation prize", body: "Grapplers chasing speed and explosiveness before they have real control usually plateau early, because speed without precision just means making mistakes faster. Deliberately slow rolling — where you could stop and explain every grip and weight distribution — builds the base that speed eventually gets layered onto." },
-  { title: "The person you're most afraid to roll with is your best teacher", body: "Avoidance of a specific training partner is almost always a signal, not a preference. Notice who you quietly try not to roll with, and ask honestly why. That roll — not the comfortable ones — is usually where the actual next lesson is waiting." },
-  { title: "Recovery is part of the technique, not separate from it", body: "Showing up exhausted and forcing a hard round doesn't build toughness, it builds bad movement patterns your body will default to under pressure later. Real mental toughness sometimes looks like tapping into your ego and taking the lighter round, or the day off, because you can tell the difference between fatigue and weakness." },
-  { title: "Compare yourself to your last version, not to your training partners", body: "Everyone in the room started at a different point, with a different body, a different schedule, and different life stress outside the gym. The only fair comparison is you six months ago. If that person would be impressed with where you are now, you're on track — regardless of who's currently tapping you." },
-  { title: "Name the emotion before it runs the roll", body: "Frustration, fear, and anger all narrow your attention and make you fight the position instead of solving it. The fastest way out of an emotional spiral mid-roll is silently naming it — 'this is frustration' — which genuinely reactivates the thinking part of your brain that panic and anger shut off." },
-  { title: "A bad camp doesn't mean a bad competitor", body: "If your training leading into a competition was disrupted — injury, work, life — walk in with adjusted goals instead of abandoning the goal entirely. 'Survive and learn' is a completely legitimate competition objective. Showing up under-prepared and competing anyway builds more resilience than skipping it would." },
-  { title: "Your ego and your growth want different things", body: "Ego wants to win every round, submit everyone, never look bad in front of the gym. Growth wants you in bad positions, against tougher partners, failing in front of people. Notice which one is choosing your training partners and your rolling intensity on a given day — and deliberately let growth win more often than ego does." },
+  { title: "The tap is outside your judgment of it", body: "A tap is an event. Your account of what it means is a separate act, one you perform afterward and one you control completely. The event cannot harm you; only the account can. Train yourself to notice the gap between the two, and hold your account to the facts: this position, this day, did not work. Nothing more is true without your adding it. \"Man's anger does not achieve God's righteousness\" (James 1:20) — neither does turning a tap into a verdict on your worth." },
+  { title: "Govern what is yours to govern", body: "Some things are in your power — effort, technique, composure, whether you show up tomorrow. Others are not — your opponent's skill, the outcome of a scramble, whether the call goes your way. Grief and frustration in grappling almost always come from mistaking the second category for the first. Sort clearly, every session, which is which." },
+  { title: "Return to white belt as often as needed", body: "Each new rank strips away your competence and hands you back the discomfort of being a beginner. This is not a defect in the process; it is the process. \"Whoever humbles himself will be exalted\" (Matthew 23:12). The man unwilling to look clumsy again has already decided where his growth stops." },
+  { title: "A worthy opponent asks nothing of your pride", body: "Being caught by someone with fewer stripes than you costs you nothing but the story you attach to it. Take the position calmly, examine it without flinching, and train it. What you protect by refusing the lesson is not your skill — only your image of it." },
+  { title: "Name the sensation correctly", body: "The tightening chest and the quickened breath before a match are not fear by nature; they are simply the body preparing for effort. Whether you call it dread or readiness is your choice to make, made freely, and it changes nothing about the sensation except your relationship to it. Choose the name that serves you." },
+  { title: "Attend to the hand, not the scoreboard", body: "Concern yourself with the frame in front of you, the grip you currently hold, the base beneath you — not with a result that has not yet occurred and may never occur as you imagine it. \"Sufficient unto the day is the evil thereof\" (Matthew 6:34). The present exchange is the whole of your task; give it your whole attention." },
+  { title: "Stagnation is often invisible labor", body: "Weeks that feel unproductive are frequently the weeks in which the body is quietly consolidating what came before. Judge the process by its discipline, not by how it feels on a given Tuesday. Endurance that waits for a feeling is not endurance at all." },
+  { title: "One bad exchange is not the round", body: "Treat a lost scramble as a single closed event, fully finished the moment it ends. Carrying it into the next exchange is a choice you make, not a consequence you suffer. Set it down. Begin again, clean." },
+  { title: "Rehearse the precise problem, not a vague victory", body: "Imagining yourself winning changes little. Imagining, in exact detail, your answer to a collar tie or a stalling guard trains the same pathways your body will use under real pressure. Precision in rehearsal is not optional decoration — it is the actual work." },
+  { title: "Guard the ones who train beside you", body: "Skill without regard for your training partners is a poor inheritance; a gym you have emptied through carelessness is no gym at all. Roll with full effort and full restraint at once — these are not opposites, and a serious man holds both." },
+  { title: "Seek the position that unsettles you", body: "A drill that feels easy is rarely still teaching you anything. Deliberately return to the position, the grip, the partner that makes you uncomfortable — that is where the actual curriculum is kept. Ease is a poor teacher and a worse judge of your progress." },
+  { title: "Frustration measures your standard, not your failure", body: "You are frustrated because you expect more of yourself than you are currently producing — this is evidence of a standard, not evidence of decline. Notice it, name it plainly, and return your attention to the single next detail. Do not mistake the noticing for the problem." },
+  { title: "Show up regardless of the day you have had", body: "A man is not required to feel ready before he trains; he is required to train, and to adjust his expectations honestly to what the day allows. \"I have learned, in whatsoever state I am, therewith to be content\" (Philippians 4:11). Maintenance on a hard day is not failure — it is the discipline itself." },
+  { title: "Confidence is earned by repetition, not declared", body: "Telling yourself you are ready accomplishes little if the movement has not been drilled until the body no longer waits for the mind's permission. Competition confidence is the residue of hours already spent, not a mood summoned beforehand." },
+  { title: "Discipline what panic would otherwise command", body: "A fine technical game collapses the instant the nervous system floods with alarm. Train composure directly and on purpose — begin from the worst position, hold the bad spot longer than is comfortable — so that when it happens for real, the body has already rehearsed staying calm." },
+  { title: "How you treat the weaker partner is the whole measure", body: "Restraint with an overmatched or injured training partner reveals more of a man's character than any medal will. Control is a different thing entirely from domination, and only one of the two is worth having a reputation for." },
+  { title: "Separate the event from the account you give it", body: "A loss, even a repeated one to the same opponent, is a fact with a fixed size. The account — 'I will never beat him,' 'I am not good enough' — is usually far larger than the fact and entirely of your own construction. Write down only what occurred. The rest is not information; it is a story you are choosing to suffer under." },
+  { title: "Pressure exposes; it does not create", body: "Whatever surfaces when you are tired, losing, or overmatched was already present — pressure has simply removed the energy required to conceal it. Treat hard rounds as the most honest report you will ever receive on your own training, not as an unfair test of your character." },
+  { title: "Slowness now buys speed later", body: "Explosiveness pursued before control is mastered only produces faster errors. Roll slowly enough that you could narrate every grip and every shift of weight aloud — this is the foundation that speed is eventually built upon, and there is no shortcut around laying it." },
+  { title: "The partner you avoid is instructing you already", body: "Notice who you quietly steer away from rolling, and ask yourself plainly why. That roll, not the comfortable ones, is where the lesson you most need is waiting for you to stop declining it." },
+  { title: "Rest is a discipline, not a concession", body: "Forcing a hard round on an exhausted body does not build toughness — it builds the very patterns that will fail you later, when it matters. Recognizing the difference between fatigue and weakness, and choosing rest when it is fatigue, is itself an act of self-command, not a surrender of one." },
+  { title: "Measure only against the man you were", body: "Every training partner began from a different place, with a different body and a different burden outside the gym. The single honest comparison available to you is against yourself six months ago. \"Let every man prove his own work, and then shall he have rejoicing in himself alone, and not in another\" (Galatians 6:4)." },
+  { title: "Name what moves through you before it acts", body: "Fear, frustration, and anger each narrow the attention and turn a man against the position rather than toward solving it. Naming the emotion plainly the instant it arises — simply, 'this is frustration' — restores the faculty of reason that the emotion was about to seize for itself." },
+  { title: "A disrupted camp does not disqualify the competitor", body: "If injury, work, or life have cut into your preparation, walk onto the mat with an adjusted aim rather than an abandoned one. To survive and to learn is a complete and honorable objective on its own. Competing under-prepared, deliberately and without excuse, builds more than skipping ever could." },
+  { title: "Ego and growth do not want the same thing", body: "Ego wants an unbroken record and an audience that never sees you fail. Growth wants you in bad positions, against harder partners, failing where people can see it. Notice, each time you choose a training partner or an intensity, which of the two is actually making the choice." },
+  { title: "Strength is provided to the tired", body: "\"He giveth power to the faint; and to them that have no might he increaseth strength... they that wait upon the Lord shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint\" (Isaiah 40:29, 31). On the days your own reserve runs out, this is worth remembering — endurance is not always a resource you generate alone." },
 ];
 
 function mentalTipForDate(dateStr) {
@@ -912,7 +960,6 @@ const READINESS_COPY = {
 
 const TABS = [
   { id: "today", label: "Today", icon: Home },
-  { id: "schedule", label: "Schedule", icon: ListOrdered },
   { id: "program", label: "Program", icon: CalendarDays },
   { id: "history", label: "History", icon: HistoryIcon },
   { id: "bjj", label: "BJJ Notes", icon: BookOpen },
@@ -1033,9 +1080,10 @@ function MainApp({ userId, onSignOut }) {
     setClientState(null);
     setShowSettings(false);
   };
-  const refreshProgramTemplate = async () => {
+  const refreshProgramTemplate = async (variantOverride) => {
     if (!client) return;
-    const updated = { ...client, program: buildProgramVariant(client.program?.variant === "A" ? "A" : "B") };
+    const variant = variantOverride || (["A", "B", "C"].includes(client.program?.variant) ? client.program.variant : "B");
+    const updated = { ...client, program: buildProgramVariant(variant) };
     await persistClient(updated);
   };
 
@@ -1052,7 +1100,6 @@ function MainApp({ userId, onSignOut }) {
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
             onStartMobility={() => setShowMobility(true)} />
         )}
-        {tab === "schedule" && <ScheduleTab client={client} />}
         {tab === "program" && <ProgramTab client={client} onPersist={persistClient} />}
         {tab === "history" && <HistoryTab client={client} onPersist={persistClient} />}
         {tab === "bjj" && <BJJNotesTab client={client} onPersist={persistClient} />}
@@ -1166,7 +1213,7 @@ function OnboardingScreen({ onSubmit }) {
         ) : (
           <GrapplingMark opacity={0.14} />
         )}
-        <div className="brand-title" style={{ position: "relative" }}>KC Grappling Protocol</div>
+        <div className="brand-title" style={{ position: "relative" }}>Strength Matrix</div>
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome</div>
       <p className="muted" style={{ marginBottom: 20 }}>Set up your profile to get started with your training system.</p>
@@ -1184,13 +1231,18 @@ function OnboardingScreen({ onSubmit }) {
         </select>
       </label>
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</div>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
       <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")}>
         <div className="program-choice-title">Program A — Condensed Conjugate</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Day 1: Max Effort Lower + Dynamic Effort Upper. Day 2: Max Effort Upper + Dynamic Effort Lower. Day 3: Full Body Dynamic Effort. Both qualities trained every session — best if you want maximum coverage in three days a week.</p>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Every session trains two qualities — a max lift and a speed lift, back to back. Best for less mat time.</p>
       </div>
       <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
         <div className="program-choice-title">Program B — Traditional Split</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Day 1: Max Effort Lower. Day 2: Max Effort Upper. Day 3: Full Body Dynamic Effort. One quality per session — more recovery room around each lift, best if your BJJ volume is already high.</p>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>One quality per session, more recovery room. Best if your BJJ volume is already high.</p>
+      </div>
+      <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")}>
+        <div className="program-choice-title">Program C — Offseason Strength Build</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. Best when your only goal is getting as strong as possible.</p>
       </div>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant })}>
@@ -1204,10 +1256,17 @@ function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpe
   return (
     <div className="topbar">
       <div>
-        <div className="topbar-brand">KC Grappling Protocol</div>
+        <div className="topbar-brand">Strength Matrix</div>
         <button className="topbar-name-sub topbar-name-btn" onClick={onOpenDashboard}>{client.name} — view progress</button>
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <button className="topbar-avatar-btn" onClick={onOpenSettings} aria-label="Edit profile picture">
+        {client.profilePicture ? (
+          <img src={client.profilePicture} alt="" className="topbar-avatar-img" />
+        ) : (
+          <span className="topbar-avatar-fallback">{(client.name || "?").trim().charAt(0).toUpperCase()}</span>
+        )}
+      </button>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
         <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
         <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings"><SettingsIcon size={20} /></button>
@@ -1377,6 +1436,52 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
   const [savedSchedule, setSavedSchedule] = useState(false);
   const [belt, setBelt] = useState(client?.beltLevel || "White");
   const [savedBelt, setSavedBelt] = useState(false);
+  const [uploadingPic, setUploadingPic] = useState(false);
+  const [picError, setPicError] = useState("");
+
+  const handlePictureUpload = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPicError("");
+    if (!file.type.startsWith("image/")) { setPicError("Please choose an image file."); return; }
+    setUploadingPic(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = async () => {
+        const size = 300;
+        const canvas = document.createElement("canvas");
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        await onPersist({ ...client, profilePicture: dataUrl });
+        setUploadingPic(false);
+      };
+      img.onerror = () => { setPicError("Couldn't read that image — try a different file."); setUploadingPic(false); };
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => { setPicError("Couldn't read that file."); setUploadingPic(false); };
+    reader.readAsDataURL(file);
+  };
+  const removePicture = async () => { await onPersist({ ...client, profilePicture: null }); };
+  const [syncStatus, setSyncStatus] = useState(null); // null = loading, "never", or a Date
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSync() {
+      if (!client?.roster?.sharing || !client?.roster?.code || !supabase) { setSyncStatus("never"); return; }
+      try {
+        const { data } = await supabase.from("roster_snapshots").select("updated_at").eq("roster_code", client.roster.code.trim().toUpperCase()).eq("client_id", client.id).maybeSingle();
+        if (!cancelled) setSyncStatus(data?.updated_at ? new Date(data.updated_at) : "never");
+      } catch { if (!cancelled) setSyncStatus("never"); }
+    }
+    checkSync();
+    return () => { cancelled = true; };
+  }, [client?.roster?.sharing, client?.roster?.code, client?.id]);
 
   const saveSharing = async () => {
     const updated = { ...client, roster: { code: rosterCode.trim(), sharing: sharing && !!rosterCode.trim() } };
@@ -1398,6 +1503,20 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
 
   return (
     <ModalShell onClose={onClose} title="Settings">
+      <div className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+        <div className="settings-avatar-preview">
+          {client?.profilePicture ? <img src={client.profilePicture} alt="" /> : <span>{(client?.name || "?").trim().charAt(0).toUpperCase()}</span>}
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="btn-ghost" style={{ display: "inline-block", cursor: "pointer" }}>
+            {uploadingPic ? "Uploading…" : client?.profilePicture ? "Change Picture" : "Upload Picture"}
+            <input type="file" accept="image/*" onChange={handlePictureUpload} style={{ display: "none" }} disabled={uploadingPic} />
+          </label>
+          {client?.profilePicture && <button className="btn-ghost" style={{ marginLeft: 8 }} onClick={removePicture}>Remove</button>}
+          {picError && <p className="muted" style={{ color: "var(--accent)", fontSize: 12, marginTop: 6 }}>{picError}</p>}
+        </div>
+      </div>
       <div className="log-exercise-name" style={{ marginBottom: 6 }}>Brazilian Jiu-Jitsu Belt Level</div>
       <select className="select-input" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
         {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -1414,7 +1533,11 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       </label>
       <button className="btn-primary wide" onClick={saveSharing}>{savedSharing ? "Saved" : "Save Sharing Settings"}</button>
       {client?.roster?.sharing && client?.roster?.code && (
-        <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>Currently sharing with code "{client.roster.code}".</p>
+        <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          {syncStatus === null && "Checking sync status…"}
+          {syncStatus === "never" && "Sharing is on, but hasn't synced to your coach yet — it syncs automatically the next time you use the app."}
+          {syncStatus instanceof Date && `Last synced ${syncStatus.toLocaleString()} — sharing with code "${client.roster.code}".`}
+        </p>
       )}
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</div>
@@ -1448,6 +1571,54 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
           </div>
         </div>
       )}
+
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Switch Program</div>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
+      </p>
+      {["A", "B", "C"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
+        <button key={v} className="btn-ghost wide" onClick={async () => { await onRefreshProgram(v); setRefreshed(true); }}>
+          Switch to {PROGRAM_VARIANT_LABELS[v]}
+        </button>
+      ))}
+
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Veteran Athlete Mode</div>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        {(client?.sessionsCompleted || 0)} sessions logged since {client?.createdAt ? fmtDate(client.createdAt) : "you started"}
+        {client?.createdAt ? ` (roughly ${Math.max(1, Math.round((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30)))} months)` : ""}.
+        {" "}After several months of accumulated training, a deeper deload tends to pay off more than the standard one. Turning this on doesn't change your everyday lifting — only deload weeks, which go a further 10 percent lighter with an extra rep in reserve on every set.
+      </p>
+      <button className="btn-ghost wide" onClick={async () => { await onPersist({ ...client, veteranMode: !client?.veteranMode }); }}>
+        {client?.veteranMode ? "Turn Off Veteran Deload" : "Turn On Veteran Deload"}
+      </button>
+      {client?.veteranMode && <div className="adjust-box" style={{ marginTop: 8, borderColor: "var(--green)" }}>Veteran Deload is on — your next deload week will be deeper than standard.</div>}
+
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Export Your Data</div>
+      <p className="muted" style={{ marginBottom: 10 }}>Download every workout, bodyweight entry, readiness check-in, and Personal Record you've ever logged as a single file — a personal backup that's yours to keep, independent of this app.</p>
+      <button className="btn-ghost wide" onClick={() => {
+        const exportData = {
+          exportedAt: new Date().toISOString(),
+          name: client.name,
+          programName: client.program?.name,
+          sessionsCompleted: client.sessionsCompleted,
+          logs: client.logs,
+          bodyweightLog: client.bodyweightLog,
+          readiness: client.readiness,
+          prLog: client.prLog,
+          mobilityLogs: client.mobilityLogs,
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${(client.name || "athlete").replace(/\s+/g, "-").toLowerCase()}-training-data-${todayStr()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }}>
+        <Download size={14} /> Download My Training Data
+      </button>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 10 }}>Appearance</div>
       <div className="radio-group">
@@ -1813,6 +1984,7 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   ];
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
+      <button className="btn-primary wide" style={{ marginBottom: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
       <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (pounds)</span><input type="number" step="0.1" inputMode="decimal" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" /></div>
       {fields.map((f) => <SliderRow key={f.key} label={f.label} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
       <label className="bjj-toggle">
@@ -1945,10 +2117,6 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     list[exIdx] = { ...list[exIdx], sets };
     return { ...prev, [sectionId]: list };
   });
-  const markDone = (sectionId, exIdx, setIdx) => {
-    const currentlyDone = entriesBySection[sectionId][exIdx].sets[setIdx].done;
-    updateSet(sectionId, exIdx, setIdx, "done", !currentlyDone);
-  };
   const substituteExercise = (sectionId, exIdx, newName) => {
     setEntriesBySection((prev) => {
       const list = [...prev[sectionId]];
@@ -2186,7 +2354,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     </div>
                   )}
                 </div>
-                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>Reps</span><span>Rate of Perceived Exertion (fixed)</span><span>Done</span><span>Personal Record</span></div>
+                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>Reps</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
@@ -2206,7 +2374,6 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                           <input type="number" step="0.1" inputMode="decimal" placeholder="pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
                           <input type="text" inputMode="text" placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
                           <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} disabled />
-                          <button className={`set-done ${s.done ? "done" : ""}`} onClick={() => markDone(sec.id, exIdx, setIdx)}><Check size={16} /></button>
                           <button className={`set-pr ${setFlagged ? "flagged" : ""}`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); setTimeout(() => setPrHint(null), 3000); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
                         </div>
                         {effectivePct && (
@@ -2335,7 +2502,7 @@ function ScheduleTab({ client }) {
   const [openWeek, setOpenWeek] = useState(Math.min(currentWeek, totalWeeks));
 
   return (
-    <div className="pad">
+    <div>
       <div className="program-title">Full Schedule — All {totalWeeks} Weeks</div>
       <p className="muted" style={{ marginBottom: 14 }}>A condensed look at every day of every week, so you can see what's coming before you get there. Tap a week to expand it.</p>
       {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => {
@@ -2357,7 +2524,7 @@ function ScheduleTab({ client }) {
               <div className="phase-body">
                 {phase.days.map((day) => {
                   const lift = primaryLiftName(day, week, client.program, phase);
-                  const resolvedSections = resolveDaySections(day, week, client.program, phase);
+                  const resolvedSections = resolveDaySections(day, week, client.program, phase, !!client.veteranMode);
                   return (
                     <div key={day.id} className="day-card">
                       <div className="day-card-head">
@@ -2390,6 +2557,7 @@ function ScheduleTab({ client }) {
 }
 
 function ProgramTab({ client, onPersist }) {
+  const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
   const [editingDay, setEditingDay] = useState(null);
   const [editingWarmup, setEditingWarmup] = useState(false);
@@ -2397,8 +2565,25 @@ function ProgramTab({ client, onPersist }) {
   const perWeek = client.program.sessionsPerWeek || 3;
   const currentWeekNumber = Math.max(1, Math.floor((client.sessionsCompleted || 0) / perWeek) + 1);
 
+  const viewToggle = (
+    <div className="view-toggle-row">
+      <button className={`view-toggle-btn ${view === "overview" ? "active" : ""}`} onClick={() => setView("overview")}>Overview</button>
+      <button className={`view-toggle-btn ${view === "schedule" ? "active" : ""}`} onClick={() => setView("schedule")}>Full Schedule</button>
+    </div>
+  );
+
+  if (view === "schedule") {
+    return (
+      <div className="pad">
+        {viewToggle}
+        <ScheduleTab client={client} />
+      </div>
+    );
+  }
+
   return (
     <div className="pad">
+      {viewToggle}
       <div className="program-title">{client.program.name}</div>
 
       {client.program.coachNote && <Card title="From the Coach"><p className="muted">{client.program.coachNote}</p></Card>}
@@ -2674,6 +2859,7 @@ function HistoryTab({ client, onPersist }) {
   const [openId, setOpenId] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(20);
   const logs = [...client.logs].reverse();
   const mobilityLogs = [...(client.mobilityLogs || [])].reverse();
 
@@ -2775,21 +2961,28 @@ function HistoryTab({ client, onPersist }) {
       )}
 
       <div className="program-title" style={{ fontSize: 18, marginTop: 24, marginBottom: 8 }}>Full History</div>
-      {logs.length === 0 ? <EmptyState text="No workouts logged yet. Finish a session from Today to see it here." /> : (
-        logs.map((log) => (
-          <div key={log.id} className="history-card">
-            <button className="history-head" onClick={() => setOpenId(openId === log.id ? null : log.id)}>
-              <div><div className="history-date">{fmtDate(log.date)}</div><div className="muted">Week {log.weekNumber} — Day {log.dayLabel}</div></div>
-              <div className="history-meta"><span>{log.totalVolume.toLocaleString()} pounds</span><ChevronRight size={16} className={openId === log.id ? "chev-open" : ""} /></div>
+      {logs.length === 0 ? <EmptyState icon={HistoryIcon} text="Nothing logged yet — head to the Today tab and finish your first session. It'll show up here the moment you do." /> : (
+        <>
+          {logs.slice(0, visibleCount).map((log) => (
+            <div key={log.id} className="history-card">
+              <button className="history-head" onClick={() => setOpenId(openId === log.id ? null : log.id)}>
+                <div><div className="history-date">{fmtDate(log.date)}</div><div className="muted">Week {log.weekNumber} — Day {log.dayLabel}</div></div>
+                <div className="history-meta"><span>{log.totalVolume.toLocaleString()} pounds</span><ChevronRight size={16} className={openId === log.id ? "chev-open" : ""} /></div>
+              </button>
+              {openId === log.id && (
+                <div className="history-body">
+                  <EditableLogBody log={log} client={client} onPersist={onPersist} />
+                  <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>{log.warmupCompleted ? "Warm-up complete" : ""}</div>
+                </div>
+              )}
+            </div>
+          ))}
+          {logs.length > visibleCount && (
+            <button className="btn-ghost wide" onClick={() => setVisibleCount((c) => c + 20)}>
+              Load 20 More ({logs.length - visibleCount} remaining)
             </button>
-            {openId === log.id && (
-              <div className="history-body">
-                <EditableLogBody log={log} client={client} onPersist={onPersist} />
-                <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>{log.warmupCompleted ? "Warm-up complete" : ""}</div>
-              </div>
-            )}
-          </div>
-        ))
+          )}
+        </>
       )}
 
       {mobilityLogs.length > 0 && (
@@ -2910,10 +3103,13 @@ function DetailBarToggle({ label, entries, dataKey, domain }) {
 }
 
 function ProgressTab({ client }) {
-  const bwData = (client.bodyweightLog || []).map((b) => ({ date: fmtDate(b.date), weight: b.weight }));
-  const readinessEntries = Object.values(client.readiness || {}).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const CHART_WINDOW = 90;
+  const bwData = (client.bodyweightLog || []).map((b) => ({ date: fmtDate(b.date), weight: b.weight })).slice(-CHART_WINDOW);
+  const readinessEntries = Object.values(client.readiness || {}).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-CHART_WINDOW);
   const readinessData = readinessEntries.map((r) => ({ date: fmtDate(r.date), score: r.color === "GREEN" ? 3 : r.color === "YELLOW" ? 2 : 1 }));
   const sorenessData = readinessEntries.map((r) => ({ date: fmtDate(r.date), soreness: Number(r.soreness) }));
+  const totalBwEntries = (client.bodyweightLog || []).length;
+  const totalReadinessEntries = Object.keys(client.readiness || {}).length;
 
   if (bwData.length === 0 && readinessData.length === 0) return <div className="pad"><EmptyState text="Log a workout or a daily check-in to see progress charts." /></div>;
 
@@ -2921,6 +3117,7 @@ function ProgressTab({ client }) {
     <div className="pad">
       {bwData.length > 0 && (
         <Card title="Bodyweight">
+          {totalBwEntries > CHART_WINDOW && <p className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Showing your most recent {CHART_WINDOW} entries of {totalBwEntries} total — export your data in Settings for the full history.</p>}
           <div style={{ height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={bwData}>
@@ -3077,7 +3274,16 @@ function Card({ title, subtitle, right, children }) {
   return <div className="card"><div className="card-head"><div><div className="card-title">{title}</div>{subtitle && <div className="muted" style={{ fontSize: 13 }}>{subtitle}</div>}</div>{right}</div>{children}</div>;
 }
 function StatChip({ label, value }) { return <div className="stat-chip"><div className="stat-chip-value">{value}</div><div className="stat-chip-label">{label}</div></div>; }
-function EmptyState({ text }) { return <div className="empty-state">{text}</div>; }
+function EmptyState({ text, icon, actionLabel, onAction }) {
+  const Icon = icon || HistoryIcon;
+  return (
+    <div className="empty-state-v2">
+      <div className="empty-state-icon"><Icon size={28} /></div>
+      <p>{text}</p>
+      {actionLabel && onAction && <button className="btn-primary" style={{ marginTop: 12, padding: "10px 20px" }} onClick={onAction}>{actionLabel}</button>}
+    </div>
+  );
+}
 function ModalShell({ title, children, onClose, fullscreen, headerRight, headerLeftExtra }) {
   return (
     <div className={`modal-overlay ${fullscreen ? "fullscreen" : ""}`}>
@@ -3119,7 +3325,13 @@ function GlobalStyle() {
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.active { border-color: var(--accent); }
       .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-      .topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+      .topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+      .topbar-avatar-btn { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto; flex-shrink: 0; }
+      .topbar-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+      .topbar-avatar-fallback { font-size: 16px; font-weight: 700; color: var(--text-dim); }
+      .settings-avatar-preview { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .settings-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+      .settings-avatar-preview span { font-size: 24px; font-weight: 700; color: var(--text-dim); }
       .topbar-brand { font-family: 'Bebas Neue', 'Oswald', sans-serif; font-size: 17px; letter-spacing: 0.01em; color: var(--accent); line-height: 1.1; max-width: 220px; }
       .topbar-name-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
       .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); }
@@ -3173,6 +3385,9 @@ function GlobalStyle() {
       .btn-primary:disabled { opacity: 0.4; }
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+      .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+      .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 0; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
+      .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
       .pr-line { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 4px 0; }
       .slider-row { margin-bottom: 14px; }
@@ -3234,7 +3449,7 @@ function GlobalStyle() {
       .warmup-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
       .warmup-item input { margin-top: 3px; accent-color: var(--accent); }
       .warmup-item-name { font-size: 13.5px; }
-      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 32px 32px; gap: 5px; align-items: center; }
+      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 32px; gap: 5px; align-items: center; }
       .set-grid-header { font-size: 9.5px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
@@ -3301,6 +3516,8 @@ function GlobalStyle() {
       .pr-history-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
       .pr-history-row:last-child { border-bottom: none; }
       .empty-state { text-align: center; color: var(--text-dim); padding: 60px 20px; font-size: 14px; }
+      .empty-state-v2 { text-align: center; color: var(--text-dim); padding: 48px 24px; font-size: 14px; }
+      .empty-state-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; color: var(--accent); }
       .client-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
       .client-select { flex: 1; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-size: 14.5px; cursor: pointer; }
       .client-select.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
@@ -3369,7 +3586,7 @@ function AuthScreen() {
       <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
         <div className="logo-block">
           <GrapplingMark opacity={0.14} />
-          <div className="brand-title" style={{ position: "relative" }}>KC Grappling Protocol</div>
+          <div className="brand-title" style={{ position: "relative" }}>Strength Matrix</div>
         </div>
         <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>{mode === "signup" ? "Create Your Account" : "Sign In"}</div>
         <p className="muted" style={{ marginBottom: 20 }}>
