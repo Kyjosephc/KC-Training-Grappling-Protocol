@@ -19,6 +19,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
+const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 
 /* ============================== STORAGE HELPERS ============================== */
 // These five functions are the ONLY place the rest of the app talks to storage.
@@ -122,6 +123,38 @@ function rpeFromRir(rir) {
   const n = Number(rir);
   if (Number.isNaN(n)) return null;
   return Math.max(1, Math.min(10, 10 - n));
+}
+// Standard strength-coaching RPE chart (the same one used by most autoregulated programs):
+// %1RM at true 0-reps-in-reserve (RPE 10) for a given rep count, then roughly 2.5% is subtracted
+// per point below RPE 10. This lets any RPE + rep target also show a calculated suggested weight,
+// once a real max has been logged for that exercise — the RPE stays the actual target effort,
+// the percentage is just what that effort is expected to correspond to.
+const PCT_AT_RPE10_BY_REPS = { 1: 100, 2: 95, 3: 92, 4: 89, 5: 86, 6: 84, 7: 81, 8: 79, 9: 76, 10: 74, 11: 72, 12: 70, 15: 65, 20: 58 };
+function pctFromRpeReps(rpe, reps) {
+  const match = String(reps).match(/^\d+/);
+  const r = match ? Number(match[0]) : NaN;
+  if (!r || Number.isNaN(r) || !rpe) return null;
+  let base;
+  if (PCT_AT_RPE10_BY_REPS[r] !== undefined) base = PCT_AT_RPE10_BY_REPS[r];
+  else if (r > 20) base = 50;
+  else {
+    // interpolate between the nearest known rep counts
+    const knownReps = Object.keys(PCT_AT_RPE10_BY_REPS).map(Number).sort((a, b) => a - b);
+    let lo = knownReps[0], hi = knownReps[knownReps.length - 1];
+    for (let i = 0; i < knownReps.length - 1; i++) { if (r >= knownReps[i] && r <= knownReps[i + 1]) { lo = knownReps[i]; hi = knownReps[i + 1]; break; } }
+    const t = (r - lo) / (hi - lo);
+    base = PCT_AT_RPE10_BY_REPS[lo] + t * (PCT_AT_RPE10_BY_REPS[hi] - PCT_AT_RPE10_BY_REPS[lo]);
+  }
+  const pct = base - (10 - rpe) * 2.5;
+  return Math.max(30, Math.min(100, Math.round(pct)));
+}
+// A rep target counts as "loadable" (worth a %1RM suggestion) only if it's a genuine number of reps —
+// "6", "3 each side", "10 to 12 each" all count. Holds, carries, and distance work (seconds, meters,
+// minutes) don't get a percentage, since %1RM doesn't apply to them.
+function isLoadableReps(repsStr) {
+  const s = String(repsStr).trim().toLowerCase();
+  if (/second|minute|meter|\bsec\b|\bmin\b|hold/.test(s)) return false;
+  return /^\d+/.test(s);
 }
 function defaultRepsFor(target, setIdx) {
   if (target.perSetTargets) return String(target.perSetTargets[setIdx]?.reps ?? "");
@@ -454,9 +487,9 @@ const wristPool = [
   { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction" },
   { name: "Rice Bucket Grip Drills", notes: "Dig, twist, and squeeze through a bucket of rice — forearm and wrist rotator conditioning that also toughens the hands", reps: "20 seconds each direction" },
 ];
-const bicepAltPool = [
-  { name: "Inverse Zottman Curl", notes: "Curl with a reverse grip up, rotate to a standard grip on the way down — biceps and forearm rotator strength in one movement" },
-  { name: "Face-Away Behind-the-Back Cable Curl", notes: "Face away from a low cable and curl behind the body — loads the biceps in a deep stretched position most curls never reach" },
+const coreAntiPool = [
+  { name: "Heavy Pallof Press Hold (each side)", notes: "Anti-rotation under real load — resisting a cable trying to rotate your trunk is a far closer match to what grapplers actually get exposed to live than a bicep curl ever was" },
+  { name: "Suitcase Carry (each side)", notes: "Anti-lateral-flexion under load — a heavy single-side carry forces the trunk to resist being pulled sideways the entire walk, directly protective for the exact forces guard retention and scrambles put on the spine" },
 ];
 const conditioningIntervalPool = [
   { name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "45 to 60 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct." },
@@ -529,7 +562,7 @@ const conjugateProgram = {
     "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 120 to 150 beats per minute, the qualifying standard for that work), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used only every other week since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
-  conjugate: { meLowerPool, meUpperPool, wristPool, bicepAltPool, conditioningIntervalPool, meRotationWeeks: 2 },
+  conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, meRotationWeeks: 2 },
   warmup: defaultWarmup(),
   mobility: defaultMobility(),
 
@@ -582,7 +615,7 @@ const conjugateProgram = {
               ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through a full range of motion — protective against neck cranks, guillotines, and posture under pressure", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
-              ex({ name: bicepAltPool[0].name, rotatingPool: "bicepAltPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — biceps and forearm strength for grip fighting and pulling positions, alternated every 2 weeks between two curl variations", quality: "Arms" }),
+              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, alternated every 2 weeks between the two variations", quality: "Core" }),
               ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength — resisting rotation is as important for grappling as producing it", quality: "Core" }),
             ]},
           ]},
@@ -651,7 +684,7 @@ const conjugateProgram = {
               ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Neck strength and durability", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
-              ex({ name: bicepAltPool[0].name, rotatingPool: "bicepAltPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation, alternated every 2 weeks between two curl variations", quality: "Arms" }),
+              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, alternated every 2 weeks between the two variations", quality: "Core" }),
               ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength", quality: "Core" }),
             ]},
           ]},
@@ -760,6 +793,175 @@ const conjugateProgram = {
   ],
 };
 
+function rigoWarmup() {
+  return [
+    { id: uid(), block: "Movement Prep", duration: "8 to 10 minutes", items: [
+      { id: uid(), name: "Heel to Toe Walks", detail: "10 meters", videoUrl: "" },
+      { id: uid(), name: "Heel Walks", detail: "20 meters", videoUrl: "" },
+      { id: uid(), name: "Toe Walks", detail: "20 meters", videoUrl: "" },
+      { id: uid(), name: "Banded Lateral Step", detail: "20 meters both ways", videoUrl: "" },
+      { id: uid(), name: "Banded Sumo Steps", detail: "20 meters both ways", videoUrl: "" },
+      { id: uid(), name: "Single Leg Glute Bridge", detail: "10 reps each side", videoUrl: "" },
+      { id: uid(), name: "Bulldog Circuit", detail: "5 reps each way", videoUrl: "" },
+      { id: uid(), name: "Box Jumps", detail: "5 reps", videoUrl: "" },
+      { id: uid(), name: "Arm Swings Forward & Backward", detail: "30 reps each way", videoUrl: "" },
+    ]},
+  ];
+}
+// Builds one superset pair as two adjacent exercises sharing a numbered A/B label, RPE-driven (not %1RM),
+// with tempo notation exactly as in the source program (eccentric/pause/concentric, X = explosive).
+function ssPair(num, aName, aPre, bName, bPre) {
+  return [
+    ex({ name: aName, supersetLabel: `${num}A`, sets: aPre.sets, reps: aPre.reps, tempo: aPre.tempo || "", rir: 10 - aPre.rpe, rest: "as needed between the paired exercises, 2 to 3 minutes after both are done", quality: "Strength", pct1rmFlat: isLoadableReps(aPre.reps) ? pctFromRpeReps(aPre.rpe, aPre.reps) : null }),
+    ex({ name: bName, supersetLabel: `${num}B`, sets: bPre.sets, reps: bPre.reps, tempo: bPre.tempo || "", rir: 10 - bPre.rpe, rest: "moves straight into the next superset round", quality: "Accessory", pct1rmFlat: isLoadableReps(bPre.reps) ? pctFromRpeReps(bPre.rpe, bPre.reps) : null }),
+  ];
+}
+function ssSingle(num, name, pre, quality) {
+  return ex({ name, supersetLabel: String(num), sets: pre.sets, reps: pre.reps, tempo: pre.tempo || "", rir: 10 - pre.rpe, rest: "90 seconds to 2 minutes", quality: quality || "Strength", pct1rmFlat: isLoadableReps(pre.reps) ? pctFromRpeReps(pre.rpe, pre.reps) : null });
+}
+
+function buildProgramCPhase(nameLabel, weekStart, weekEnd, objective, dayDefs) {
+  return {
+    id: uid(), name: nameLabel, weekStart, weekEnd, objective,
+    intensityNote: "Every prescription below is driven by Rate of Perceived Exertion, not a percentage of your One-Rep Max — the number in parentheses after each exercise is the target RPE for that set. Tempo notation (for example 2/1/X) means seconds lowering the weight, seconds pausing, then the lifting phase — X means as explosive as you can make it.",
+    days: dayDefs.map((d, i) => ({ id: uid(), label: String(i + 1), name: d.name, intent: d.intent, sections: d.sections })),
+  };
+}
+
+function buildProgramCContent() {
+  const phase1 = buildProgramCPhase(
+    "Strength / Strength Endurance / Isometrics / Core Stability — Weeks 1 to 3",
+    1, 3,
+    "Foundational strength block. RPE climbs from 8 in week 1 up to 10 by week 3 of this block on the same exercises — same movements, same set and rep scheme, just build toward a harder honest effort each week.",
+    [
+      { name: "Day 1", intent: "Squat, bench, and row pattern with isometric neck work to finish.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Back Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Side Plank", { sets: 4, reps: "20 seconds each side", rpe: 7 }),
+          ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
+          ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Scap Push-Up", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
+          ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
+        ]},
+      ]},
+      { name: "Day 2", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Zercher Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Supine Hamstring Single Leg Glute Bridge (ball or slides)", { sets: 4, reps: "8 each side", tempo: "2/0/X", rpe: 8 }),
+          ...ssPair(2, "Upright Shoulder Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
+          ...ssPair(3, "Weighted Pull-Ups", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Banded Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
+          ...ssPair(4, "Toes to Bar", { sets: 2, reps: "10", tempo: "3/0/1", rpe: 8 }, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }),
+          ssSingle(5, "Rice Grips", { sets: 2, reps: "20 each direction", rpe: 6 }, "Grip"),
+        ]},
+      ]},
+      { name: "Day 3", intent: "Single-leg hinge and pressing day, finishing on a loaded carry for anti-lateral-flexion core strength.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Single Leg Romanian Deadlift", { sets: 3, reps: "6", tempo: "2/0/1", rpe: 8 }, "Side Plank", { sets: 3, reps: "20 seconds", rpe: 7 }),
+          ...ssPair(2, "Weighted Push-Ups", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Weighted Scarecrows", { sets: 3, reps: "8, controlled", rpe: 7 }),
+          ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Briefcase Carry", { sets: 3, reps: "30 seconds each side", rpe: 9 }),
+          ssSingle(4, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 8 }, "Core"),
+        ]},
+      ]},
+    ]
+  );
+
+  const phase2 = buildProgramCPhase(
+    "Strength Endurance, Isometrics, Core Stability — Weeks 5 to 7",
+    5, 7,
+    "Different main lifts than the first block on purpose — trap bar deadlift and front squat replace back squat and Zercher, keeping the same superset structure so the movement pattern stays fresh while total training stress builds. RPE again climbs from 8 toward 9 to 10 across the three weeks.",
+    [
+      { name: "Day 1", intent: "Trap bar deadlift and floor press pattern, finishing on a pull-up hold and neck work.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Trap Bar Deadlift", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Banded Clamshell", { sets: 4, reps: "8", tempo: "2/1/1", rpe: 7 }),
+          ...ssPair(2, "Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
+          ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
+          ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
+        ]},
+      ]},
+      { name: "Day 2", intent: "Front squat and landmine press pattern.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Front Squat", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 4, reps: "10 each side", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(2, "Landmine Punch Press", { sets: 3, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(3, "Bent Over Barbell Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Prone Bench Y, T, W's", { sets: 3, reps: "5 each way", rpe: 7 }),
+          ssSingle(4, "Toes to Bar", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 8 }, "Trunk"),
+        ]},
+      ]},
+      { name: "Day 3", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets", exercises: [
+          ...ssPair(1, "Rear-Foot-Elevated Split Squat", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(3, "Renegade Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
+          ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
+        ]},
+      ]},
+    ]
+  );
+
+  const phase3 = buildProgramCPhase(
+    "Strength Speed, Speed Strength, Yielding Strength, Contralateral Stability, Concurrent Aerobic — Weeks 9 to 11",
+    9, 11,
+    "Higher-set, lower-fatigue speed-strength block — six sets of low reps on the main lift, moved with real intent, rather than the grinding volume of the first two blocks. Yielding-strength holds (the static trap bar hold, the single-arm kettlebell hold) train your ability to resist being moved, which is a different and just as important quality for grappling as producing force. Neck work also progresses here — once you've built a base with the isometric holds in earlier blocks, this block adds a light weighted bridge, since flat, unprogressed neck work indefinitely stops being real programming.",
+    [
+      { name: "Day 1", intent: "Split-stance trap bar deadlift for six triples, then supporting single-effort work.", sections: [
+        { id: uid(), type: "power", name: "Working Sets", exercises: [
+          ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 6, reps: "6 each side", tempo: "3/1/0", rpe: 7 }),
+          ssSingle(2, "Dumbbell Glute Bridge Floor Press", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 3, reps: "10 second holds", rpe: 7 }, "Yielding Strength"),
+          ssSingle(5, "Ab Roll Out", { sets: 3, reps: "12", rpe: 7 }, "Trunk"),
+          ssSingle(6, "Weighted Neck Bridge (front and back, light plate on chest, controlled)", { sets: 2, reps: "6 per direction", rpe: 7 }, "Durability"),
+        ]},
+      ]},
+      { name: "Day 2", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
+        { id: uid(), type: "power", name: "Working Sets", exercises: [
+          ...ssPair(1, "Front Squat", { sets: 6, reps: "3", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 6, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
+          ssSingle(2, "Incline Close Grip Bench Press", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(3, "Renegade Rows", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 3, reps: "15 seconds each side", rpe: 6 }, "Core"),
+          ssSingle(5, "Cable Pallof Press", { sets: 2, reps: "10 each side", rpe: 7 }, "Contralateral Stability"),
+        ]},
+      ]},
+      { name: "Day 3", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
+        { id: uid(), type: "power", name: "Working Sets", exercises: [
+          ...ssPair(1, "Split Stance Romanian Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 6, reps: "6", tempo: "3/1/1", rpe: 7 }),
+          ssSingle(2, "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Contralateral Stability"),
+          ssSingle(3, "Banded Single Leg Single Arm Row", { sets: 4, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Contralateral Stability"),
+          ssSingle(4, "Single Arm Kettlebell Hold", { sets: 3, reps: "20 second holds", rpe: 8 }, "Yielding Strength"),
+          ssSingle(5, "High Plank Kettlebell Pull-Through", { sets: 3, reps: "8 each side", rpe: 8 }, "Contralateral Stability"),
+        ]},
+      ]},
+    ]
+  );
+
+  const deloadPhase = (weekNum, afterLabel) => buildProgramCPhase(
+    `Deload — Week ${weekNum}`,
+    weekNum, weekNum,
+    `A genuine deload, not a retest. Every exercise from ${afterLabel} repeats at the same structure and tempo, but every set target drops to RPE 6 — a moderate, controlled effort with real reps in reserve on every set.`,
+    [
+      { name: "Day 1 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
+          ...ssPair(1, weekNum === 4 ? "Back Squat" : weekNum === 8 ? "Trap Bar Deadlift" : "Split Stance Trap Bar Deadlift", { sets: 3, reps: weekNum === 12 ? "5 each side" : "6", tempo: "1/2/X", rpe: 6 }, weekNum === 4 ? "Side Plank" : weekNum === 8 ? "Banded Clamshell" : "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: "15 to 20 seconds", rpe: 6 }),
+          ssSingle(2, weekNum === 4 ? "Bench Press" : weekNum === 8 ? "Glute Bridge Floor Press" : "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Strength"),
+          ssSingle(3, "4-Way Isometric Neck Holds", { sets: 3, reps: "15 seconds each way", rpe: 5 }, "Durability"),
+        ]},
+      ]},
+      { name: "Day 2 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
+          ...ssPair(1, weekNum === 4 ? "Zercher Squat" : "Front Squat", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "2/2/2", rpe: 6 }),
+          ssSingle(2, weekNum === 4 ? "Upright Shoulder Overhead Press" : weekNum === 8 ? "Incline Bench Press" : "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 6 }, "Strength"),
+          ssSingle(3, "Rice Grips", { sets: 2, reps: "20 each direction", rpe: 5 }, "Grip"),
+        ]},
+      ]},
+      { name: "Day 3 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
+        { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
+          ...ssPair(1, weekNum === 4 ? "Single Leg Romanian Deadlift" : "Split Stance Romanian Deadlift", { sets: 3, reps: "6", tempo: "2/0/1", rpe: 6 }, "Valslide Hamstring Curls", { sets: 3, reps: "6", rpe: 6 }),
+          ssSingle(2, weekNum === 4 ? "Weighted Push-Ups" : "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 6 }, "Strength"),
+          ssSingle(3, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 5 }, "Core"),
+        ]},
+      ]},
+    ]
+  );
+
+  return { phases: [phase1, deloadPhase(4, "the first block"), phase2, deloadPhase(8, "the second block"), phase3, deloadPhase(12, "the speed-strength block")], warmup: rigoWarmup() };
+}
+
 function defaultWarmup() {
   return [
     { id: uid(), block: "General Raise", duration: "3 to 5 minutes", items: [
@@ -808,7 +1010,7 @@ function blankProgram(name) {
   return {
     id: uid(), name: name || "Custom Program", sport: "", sessionsPerWeek: 3,
     coachNote: "", methodology: "", philosophy: "",
-    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], bicepAltPool: [], conditioningIntervalPool: [], meRotationWeeks: 2 },
+    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], coreAntiPool: [], conditioningIntervalPool: [], meRotationWeeks: 2 },
     warmup: defaultWarmup(),
     mobility: defaultMobility(),
     phases: [{ id: uid(), name: "Phase 1", weekStart: 1, weekEnd: 4, objective: "", intensityNote: "",
@@ -854,27 +1056,12 @@ function buildProgramVariant(variant) {
   } else if (variant === "C") {
     base.name = "Offseason Strength Build — Twelve-Week Program (Program C)";
     base.variant = "C";
-    base.objective = "No competition on the calendar to peak for — every phase in this program, including the last one, keeps building. The goal is simple: get as strong as possible for jiu-jitsu, without ever backing off volume to be fresh for a tournament that isn't happening.";
-    const peakIdx = base.phases.findIndex((p) => p.name.includes("Peak"));
-    if (peakIdx !== -1) {
-      // Clone the Intensification phase's fuller day structure instead of the tapered peak-phase one
-      const offseason = JSON.parse(JSON.stringify(base.phases[1]));
-      offseason.id = uid();
-      offseason.name = "Offseason Strength Build — Weeks 9 to 11";
-      offseason.weekStart = base.phases[peakIdx].weekStart;
-      offseason.weekEnd = base.phases[peakIdx].weekEnd;
-      offseason.objective = "This is the third and final strength block before your next deload — and because there's no competition to taper for, nothing here gets trimmed down. Durability, arms and core, and conditioning all stay at full volume, same as the first two blocks. The only thing that changes is the weight on the bar goes up.";
-      offseason.intensityNote = "Max Effort days work up to a true heavy top single or triple, same as always. Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max — normally that jump comes with a taper in everything else, but not here. Keep training like weeks 5 through 7, just heavier.";
-      offseason.dePercent = "60 to 65%";
-      offseason.days.forEach((day) => {
-        day.sections.forEach((sec) => {
-          if (sec.type === "power") {
-            sec.exercises.forEach((e) => { if (typeof e.pct1rmFlat === "number") e.pct1rmFlat = 62; });
-          }
-        });
-      });
-      base.phases[peakIdx] = offseason;
-    }
+    base.objective = "Built directly from a Rate-of-Perceived-Exertion based coaching program — paired supersets, tempo-controlled reps, and RPE targets instead of percentage-of-max ramps. No competition to taper for, so nothing in the final block backs off; the last three weeks simply shift from strength-endurance work to a faster, lower-fatigue speed-strength emphasis.";
+    base.coachNote = "";
+    base.philosophy = "Every working set below is paired into a numbered superset (1A and 1B, done back to back before resting) and prescribed by Rate of Perceived Exertion rather than a percentage of your max — the number after each exercise is the target RPE for that set. Tempo notation like 2/1/X means 2 seconds lowering the weight, a 1 second pause, then lift as explosively as you can (X).";
+    const built = buildProgramCContent();
+    base.phases = built.phases;
+    base.warmup = built.warmup;
   } else {
     base.name = "Traditional Split — Twelve-Week Program (Program B)";
     base.variant = "B";
@@ -1016,7 +1203,7 @@ function MainApp({ userId, onSignOut }) {
         // that are missing a name, using the current default pools as reference.
         let healed = false;
         if (c.program?.conjugate) {
-          ["meLowerPool", "meUpperPool", "wristPool", "bicepAltPool", "conditioningIntervalPool"].forEach((key) => {
+          ["meLowerPool", "meUpperPool", "wristPool", "coreAntiPool", "conditioningIntervalPool"].forEach((key) => {
             const defaults = conjugateProgram.conjugate[key];
             if (!Array.isArray(c.program.conjugate[key]) || c.program.conjugate[key].length === 0) {
               c.program.conjugate[key] = JSON.parse(JSON.stringify(defaults));
@@ -1747,6 +1934,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showJumpPicker, setShowJumpPicker] = useState(false);
   const [showMentalLibrary, setShowMentalLibrary] = useState(false);
+  const [coachQrOk, setCoachQrOk] = useState(true);
   const todaysMentalTip = useMemo(() => mentalTipForDate(todayStr()), []);
   useEffect(() => { setViewIndex(client.sessionsCompleted || 0); }, [client.sessionsCompleted, client.id]);
 
@@ -1807,6 +1995,25 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <p className="muted" style={{ marginBottom: 10 }}>{todaysMentalTip.body}</p>
         <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Mental Game Entries</button>
       </Card>
+
+      {(coachVenmo || coachCashApp || coachQrOk) && (
+        <Card title="Payment">
+          <div style={{ textAlign: "center" }}>
+            {coachQrOk && (
+              coachPaymentLink ? (
+                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
+                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 160, height: 160, objectFit: "contain", margin: "0 auto 10px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setCoachQrOk(false)} />
+                </a>
+              ) : (
+                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 160, height: 160, objectFit: "contain", margin: "0 auto 10px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setCoachQrOk(false)} />
+              )
+            )}
+            {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
+            {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            {coachPaymentLink && <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
+          </div>
+        </Card>
+      )}
 
       <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color }}>{readinessToday.color}</span> : null}>
         {readinessToday ? (
@@ -2327,13 +2534,18 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                       </div>
                     ) : (
                       <div className="log-exercise-name" style={{ fontSize: 14.5 }}>
+                        {en.target.supersetLabel ? (
+                          <span className="superset-tag">{en.target.supersetLabel}</span>
+                        ) : (
+                          en.target.quality && <span className="superset-tag quality-tag">{en.target.quality}</span>
+                        )}
                         {displayName}
                         {inferredPoolKey && <span className="recommended-tag">Recommended</span>}
                         <button className="icon-btn-sm" onClick={() => { setEditingName(en.exerciseId); setNameDraft(displayName); }} title="Rename this exercise"><Pencil size={13} /></button>
                       </div>
                     )}
                   </div>
-                  <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}</div>
+                  <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
                   {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
@@ -3416,17 +3628,19 @@ function GlobalStyle() {
       .log-exercise { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
       .log-exercise-head { margin-bottom: 10px; }
       .log-exercise-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-      .log-exercise-target-wrap { margin-bottom: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-      .section-ex-block:first-of-type .log-exercise-target-wrap { border-top: none; padding-top: 0; }
-      .log-exercise-target { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-      .rest-note-static { font-size: 12px; color: #4a9eff; margin-top: 3px; font-weight: 600; }
+      .section-ex-block { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+      .log-exercise-target-wrap { margin-bottom: 10px; }
+      .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
+      .rest-note-static { font-size: 12px; color: #4a9eff; margin-top: 6px; font-weight: 600; }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
       .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
-      .log-exercise-cue { font-size: 12px; color: var(--accent); margin-top: 4px; font-style: italic; }
+      .log-exercise-cue { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; font-style: normal; line-height: 1.5; padding-top: 6px; border-top: 1px dashed var(--border); }
       .ex-name-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .recommended-tag { font-size: 10px; color: var(--green); border: 1px solid var(--green); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
-      .last-logged { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+      .last-logged { font-size: 12px; color: var(--accent); margin-top: 8px; font-weight: 600; }
+      .superset-tag { font-size: 10.5px; font-weight: 800; color: var(--bg); background: var(--accent); border-radius: 5px; padding: 1px 6px; margin-right: 6px; letter-spacing: 0.03em; }
+      .quality-tag { color: var(--accent); background: none; border: 1.5px solid var(--accent); }
       .pct-1rm-row { font-size: 11.5px; color: var(--accent); margin: -3px 0 8px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
@@ -3453,8 +3667,9 @@ function GlobalStyle() {
       .set-grid-header { font-size: 9.5px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
-      .set-grid-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 4px; font-size: 12.5px; width: 100%; text-align: center; }
-      .set-grid-row input:disabled { opacity: 0.55; background: var(--card); cursor: default; }
+      .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 4px; font-size: 15px; font-weight: 700; width: 100%; text-align: center; }
+      .set-grid-row input:focus { border-color: var(--accent); outline: none; }
+      .set-grid-row input:disabled { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
       .set-done { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .set-done.done { background: var(--green); color: #fff; border-color: var(--green); }
       .notes-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px; font-size: 14px; font-family: inherit; resize: vertical; }
@@ -3596,9 +3811,18 @@ function AuthScreen() {
           <div className="card" style={{ marginBottom: 18, textAlign: "center" }}>
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Please send payment before starting your program.</p>
-            {qrOk && <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />}
+            {qrOk && (
+              coachPaymentLink ? (
+                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
+                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
+                </a>
+              ) : (
+                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
+              )
+            )}
             {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
-            {coachCashApp && <div style={{ fontSize: 13.5 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            {coachPaymentLink && <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
           </div>
         )}
         <form onSubmit={submit}>
