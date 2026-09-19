@@ -637,6 +637,9 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
             ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief movement preparation only", quality: "Neuromuscular" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
+          { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+            ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
+          ]},
         ]},
       { id: uid(), label: "2", name: "Max Effort Upper — Deload",
         intent: "Same idea upstairs — moderate weight, clean technique, plenty of reps left in reserve.",
