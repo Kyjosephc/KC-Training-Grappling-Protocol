@@ -98,6 +98,25 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
+function daysSinceLastActivity(client) {
+  const dates = [
+    ...(client.logs || []).map((l) => l.date),
+    ...(client.mobilityLogs || []).map((m) => m.date),
+  ].filter(Boolean).sort();
+  const last = dates.length ? dates[dates.length - 1] : client.createdAt;
+  if (!last) return 0;
+  const lastDate = new Date(last + "T00:00:00");
+  const now = new Date(todayStr() + "T00:00:00");
+  return Math.max(0, Math.round((now - lastDate) / (1000 * 60 * 60 * 24)));
+}
+
+function reengagementMessage(days) {
+  if (days < 5) return null;
+  if (days < 10) return `It's been ${days} days since your last session — jump back in today, even a short one counts.`;
+  if (days < 21) return `It's been ${days} days. No judgment — everything's saved exactly where you left it, and picking back up today is the whole move.`;
+  return `It's been over ${Math.floor(days / 7)} weeks since your last session. Nothing is lost — restart whenever it works for you, today or any day.`;
+}
+
 function est1RM(weight, reps) {
   if (!weight || !reps) return 0;
   if (reps === 1) return weight;
@@ -2204,6 +2223,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const [showAccomplishments, setShowAccomplishments] = useState(false);
   const latestBW = client.bodyweightLog?.length ? client.bodyweightLog[client.bodyweightLog.length - 1] : null;
   const mobilityMinutes = Math.round((client.program.mobility || []).reduce((s, seg) => s + seg.seconds, 0) / 60);
+  const hasEverTrained = (client.logs?.length || 0) > 0 || (client.mobilityLogs?.length || 0) > 0;
+  const daysInactive = useMemo(() => daysSinceLastActivity(client), [client]);
+  const nudgeMessage = hasEverTrained ? reengagementMessage(daysInactive) : null;
 
   if (actualComplete) {
     return (
@@ -2228,6 +2250,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
 
   return (
     <div className="pad">
+      {isCurrent && nudgeMessage && (
+        <div className="nudge-card">
+          <div className="nudge-card-title">Welcome back</div>
+          <p className="muted" style={{ marginBottom: 0 }}>{nudgeMessage}</p>
+        </div>
+      )}
       <div className="stat-row">
         <StatChip label="Block" value={`${client.blockNumber || 1}`} />
         <StatChip label="Week" value={`${pos.weekNumber}`} />
@@ -3920,6 +3948,8 @@ function GlobalStyle() {
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
+      .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .waiver-box { margin-top: 4px; }
       .waiver-check-row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; font-size: 13px; color: var(--text); line-height: 1.4; cursor: pointer; }
