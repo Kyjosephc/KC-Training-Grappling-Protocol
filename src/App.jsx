@@ -513,6 +513,7 @@ const VIDEO_LIBRARY = {
   "band pull-apart": "https://www.youtube.com/shorts/SuvO4TBwSu4",
   "banded pull-apart": "https://www.youtube.com/shorts/SuvO4TBwSu4",
   "banded clamshell": "https://www.youtube.com/shorts/Y1vuVuP754M",
+  "90/90 hip switch flow": "https://www.youtube.com/watch?v=m51AZSXMvEA",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
@@ -2640,7 +2641,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                 <div style={{ flex: 1 }}>
                   <div className="warmup-item-name">{item.name}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{item.detail}</div>
-                  <VideoLinkBlock url={item.videoUrl} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")} />
+                  <VideoLinkBlock url={item.videoUrl || lookupVideo(item.name)} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")} />
                 </div>
               </div>
             ))}
@@ -2832,7 +2833,7 @@ function MobilitySession({ client, onClose, onSave, onUpdateProgram }) {
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
         <div className="log-exercise-name" style={{ fontSize: 20, marginTop: 6, marginBottom: 6 }}>{seg.name}</div>
         {seg.detail && <p className="muted" style={{ marginBottom: 10 }}>{seg.detail}</p>}
-        <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock url={seg.videoUrl} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
+        <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
         <div className="mobility-timer">{mins}:{String(secs).padStart(2, "0")}</div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button className="btn-primary" style={{ flex: 1 }} onClick={toggleRunning}>{running ? "Pause" : "Start"}</button>
