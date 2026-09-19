@@ -1298,6 +1298,7 @@ function MainApp({ userId, onSignOut }) {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1437,8 +1438,9 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onSignOut={onSignOut} />}
+      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && <CoachDashboard onClose={() => setShowCoachDashboard(false)} />}
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -1596,6 +1598,7 @@ function OnboardingScreen({ onSubmit }) {
   const [programVariant, setProgramVariant] = useState("B");
   const [logoImageOk, setLogoImageOk] = useState(true);
   const w = useWaiverState();
+  const [showTerms, setShowTerms] = useState(false);
   const canSubmit = firstName.trim() && lastName.trim() && weight && w.complete;
 
   return (
@@ -1634,10 +1637,14 @@ function OnboardingScreen({ onSubmit }) {
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
       </div>
       <LiabilityWaiverFields w={w} athleteName={`${firstName} ${lastName}`.trim()} />
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
+      </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, ...waiverPayload(w) })}>
         Get started
       </button>
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
     </div>
   );
 }
@@ -1675,6 +1682,30 @@ const TUTORIAL_PAGES = [
   { title: "Deload Week", body: "Every fourth week, the program automatically gets lighter on purpose — lower volume, no true max attempts. It's built-in recovery, not a step backward, and it happens whether you ask for it or not." },
   { title: "Daily Readiness Check-In", body: "A few quick questions each day about sleep, soreness, and energy. Based on your answers, the app automatically adjusts that day's workout — trimming volume or dropping entire sections when you actually need it." },
 ];
+
+const TERMS_SECTIONS = [
+  { heading: "What this app is", body: "KC Grappling Protocol is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
+  { heading: "Your data", body: "The app stores what it needs to run your program: your name, body measurements, workout logs, readiness check-ins, personal records, and the health-history answers from your liability waiver. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
+  { heading: "Payment", body: "Any payment (such as the Week 2 continuation fee) is handled directly between you and your coach through Venmo or Cash App. This app does not process, transmit, or store card or bank account numbers." },
+  { heading: "Not medical advice", body: "This program is coaching, not medical care. See the liability waiver and health-history questionnaire for the full details — when in doubt, check with a physician before training." },
+  { heading: "Your data, your call", body: "You can ask your coach at any time to export or permanently delete your data from this app." },
+  { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
+];
+
+function TermsModal({ onClose }) {
+  return (
+    <ModalShell onClose={onClose} title="Terms & Privacy">
+      <p className="muted" style={{ marginBottom: 16 }}>A short, plain-language summary — not a substitute for a lawyer's advice, just an honest explanation of how this app handles your information.</p>
+      {TERMS_SECTIONS.map((s) => (
+        <div key={s.heading} className="card">
+          <div className="card-title" style={{ marginBottom: 8 }}>{s.heading}</div>
+          <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 0 }}>{s.body}</p>
+        </div>
+      ))}
+      <button className="btn-primary wide" style={{ marginTop: 4 }} onClick={onClose}>Close</button>
+    </ModalShell>
+  );
+}
 
 function TutorialModal({ onClose }) {
   const [page, setPage] = useState(0);
@@ -1815,7 +1846,7 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onSignOut }) {
+function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
@@ -1962,6 +1993,10 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
           ? `Signed by ${client.waiverSignedBy || client?.name} on ${fmtDate(client.waiverAcceptedAt.slice(0, 10))}.${client.parqFlagged ? " Health-history flag on file — confirm this athlete has physician clearance before training." : ""}`
           : "No waiver on file — this profile was created before the waiver step was added."}
       </p>
+
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
+      <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
+      <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
       <p className="muted" style={{ marginBottom: 10 }}>
