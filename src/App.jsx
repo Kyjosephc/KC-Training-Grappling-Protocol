@@ -3765,30 +3765,53 @@ function PRsTab({ client }) {
 
   return (
     <div className="pad">
-      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Every lift you've flagged as a Personal Record, most recent first. Tap a lift with more than one to see every earlier one too.</p>
+      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Every lift you've flagged as a Personal Record, most recent first. Tap any lift to see your progress graph and full history.</p>
       {names.map((name) => {
         const records = grouped[name];
         const mostRecent = records[0];
         const earlier = records.slice(1);
         const open = openName === name;
+        const chartData = [...records].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => ({ date: fmtDate(r.date), weight: r.weight, reps: r.reps }));
+        const unit = isTimedExercise(name) ? "seconds" : "reps";
         return (
           <div key={name} className="pr-card-wrap">
-            <button className="pr-card-v2" onClick={() => earlier.length > 0 && setOpenName(open ? null : name)}>
+            <button className="pr-card-v2" onClick={() => setOpenName(open ? null : name)}>
               <div className="pr-card-v2-top">
                 <div className="pr-card-v2-name">{name}</div>
-                {earlier.length > 0 && <ChevronRight size={18} className={open ? "chev-open" : ""} />}
+                <ChevronRight size={18} className={open ? "chev-open" : ""} />
               </div>
               <div className="pr-side-row" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
-                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {isTimedExercise(name) ? "seconds" : "reps"}</span>
+                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {unit}</span>
               </div>
               <div className="pr-side-row"><CalendarDays size={13} color="var(--text-dim)" /><span className="muted">{fmtDate(mostRecent.date)} — most recent</span></div>
-              {earlier.length > 0 && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{earlier.length} earlier Personal Record{earlier.length === 1 ? "" : "s"}</div>}
+              {records.length > 1 && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{records.length} Personal Records logged — tap to see your progress</div>}
             </button>
-            {open && earlier.length > 0 && (
+            {open && (
               <div className="pr-history">
+                {records.length > 1 ? (
+                  <>
+                    <div style={{ height: 170 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+                          <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
+                          <YAxis stroke="var(--text-dim)" fontSize={11} domain={["auto", "auto"]} />
+                          <Tooltip
+                            contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                            formatter={(value, key, props) => [`${value} lb × ${props.payload.reps} ${unit}`, "Personal Record"]}
+                          />
+                          <Line type="monotone" dataKey="weight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="muted" style={{ fontSize: 11.5, margin: "2px 0 10px" }}>Weight lifted at each Personal Record on this lift, oldest to newest.</div>
+                  </>
+                ) : (
+                  <p className="muted" style={{ fontSize: 12.5, marginBottom: 4 }}>Log another Personal Record on this lift to start seeing your progress graph here.</p>
+                )}
                 {earlier.map((h) => (
                   <div key={h.id} className="pr-history-row-v2">
-                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {isTimedExercise(name) ? "seconds" : "reps"}</div>
+                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {unit}</div>
                     <div className="pr-history-date"><CalendarDays size={12} /> {fmtDate(h.date)}</div>
                   </div>
                 ))}
