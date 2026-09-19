@@ -1270,12 +1270,16 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
       { id: uid(), label: "1", name: "Max Effort Lower + Dynamic Effort Upper",
         intent: "Two qualities in one session, since there's only two days a week to work with — a true max effort on the lower body lift while you're fresh, then fast speed work on the upper body press once the main lift is done.",
         sections: [
-          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
+          { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
             ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief ankle and knee stability preparation before loading the lift", quality: "Neuromuscular" }),
             ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility", videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
+            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week", quality: "Alactic Power" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
-          { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [ deBench(dePct) ]},
+          { id: uid(), type: "power", name: trim ? "Dynamic Effort Upper" : "Dynamic Effort Upper + Rotational Power", exercises: [
+            deBench(dePct),
+            ...(trim ? [] : [ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles", quality: "Rotational Power" })]),
+          ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Heavy Farmer Carry", sets: 2, reps: "25 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk bracing under load — the only carry slot in a two-day week, so it stays heavy", quality: "Grip/Trunk" }),
             ...(trim ? [] : [ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" })]),
@@ -1295,6 +1299,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
             ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: wristPool[0].notes, quality: "Durability" }),
+            ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure, and the single most time-efficient way to cover it in a two-day week", quality: "Durability" }),
             ...(trim ? [] : [ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" })]),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -1747,15 +1752,15 @@ function OnboardingScreen({ onSubmit }) {
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
       <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")}>
         <div className="program-choice-title">Program A — Condensed Conjugate</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Every session trains two qualities — a max lift and a speed lift, back to back. Best for less mat time.</p>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week.</p>
       </div>
       <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal.</p>
       </div>
       <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")}>
         <div className="program-choice-title">Program C — Two-Day Hybrid</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Only two days a week for the weight room? This condenses A and B's ideas into two full sessions instead of three. Best for a packed mat schedule.</p>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>2 days a week — built for a packed mat schedule with no room for a 3rd lifting day. Each session pairs a Max Effort lift with a Dynamic Effort lift like Program A, with slightly more work per session to make up for it. Best if you're training grappling 4 or more times a week.</p>
       </div>
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
