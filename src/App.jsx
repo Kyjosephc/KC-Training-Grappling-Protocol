@@ -515,6 +515,15 @@ const VIDEO_LIBRARY = {
   "90/90 hip switch flow": "https://www.youtube.com/watch?v=m51AZSXMvEA",
   "single-leg balance reach": "https://www.youtube.com/shorts/X6isWRdfCE4",
   "pogo hops": "https://www.youtube.com/shorts/L_khHgMz9uU",
+  "copenhagen plank": "https://www.youtube.com/watch?v=aDsaGBnvDQo",
+  "five-ten-five pro agility shuttle": "https://www.youtube.com/watch?v=XSc-g5o2qhY",
+  "hanging leg raise": "https://www.youtube.com/shorts/Gtv_pe0E42U",
+  "heavy farmer carry": "https://www.youtube.com/watch?v=8OtwXwrJizk",
+  "heavy isometric wall sit": "https://www.youtube.com/shorts/4ZS2W4SlnHU",
+  "heavy landmine anti-rotation hold": "https://www.youtube.com/watch?v=c6_FnMLPsys",
+  "landmine rotational press": "https://www.youtube.com/watch?v=ONDeomDVlbE",
+  "speed bench press — dynamic effort": "https://www.youtube.com/shorts/32SZmZgc1KI",
+  "trap bar jump squat — dynamic effort": "https://www.youtube.com/shorts/2TfyFQRndNk",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
@@ -628,9 +637,6 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
             ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief movement preparation only", quality: "Neuromuscular" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
-          { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-            ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
-          ]},
         ]},
       { id: uid(), label: "2", name: "Max Effort Upper — Deload",
         intent: "Same idea upstairs — moderate weight, clean technique, plenty of reps left in reserve.",
