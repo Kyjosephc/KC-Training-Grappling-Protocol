@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
   Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download
+  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1217,7 +1217,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, waiverAcceptedAt, waiverSignedBy, parqAnswers, parqFlagged }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1231,10 +1231,6 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     beltLevel: beltLevel || "White",
     bjjNotes: [],
     paid: false,
-    waiverAcceptedAt: waiverAcceptedAt || null,
-    waiverSignedBy: waiverSignedBy || "",
-    parqAnswers: parqAnswers || [],
-    parqFlagged: !!parqFlagged,
   };
 }
 
@@ -1318,7 +1314,6 @@ function MainApp({ userId, onSignOut }) {
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const [showPayments, setShowPayments] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1350,10 +1345,6 @@ function MainApp({ userId, onSignOut }) {
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
         if (c.paid === undefined) c.paid = true;
-        if (c.waiverAcceptedAt === undefined) c.waiverAcceptedAt = null;
-        if (c.waiverSignedBy === undefined) c.waiverSignedBy = "";
-        if (!c.parqAnswers) c.parqAnswers = [];
-        if (c.parqFlagged === undefined) c.parqFlagged = false;
         if (!c.program.mobility) c.program.mobility = defaultMobility();
 
         // Self-heal: older versions of this app briefly saved rotating Max Effort
@@ -1439,7 +1430,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} />
+      <TopBar client={client} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -1458,10 +1449,9 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onOpenPayments={() => { setShowSettings(false); setShowPayments(true); }} onSignOut={onSignOut} />}
-      {showCoachDashboard && <CoachDashboard onClose={() => setShowCoachDashboard(false)} />}
+      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showCoachDashboard && <CoachDashboard userId={userId} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowCoachDashboard(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
-      {showPayments && <AllClientsPaymentModal userId={userId} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowPayments(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -1542,73 +1532,6 @@ function GrapplingMark({ opacity = 0.14 }) {
   );
 }
 
-const PARQ_QUESTIONS = [
-  "Has a doctor ever said you have a heart condition and recommended only medically supervised physical activity?",
-  "Do you feel pain in your chest during physical activity, or have you had chest pain in the past month when not doing physical activity?",
-  "Do you lose your balance because of dizziness, or have you lost consciousness in the past 12 months?",
-  "Do you have a bone or joint problem (for example, back, knee, or hip) that could be made worse by a change in physical activity?",
-  "Are you currently taking medication for blood pressure or a heart condition?",
-  "Do you know of any other reason you should not do physical activity right now?",
-];
-
-const WAIVER_PARAGRAPHS = [
-  "Strength training, conditioning, and grappling-related exercise carry an inherent risk of injury — including but not limited to muscle strain, joint injury, and cardiovascular strain. This athlete is participating in this program voluntarily and with full knowledge of that risk.",
-  "This confirms the athlete is in suitable physical condition to participate, or has answered \"yes\" to one or more of the health questions below and will get clearance from a physician before starting.",
-  "By signing below, the athlete releases Kyle Cox and KC Grappling Protocol from any and all claims, liability, or damages arising from participation in this training program, to the fullest extent permitted by law.",
-  "This program is not a substitute for medical advice. The athlete will stop any exercise immediately and seek medical attention if they experience pain, dizziness, shortness of breath, or any other concerning symptom.",
-];
-
-function useWaiverState() {
-  const [parqAnswers, setParqAnswers] = useState(() => PARQ_QUESTIONS.map(() => false));
-  const [accepted, setAccepted] = useState(false);
-  const [signatureName, setSignatureName] = useState("");
-  const flagged = parqAnswers.some(Boolean);
-  const complete = accepted && signatureName.trim().length > 0;
-  return { parqAnswers, setParqAnswers, accepted, setAccepted, signatureName, setSignatureName, flagged, complete };
-}
-
-function waiverPayload(w) {
-  return {
-    waiverAcceptedAt: new Date().toISOString(),
-    waiverSignedBy: w.signatureName.trim(),
-    parqAnswers: PARQ_QUESTIONS.map((q, i) => ({ question: q, yes: !!w.parqAnswers[i] })),
-    parqFlagged: w.flagged,
-  };
-}
-
-function LiabilityWaiverFields({ w, athleteName }) {
-  const [expanded, setExpanded] = useState(false);
-  const name = athleteName || "this athlete";
-  return (
-    <div className="waiver-box">
-      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Health History &amp; Liability Waiver</div>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Required before this athlete's first session.</p>
-      {PARQ_QUESTIONS.map((q, i) => (
-        <label key={i} className="waiver-check-row">
-          <input type="checkbox" checked={w.parqAnswers[i]} onChange={(e) => { const next = [...w.parqAnswers]; next[i] = e.target.checked; w.setParqAnswers(next); }} />
-          <span>{q}</span>
-        </label>
-      ))}
-      {w.flagged && (
-        <div className="adjust-box" style={{ marginTop: 4, marginBottom: 14 }}>
-          <p className="muted" style={{ marginBottom: 0 }}>One or more answers above is a flag to get clearance from a physician before starting. This won't stop {name} from using the app, but it should be addressed before training begins.</p>
-        </div>
-      )}
-      <button type="button" className="waiver-toggle" onClick={() => setExpanded((v) => !v)}>{expanded ? "Hide full waiver text" : "Read the full liability waiver"}</button>
-      {expanded && (
-        <div className="waiver-text-box">
-          {WAIVER_PARAGRAPHS.map((p, i) => <p key={i}>{p}</p>)}
-        </div>
-      )}
-      <LabeledInput label={`Type ${name}'s full name to sign`} value={w.signatureName} onChange={w.setSignatureName} />
-      <label className="waiver-check-row" style={{ marginTop: 4 }}>
-        <input type="checkbox" checked={w.accepted} onChange={(e) => w.setAccepted(e.target.checked)} />
-        <span>I have read the liability waiver above and agree to its terms on behalf of {name}.</span>
-      </label>
-    </div>
-  );
-}
-
 function OnboardingScreen({ onSubmit }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -1618,9 +1541,8 @@ function OnboardingScreen({ onSubmit }) {
   const [beltLevel, setBeltLevel] = useState("White");
   const [programVariant, setProgramVariant] = useState("B");
   const [logoImageOk, setLogoImageOk] = useState(true);
-  const w = useWaiverState();
   const [showTerms, setShowTerms] = useState(false);
-  const canSubmit = firstName.trim() && lastName.trim() && weight && w.complete;
+  const canSubmit = firstName.trim() && lastName.trim() && weight;
 
   return (
     <div className="pad" style={{ paddingTop: 40, maxWidth: 420, margin: "0 auto" }}>
@@ -1657,12 +1579,11 @@ function OnboardingScreen({ onSubmit }) {
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
       </div>
-      <LiabilityWaiverFields w={w} athleteName={`${firstName} ${lastName}`.trim()} />
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
         By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
       </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, ...waiverPayload(w) })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant })}>
         Get started
       </button>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -1670,7 +1591,7 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp }) {
+function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard }) {
   return (
     <div className="topbar">
       <div>
@@ -1685,6 +1606,7 @@ function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpe
         )}
       </button>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button className="icon-btn" onClick={onOpenCoachDashboard} aria-label="Coach Dashboard"><LayoutDashboard size={20} /></button>
         <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
         <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
         <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings"><SettingsIcon size={20} /></button>
@@ -1867,7 +1789,7 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onOpenPayments, onSignOut }) {
+function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
@@ -1993,7 +1915,7 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</div>
-      <p className="muted" style={{ marginBottom: 10 }}>If you're the coach, open this to see every athlete who has shared their progress with one of your roster codes.</p>
+      <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
       <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</div>
@@ -2007,14 +1929,6 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       ) : (
         <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
       )}
-      <button className="btn-ghost wide" style={{ marginTop: 8 }} onClick={onOpenPayments}>View All Athletes' Payment Status</button>
-
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Liability Waiver</div>
-      <p className="muted" style={{ marginBottom: 10 }}>
-        {client?.waiverAcceptedAt
-          ? `Signed by ${client.waiverSignedBy || client?.name} on ${fmtDate(client.waiverAcceptedAt.slice(0, 10))}.${client.parqFlagged ? " Health-history flag on file — confirm this athlete has physician clearance before training." : ""}`
-          : "No waiver on file — this profile was created before the waiver step was added."}
-      </p>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
@@ -2126,7 +2040,7 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
 
 /* ============================== COACH DASHBOARD ============================== */
 
-function AllClientsPaymentModal({ userId, clients, activeId, onPersistActive, onClose }) {
+function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose }) {
   const [records, setRecords] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
@@ -2155,90 +2069,56 @@ function AllClientsPaymentModal({ userId, clients, activeId, onPersistActive, on
   const paidCount = records ? records.filter((r) => r.full?.paid).length : 0;
 
   return (
-    <ModalShell onClose={onClose} title="Payment Status">
+    <ModalShell onClose={onClose} title="Coach Dashboard">
       {!records ? (
         <p className="muted">Loading…</p>
       ) : records.length === 0 ? (
         <EmptyState text="No athletes yet — add one from the Athletes/Clients screen." />
       ) : (
         <>
-          <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athletes marked paid.</p>
-          {records.map((r) => (
-            <div key={r.id} className="card">
-              <div className="payment-row">
-                <div>
-                  <div className="card-title" style={{ marginBottom: 2 }}>{r.name}</div>
-                  <div className="muted" style={{ fontSize: 12.5 }}>{r.full?.paid ? "Paid — full access" : "Unpaid — locks after Week 1"}</div>
+          <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid and grandfathered in for good.</p>
+          {records.map((r) => {
+            const full = r.full;
+            const perWeek = full?.program?.sessionsPerWeek || 3;
+            const weekNumber = full ? Math.max(1, Math.floor((full.sessionsCompleted || 0) / perWeek) + 1) : null;
+            const recentPR = full?.prLog?.length ? [...full.prLog].sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
+            const recentBW = full?.bodyweightLog?.length ? full.bodyweightLog[full.bodyweightLog.length - 1] : null;
+            const recentReadiness = full ? Object.values(full.readiness || {}).sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
+            return (
+              <div key={r.id} className="card">
+                <div className="payment-row">
+                  <div>
+                    <div className="card-title" style={{ marginBottom: 2 }}>{r.name}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
+                  </div>
+                  <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>
                 </div>
-                <span className={`pill ${r.full?.paid ? "pill-paid" : "pill-unpaid"}`}>{r.full?.paid ? "Paid" : "Unpaid"}</span>
+                <div className="dash-grid" style={{ marginTop: 10 }}>
+                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight} lb × ${recentPR.reps} ${isTimedExercise(recentPR.exerciseName) ? "seconds" : "reps"}` : "None yet"} wide />
+                  <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
+                  <DashStat
+                    label="Readiness"
+                    value={recentReadiness ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span className="hero-dot" style={{ background: READINESS_COPY[recentReadiness.color].color }} />
+                        {recentReadiness.color} — {fmtDate(recentReadiness.date)}
+                      </span>
+                    ) : "None yet"}
+                    wide
+                  />
+                </div>
+                <button
+                  className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
+                  style={{ marginTop: 10 }}
+                  disabled={busyId === r.id || !full}
+                  onClick={() => togglePaid(r.id, full)}
+                >
+                  {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
+                </button>
               </div>
-              <button
-                className={r.full?.paid ? "btn-ghost wide" : "btn-primary wide"}
-                style={{ marginTop: 10 }}
-                disabled={busyId === r.id || !r.full}
-                onClick={() => togglePaid(r.id, r.full)}
-              >
-                {busyId === r.id ? "Updating…" : r.full?.paid ? "Mark as Unpaid" : "Mark as Paid"}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </>
-      )}
-    </ModalShell>
-  );
-}
-
-function CoachDashboard({ onClose }) {
-  const [code, setCode] = useState("");
-  const [roster, setRoster] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = async () => {
-    if (!code.trim()) return;
-    setLoading(true);
-    const r = await fetchRoster(code);
-    setRoster(r);
-    setLoading(false);
-  };
-
-  return (
-    <ModalShell onClose={onClose} title="Coach Dashboard">
-      <p className="muted" style={{ marginBottom: 12 }}>Enter a roster code to see every athlete who has turned on sharing with it. This only shows the summary they've opted to share — not their full workout logs.</p>
-      <div className="bw-row">
-        <input className="bw-input" style={{ textAlign: "left", flex: 1 }} placeholder="Roster code" value={code} onChange={(e) => setCode(e.target.value)} />
-        <button className="btn-primary" style={{ padding: "10px 16px" }} onClick={load} disabled={!code.trim()}>Load</button>
-      </div>
-      {loading && <p className="muted" style={{ marginTop: 12 }}>Loading roster…</p>}
-      {roster && roster.length === 0 && <div style={{ marginTop: 12 }}><EmptyState text="No athletes have shared their progress with this code yet." /></div>}
-      {roster && roster.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          {roster.map((a) => (
-            <div key={a.clientId} className="card">
-              <div className="card-title" style={{ marginBottom: 2 }}>{a.name}</div>
-              <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>{a.programName}</div>
-              <div className="dash-grid">
-                <DashStat label="Week" value={`${a.currentWeek} of ${a.totalWeeks}`} />
-                <DashStat label="Block" value={`${a.blockNumber}`} />
-                <DashStat label="Total Workouts" value={`${a.totalWorkouts}`} />
-                <DashStat label="Last Workout" value={a.lastWorkoutDate ? `${fmtDate(a.lastWorkoutDate)} — Day ${a.lastWorkoutDay}` : "None yet"} wide />
-              </div>
-              {a.readinessColor && (
-                <span className="pill" style={{ background: a.readinessColor === "GREEN" ? "var(--green)" : a.readinessColor === "YELLOW" ? "var(--amber)" : "var(--accent)", display: "inline-block", marginTop: 10 }}>
-                  Today: {a.readinessColor}
-                </span>
-              )}
-              {a.recentPRs?.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div className="section-subheading">Recent Personal Records</div>
-                  {a.recentPRs.map((p) => (
-                    <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} — {fmtDate(p.date)}</span></div>
-                  ))}
-                </div>
-              )}
-              <div className="muted" style={{ fontSize: 11, marginTop: 10 }}>Last synced {new Date(a.updatedAt).toLocaleString()}</div>
-            </div>
-          ))}
-        </div>
       )}
     </ModalShell>
   );
@@ -3861,8 +3741,7 @@ function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose })
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [template, setTemplate] = useState("bjj");
-  const w = useWaiverState();
-  const canCreate = firstName.trim() && lastName.trim() && w.complete;
+  const canCreate = firstName.trim() && lastName.trim();
 
   return (
     <ModalShell onClose={onClose} title="Athletes / Clients">
@@ -3885,10 +3764,9 @@ function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose })
             <label className={`radio-pill ${template === "bjj" ? "active" : ""}`}><input type="radio" checked={template === "bjj"} onChange={() => setTemplate("bjj")} />Conjugate Brazilian Jiu-Jitsu / Wrestling template</label>
             <label className={`radio-pill ${template === "blank" ? "active" : ""}`}><input type="radio" checked={template === "blank"} onChange={() => setTemplate("blank")} />Blank — build custom</label>
           </div>
-          <LiabilityWaiverFields w={w} athleteName={`${firstName} ${lastName}`.trim()} />
           <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canCreate}
             onClick={() => {
-              onAdd({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, ...waiverPayload(w) }, template === "bjj");
+              onAdd({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0 }, template === "bjj");
               setFirstName(""); setLastName(""); setWeight(""); setHeightFeet(""); setHeightInches(""); setAdding(false);
             }}>Create athlete</button>
         </div>
@@ -4019,13 +3897,6 @@ function GlobalStyle() {
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
-      .waiver-box { margin-top: 4px; }
-      .waiver-check-row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; font-size: 13px; color: var(--text); line-height: 1.4; cursor: pointer; }
-      .waiver-check-row input { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent); }
-      .waiver-toggle { background: none; border: none; padding: 0; margin: 6px 0 12px; color: var(--accent); font-size: 12.5px; text-decoration: underline; cursor: pointer; }
-      .waiver-text-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 14px; max-height: 220px; overflow-y: auto; }
-      .waiver-text-box p { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin: 0 0 10px; }
-      .waiver-text-box p:last-child { margin-bottom: 0; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 12.5px; cursor: pointer; padding: 0; }
       .day-nav-row { display: flex; align-items: center; gap: 8px; }
       .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
