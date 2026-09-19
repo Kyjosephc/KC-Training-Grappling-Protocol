@@ -420,8 +420,112 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
 
 /* ============================== SEED PROGRAM: CONJUGATE BRAZILIAN JIU-JITSU / WRESTLING ============================== */
 
+const VIDEO_LIBRARY = {
+  "world's greatest stretch": "https://www.youtube.com/watch?v=-CiWQ2IvY34",
+  "leg swings": "https://www.youtube.com/shorts/wF10oYsLUw0",
+  "hip circles": "https://www.youtube.com/shorts/P8P1E_IosqA",
+  "thoracic rotations (quadruped)": "https://www.youtube.com/shorts/Lfn-Fv_xmmQ",
+  "cable pull-apart": "https://www.youtube.com/shorts/Ol-QWheu9Yg",
+  "multi-planar lunge matrix": "https://www.youtube.com/shorts/6hiVTg5rD7Y",
+  "cable diagonal chop": "https://www.youtube.com/shorts/8OZImYISmSg",
+  "cross-crawl march with reach": "https://www.youtube.com/shorts/_65SkNk2Esc",
+  "glute bridge": "https://www.youtube.com/shorts/mSuDY5J0Fwo",
+  "bodyweight lateral squat walk": "https://www.youtube.com/shorts/vIEmbHOSY2U",
+  "dead bug": "https://www.youtube.com/shorts/DqLL45uk2Tk",
+  "lateral shuffle": "https://www.youtube.com/shorts/nqLsCj7pgbw",
+  "tibialis raise": "https://www.youtube.com/shorts/HliiXSj2aIE",
+  "scap push-up": "https://www.youtube.com/shorts/emB58J1SyXA",
+  "dip station support hold": "https://www.youtube.com/watch?v=_vPttkLHZMw",
+  "cable external rotation": "https://www.youtube.com/watch?v=ci727TUmr80",
+  "close-grip bench press": "https://www.youtube.com/watch?v=FiQUzPtS90E",
+  "weighted pull-up": "https://www.youtube.com/shorts/pYhflsmHAy4",
+  "single-arm dumbbell row": "https://www.youtube.com/shorts/i9BJwVCK5VQ",
+  "single arm dumbbell row": "https://www.youtube.com/shorts/i9BJwVCK5VQ",
+  "cable face pull": "https://www.youtube.com/shorts/lbt7obncwVs",
+  "pull-up bar dead hang": "https://www.youtube.com/shorts/XPcT3capkyk",
+  "paused bottom-position bench press hold": "https://www.youtube.com/shorts/YHtd4XKsd7I",
+  "barbell wrist curl and reverse wrist curl": "https://www.youtube.com/shorts/xENVg7RX_O8",
+  "neck curl and neck extension": "https://www.youtube.com/shorts/i7Fn4aimzOM",
+  "standing barbell overhead press": "https://www.youtube.com/watch?v=cGnhixvC8uA",
+  "upright shoulder overhead press": "https://www.youtube.com/watch?v=cGnhixvC8uA",
+  "half-kneeling landmine press hold": "https://www.youtube.com/watch?v=fx6lSVNvu-4",
+  "trap bar high pull": "https://www.youtube.com/watch?v=_reAqpSF-m0",
+  "trap bar deadlift": "https://www.youtube.com/shorts/kpyCkyVIxjI",
+  "heavy dumbbell swing": "https://www.youtube.com/watch?v=QEMGYrebtxE",
+  "back squat": "https://www.youtube.com/shorts/PPmvh7gBTi0",
+  "front squat": "https://www.youtube.com/shorts/N4WGYDGu6bI",
+  "zercher squat": "https://www.youtube.com/watch?v=eDf49a4Vx5k",
+  "bulgarian split squat": "https://www.youtube.com/watch?v=Fmjj7wFJWRE",
+  "front-foot-elevated split squat": "https://www.youtube.com/shorts/w2oxzOGPgfU",
+  "ab roll out": "https://www.youtube.com/shorts/kISuoI7QCYk",
+  "banded single leg single arm row": "https://www.youtube.com/shorts/2ZBEy0oh_-Y",
+  "banded terminal knee extension": "https://www.youtube.com/shorts/CU7Fn11YMTw",
+  "cable lat row": "https://www.youtube.com/watch?v=UCXxvVItLoM",
+  "medicine ball abdominal extension": "https://www.youtube.com/watch?v=bld2VhFtH9I",
+  "4-way isometric neck holds": "https://www.youtube.com/watch?v=CtbZUhBxNOM",
+  "prone bench y, t, w's": "https://www.youtube.com/shorts/dCPuXZ5xH8k",
+  "supine y, t, w": "https://www.youtube.com/watch?v=uuU5InOhwLw",
+  "pull-up hold": "https://www.youtube.com/shorts/E9tgI5ZMQAE",
+  "rice bucket grip drills": "https://www.youtube.com/shorts/VLI3fRk__bc",
+  "suitcase carry": "https://www.youtube.com/shorts/iTjwbts8Djw",
+  "valslide hamstring curls": "https://www.youtube.com/shorts/vWg6217Wsqc",
+  "weighted plank": "https://www.youtube.com/shorts/Hc4RgCygkqk",
+  "weighted push-ups": "https://www.youtube.com/shorts/z4oz6W1X10w",
+  "weighted scarecrows": "https://www.youtube.com/watch?v=MEcO3V75fno",
+  "landmine punch press": "https://www.youtube.com/shorts/BVblhbECAtg",
+  "offset single arm dumbbell press": "https://www.youtube.com/shorts/kfrAo42YG1I",
+  "renegade row": "https://www.youtube.com/shorts/oZkZC33zm-A",
+  "seal row": "https://www.youtube.com/shorts/YSW2SKoiN1s",
+  "side plank": "https://www.youtube.com/shorts/1Ng5zRnf7tU",
+  "scapular push-up": "https://www.youtube.com/shorts/emB58J1SyXA",
+  "glute hip thrust with medicine ball": "https://www.youtube.com/shorts/WS_vrW_AOaA",
+  "heavy pallof press hold": "https://www.youtube.com/shorts/bnpqMNtaBIA",
+  "high plank kettlebell pull-through": "https://www.youtube.com/shorts/xdPjToOJM1o",
+  "incline chest-supported dumbbell row": "https://www.youtube.com/shorts/b_QO3PedVR8",
+  "paused bottom-position incline press hold": "https://www.youtube.com/shorts/JclaYaFPX3w",
+  "single arm kettlebell hold": "https://www.youtube.com/shorts/L-zTmBumZmI",
+  "trap bar static hold": "https://www.youtube.com/watch?v=OkxnHHkJ8eQ",
+  "arm swings forward & backward": "https://www.youtube.com/shorts/vaPFiFV9OtY",
+  "banded lateral step": "https://www.youtube.com/watch?v=RW4ZvH22l48",
+  "banded sumo steps": "https://www.youtube.com/shorts/MeCwofJYAzo",
+  "box jumps": "https://www.youtube.com/shorts/bCNpPn5b3Y4",
+  "bulldog circuit": "https://www.youtube.com/watch?v=JuQcNsyMolY",
+  "child's pose with lateral reach": "https://www.youtube.com/watch?v=5uQ2Xuc3LiE",
+  "couch stretch": "https://www.youtube.com/shorts/TIJu5aWPke0",
+  "deep squat hold": "https://www.youtube.com/shorts/LPa3LKlQ7eU",
+  "figure-4 / pigeon stretch": "https://www.youtube.com/shorts/pjmR5Kacu1w",
+  "heel walks": "https://www.youtube.com/shorts/h4V7X5ZDnU0",
+  "heel to toe walks": "https://www.youtube.com/shorts/d1fpuaq6RVg",
+  "open book thoracic rotation": "https://www.youtube.com/shorts/SKapoHxQxuk",
+  "overhead lat and shoulder stretch": "https://www.youtube.com/shorts/_q_Y5jElgrU",
+  "straddle hamstring and adductor hold": "https://www.youtube.com/shorts/oH53L8OMTCk",
+  "toe walks": "https://www.youtube.com/watch?v=3d2S7a3D9YY",
+  "barbell good morning": "https://www.youtube.com/shorts/5DonmXxz6Qk",
+  "bent over barbell row": "https://www.youtube.com/watch?v=bm0_q9bR_HA",
+  "box squat": "https://www.youtube.com/shorts/6_xQf5A3WmE",
+  "incline barbell press": "https://www.youtube.com/shorts/98HWfiRonkE",
+  "single leg romanian deadlift": "https://www.youtube.com/shorts/R_fJ6H3FlVw",
+  "split stance romanian deadlift": "https://www.youtube.com/shorts/5fUAdAXu3PI",
+  "spoto press": "https://www.youtube.com/shorts/8Fq0oo-PrcQ",
+  "weighted dip": "https://www.youtube.com/shorts/ZDOrGNvRdM0",
+  "wide-grip bench press": "https://www.youtube.com/shorts/d2QSpIHUPZ4",
+  "anderson squat": "https://www.youtube.com/shorts/SNssQJuEzX8",
+  "band pull-apart": "https://www.youtube.com/shorts/SuvO4TBwSu4",
+  "banded pull-apart": "https://www.youtube.com/shorts/SuvO4TBwSu4",
+  "banded clamshell": "https://www.youtube.com/shorts/Y1vuVuP754M",
+};
+function lookupVideo(name) {
+  const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
+  if (VIDEO_LIBRARY[key]) return VIDEO_LIBRARY[key];
+  // try matching by whether the library key is contained in (or contains) the exercise name,
+  // so things like "Split Stance Trap Bar Deadlift" still pick up the "Trap Bar Deadlift" video
+  const found = Object.keys(VIDEO_LIBRARY).find((k) => key.includes(k) || k.includes(key));
+  return found ? VIDEO_LIBRARY[found] : "";
+}
 function ex(o) {
-  return { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
+  const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
+  if (!base.videoUrl) base.videoUrl = lookupVideo(base.name);
+  return base;
 }
 function meWorkingSets() {
   // Ramps from lighter warm-up triples down to a true heavy single, so no two sets are identical.
@@ -472,19 +576,19 @@ const meLowerPool = [
   { name: "Front Squat", notes: "Upright torso, quad and trunk-bracing emphasis", videoUrl: "" },
   { name: "Anderson Squat (from pins)", notes: "Dead-stop squat starting from safety pins set just below parallel — builds strength without any stretch-reflex assistance, a genuine Westside staple", videoUrl: "" },
   { name: "Zercher Squat", notes: "Heavy anterior-loaded trunk bracing — carries over to grappling posture under load", videoUrl: "" },
-  { name: "Trap Bar Deadlift", notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single at home", videoUrl: "" },
+  { name: "Trap Bar Deadlift", notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single at home", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
   { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", videoUrl: "" },
 ];
 const meUpperPool = [
-  { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "" },
+  { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "https://www.youtube.com/watch?v=FiQUzPtS90E" },
   { name: "Spoto Press", notes: "Pause one inch off the chest — strength off the chest without bounce", videoUrl: "" },
-  { name: "Standing Barbell Overhead Press", notes: "Overhead strength, shoulder resilience", videoUrl: "" },
+  { name: "Standing Barbell Overhead Press", notes: "Overhead strength, shoulder resilience", videoUrl: "https://www.youtube.com/watch?v=cGnhixvC8uA" },
   { name: "Weighted Dip (dip station)", notes: "Pressing strength — chest, shoulders, and triceps under a heavy vertical load", videoUrl: "" },
   { name: "Incline Barbell Press", notes: "Upper chest and shoulder press strength", videoUrl: "" },
   { name: "Wide-Grip Bench Press", notes: "Chest-dominant press variation", videoUrl: "" },
 ];
 const wristPool = [
-  { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction" },
+  { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction", videoUrl: "https://www.youtube.com/shorts/xENVg7RX_O8" },
   { name: "Rice Bucket Grip Drills", notes: "Dig, twist, and squeeze through a bucket of rice — forearm and wrist rotator conditioning that also toughens the hands", reps: "20 seconds each direction" },
 ];
 const coreAntiPool = [
@@ -534,14 +638,14 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-            ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 3, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip" }),
+            ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 3, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
           ]},
         ]},
       { id: uid(), label: "3", name: "Full Body Recovery + Light Conditioning",
         intent: "No explosive lifting this week — just movement quality and an easy aerobic session. Let your body catch up.",
         sections: [
           { id: uid(), type: "agility", name: "Movement Quality", exercises: [
-            ex({ name: "Multi-Planar Lunge Matrix", sets: 1, reps: "6 per direction", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Easy full-body movement quality work, no explosive intent this week", quality: "Movement Quality" }),
+            ex({ name: "Multi-Planar Lunge Matrix", sets: 1, reps: "6 per direction", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Easy full-body movement quality work, no explosive intent this week", quality: "Movement Quality" , videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
             ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 0, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
@@ -578,7 +682,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Single-Leg Balance Reach", sets: 2, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Reactive neuromuscular training for ankle and knee stability before loading the lift", quality: "Neuromuscular" }),
-              ex({ name: "Lateral Shuffle", sets: 4, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility" }),
+              ex({ name: "Lateral Shuffle", sets: 4, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility" , videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Low-amplitude reactive hops — primes ankle and tendon stiffness before heavy lifting", quality: "Neuromuscular" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
@@ -591,7 +695,7 @@ const conjugateProgram = {
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor strength and durability — directly protective for guard retention and hip health", quality: "Durability" }),
               ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Bottom-range tendon-loading isometric for knee health — grapplers get stuck fighting from compromised positions, and end-range strength has more carryover than mid-range work", quality: "Durability" }),
               ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability" }),
-              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" }),
+              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
@@ -599,20 +703,20 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before heavy pressing", quality: "Neuromuscular" }),
-              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception, isometric support on the dip bars before heavy pressing", quality: "Neuromuscular" }),
+              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception, isometric support on the dip bars before heavy pressing", quality: "Neuromuscular" , videoUrl: "https://www.youtube.com/watch?v=_vPttkLHZMw" }),
               ex({ name: "Cable External Rotation (light)", sets: 2, reps: "12 per side", load: "light", rir: 2, rest: "45 seconds", purpose: "Rotator cuff activation and shoulder health before heavy pressing", quality: "Agility" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
-              ex({ name: "Weighted Pull-Up", sets: 4, reps: "5", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength, grappling transfer", quality: "Accessory" }),
-              ex({ name: "Single-Arm Dumbbell Row", sets: 3, reps: "8 per side", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral pull, scapular resilience", quality: "Accessory" }),
-              ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" }),
+              ex({ name: "Weighted Pull-Up", sets: 4, reps: "5", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength, grappling transfer", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
+              ex({ name: "Single-Arm Dumbbell Row", sets: 3, reps: "8 per side", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral pull, scapular resilience", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/i9BJwVCK5VQ" }),
+              ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip" }),
-              ex({ name: "Paused Bottom-Position Bench Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength — grapplers get stuck pressing out of compromised, stretched positions under load, and this trains exactly that range instead of just the mid-range most pressing already covers", quality: "Durability" }),
+              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+              ex({ name: "Paused Bottom-Position Bench Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength — grapplers get stuck pressing out of compromised, stretched positions under load, and this trains exactly that range instead of just the mid-range most pressing already covers", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/YHtd4XKsd7I" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
-              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through a full range of motion — protective against neck cranks, guillotines, and posture under pressure", quality: "Durability" }),
+              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through a full range of motion — protective against neck cranks, guillotines, and posture under pressure", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, alternated every 2 weeks between the two variations", quality: "Core" }),
@@ -653,7 +757,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Single-Leg Balance Reach", sets: 2, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Reactive neuromuscular training for ankle and knee stability", quality: "Neuromuscular" }),
-              ex({ name: "Lateral Shuffle", sets: 3, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Lateral hip stability, change-of-direction priming", quality: "Agility" }),
+              ex({ name: "Lateral Shuffle", sets: 3, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Lateral hip stability, change-of-direction priming", quality: "Agility" , videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
@@ -663,7 +767,7 @@ const conjugateProgram = {
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor durability for guard retention", quality: "Durability" }),
               ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability" }),
-              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" }),
+              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
@@ -671,17 +775,17 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Serratus activation before pressing", quality: "Neuromuscular" }),
-              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception", quality: "Neuromuscular" }),
+              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception", quality: "Neuromuscular" , videoUrl: "https://www.youtube.com/watch?v=_vPttkLHZMw" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
-              ex({ name: "Weighted Pull-Up", sets: 4, reps: "4", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength maintenance", quality: "Accessory" }),
+              ex({ name: "Weighted Pull-Up", sets: 4, reps: "4", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength maintenance", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" }),
+              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
               ex({ name: "Paused Bottom-Position Incline Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength at a different pressing angle than the base phase — grapplers get stuck pressing out of compromised, stretched positions under load", quality: "Durability" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
-              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Neck strength and durability", quality: "Durability" }),
+              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Neck strength and durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, alternated every 2 weeks between the two variations", quality: "Core" }),
@@ -699,8 +803,8 @@ const conjugateProgram = {
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
               deSquat(55), deBench(55),
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power for throws and scrambles", quality: "Rotational Power" }),
-              ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
-              ex({ name: "Trap Bar High Pull", sets: 4, reps: "5", load: "moderate, explosive intent", rir: 1, rest: "2 minutes", purpose: "Total-body explosive triple extension and grip demand — the closest barbell-based equivalent to a loaded sandbag or sled push without either", quality: "Power" }),
+              ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" , videoUrl: "https://www.youtube.com/watch?v=fx6lSVNvu-4" }),
+              ex({ name: "Trap Bar High Pull", sets: 4, reps: "5", load: "moderate, explosive intent", rir: 1, rest: "2 minutes", purpose: "Total-body explosive triple extension and grip demand — the closest barbell-based equivalent to a loaded sandbag or sled push without either", quality: "Power" , videoUrl: "https://www.youtube.com/watch?v=_reAqpSF-m0" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms" }),
@@ -739,9 +843,9 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Grip maintenance, minimal volume", quality: "Grip" }),
+              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Grip maintenance, minimal volume", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 1, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Brief wrist flexor and extensor maintenance, kept low to protect freshness this close to peak weeks", quality: "Durability" }),
-              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 1, reps: "8 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Brief neck maintenance, kept low to protect freshness this close to peak weeks", quality: "Durability" }),
+              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 1, reps: "8 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Brief neck maintenance, kept low to protect freshness this close to peak weeks", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
               ex({ name: "Pallof Press (Anti-Rotation)", sets: 2, reps: "10 per side", load: "light cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength, kept brief to protect freshness", quality: "Core" }),
             ]},
           ]},
@@ -753,7 +857,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
               deSquat(62), deBench(62),
-              ex({ name: "Heavy Dumbbell Swing", sets: 3, reps: "5", load: "heavy dumbbell", rir: 0, rest: "2 minutes", purpose: "Hip power expression", quality: "Power" }),
+              ex({ name: "Heavy Dumbbell Swing", sets: 3, reps: "5", load: "heavy dumbbell", rir: 0, rest: "2 minutes", purpose: "Hip power expression", quality: "Power" , videoUrl: "https://www.youtube.com/watch?v=QEMGYrebtxE" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
               ex({ name: "Assault Bike or Treadmill — Aerobic Maintenance", sets: 1, reps: "8 to 10 minutes", load: "easy to moderate, heart rate under about 140 beats per minute", rir: 0, rest: "none", purpose: "Maintain aerobic qualities without adding fatigue this close to peak weeks", quality: "Conditioning",
@@ -801,7 +905,7 @@ function rigoWarmup() {
       { id: uid(), name: "Toe Walks", detail: "20 meters", videoUrl: "" },
       { id: uid(), name: "Banded Lateral Step", detail: "20 meters both ways", videoUrl: "" },
       { id: uid(), name: "Banded Sumo Steps", detail: "20 meters both ways", videoUrl: "" },
-      { id: uid(), name: "Single Leg Glute Bridge", detail: "10 reps each side", videoUrl: "" },
+      { id: uid(), name: "Single Leg Glute Bridge", detail: "10 reps each side", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
       { id: uid(), name: "Bulldog Circuit", detail: "5 reps each way", videoUrl: "" },
       { id: uid(), name: "Box Jumps", detail: "5 reps", videoUrl: "" },
       { id: uid(), name: "Arm Swings Forward & Backward", detail: "30 reps each way", videoUrl: "" },
@@ -885,7 +989,7 @@ function buildProgramCContent() {
       ]},
       { name: "Day 3", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
-          ...ssPair(1, "Rear-Foot-Elevated Split Squat", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(1, "Bulgarian Split Squat", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
@@ -968,21 +1072,21 @@ function defaultWarmup() {
       { id: uid(), name: "Assault Bike or Treadmill, light pace", detail: "Build to a light sweat, nasal breathing only", videoUrl: "" },
     ]},
     { id: uid(), block: "Dynamic Mobility", duration: "5 to 6 minutes", items: [
-      { id: uid(), name: "World's Greatest Stretch", detail: "5 reps per side", videoUrl: "" },
-      { id: uid(), name: "Leg Swings, front-to-back and lateral", detail: "10 reps per direction per side", videoUrl: "" },
-      { id: uid(), name: "Hip Circles", detail: "8 reps per direction per side", videoUrl: "" },
-      { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "8 reps per side", videoUrl: "" },
-      { id: uid(), name: "Cable Pull-Apart (light, rope attachment)", detail: "15 reps", videoUrl: "" },
+      { id: uid(), name: "World's Greatest Stretch", detail: "5 reps per side", videoUrl: "https://www.youtube.com/watch?v=-CiWQ2IvY34" },
+      { id: uid(), name: "Leg Swings, front-to-back and lateral", detail: "10 reps per direction per side", videoUrl: "https://www.youtube.com/shorts/wF10oYsLUw0" },
+      { id: uid(), name: "Hip Circles", detail: "8 reps per direction per side", videoUrl: "https://www.youtube.com/shorts/P8P1E_IosqA" },
+      { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "8 reps per side", videoUrl: "https://www.youtube.com/shorts/Lfn-Fv_xmmQ" },
+      { id: uid(), name: "Cable Pull-Apart (light, rope attachment)", detail: "15 reps", videoUrl: "https://www.youtube.com/shorts/Ol-QWheu9Yg" },
     ]},
     { id: uid(), block: "Fascial & Multi-Planar Preparation", duration: "3 to 4 minutes", items: [
-      { id: uid(), name: "Multi-Planar Lunge Matrix", detail: "Forward, lateral, and rotational lunge, each direction, bodyweight", videoUrl: "" },
-      { id: uid(), name: "Cable Diagonal Chop (light load)", detail: "High-to-low and low-to-high, 6 reps per side", videoUrl: "" },
-      { id: uid(), name: "Cross-Crawl March with Reach", detail: "10 total, slow and controlled", videoUrl: "" },
+      { id: uid(), name: "Multi-Planar Lunge Matrix", detail: "Forward, lateral, and rotational lunge, each direction, bodyweight", videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" },
+      { id: uid(), name: "Cable Diagonal Chop (light load)", detail: "High-to-low and low-to-high, 6 reps per side", videoUrl: "https://www.youtube.com/shorts/8OZImYISmSg" },
+      { id: uid(), name: "Cross-Crawl March with Reach", detail: "10 total, slow and controlled", videoUrl: "https://www.youtube.com/shorts/_65SkNk2Esc" },
     ]},
     { id: uid(), block: "Activation", duration: "3 to 4 minutes", items: [
-      { id: uid(), name: "Glute Bridge", detail: "12 reps", videoUrl: "" },
-      { id: uid(), name: "Bodyweight Lateral Squat Walk", detail: "10 steps per direction", videoUrl: "" },
-      { id: uid(), name: "Dead Bug", detail: "8 reps per side", videoUrl: "" },
+      { id: uid(), name: "Glute Bridge", detail: "12 reps", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
+      { id: uid(), name: "Bodyweight Lateral Squat Walk", detail: "10 steps per direction", videoUrl: "https://www.youtube.com/shorts/vIEmbHOSY2U" },
+      { id: uid(), name: "Dead Bug", detail: "8 reps per side", videoUrl: "https://www.youtube.com/shorts/DqLL45uk2Tk" },
     ]},
     { id: uid(), block: "Movement-Specific Ramp-Up", duration: "3 to 5 minutes", items: [
       { id: uid(), name: "Ramp up today's first lift", detail: "2 to 3 warm-up sets with the empty bar and increasing load, building to the first working set", videoUrl: "" },
@@ -1053,18 +1157,15 @@ function buildProgramVariant(variant) {
         }
       });
     });
-  } else if (variant === "C") {
-    base.name = "Offseason Strength Build — Twelve-Week Program (Program C)";
-    base.variant = "C";
+  } else {
+    base.name = "Offseason Strength Build — Twelve-Week Program (Program B)";
+    base.variant = "B";
     base.objective = "Built directly from a Rate-of-Perceived-Exertion based coaching program — paired supersets, tempo-controlled reps, and RPE targets instead of percentage-of-max ramps. No competition to taper for, so nothing in the final block backs off; the last three weeks simply shift from strength-endurance work to a faster, lower-fatigue speed-strength emphasis.";
     base.coachNote = "";
     base.philosophy = "Every working set below is paired into a numbered superset (1A and 1B, done back to back before resting) and prescribed by Rate of Perceived Exertion rather than a percentage of your max — the number after each exercise is the target RPE for that set. Tempo notation like 2/1/X means 2 seconds lowering the weight, a 1 second pause, then lift as explosively as you can (X).";
     const built = buildProgramCContent();
     base.phases = built.phases;
     base.warmup = built.warmup;
-  } else {
-    base.name = "Traditional Split — Twelve-Week Program (Program B)";
-    base.variant = "B";
   }
   return base;
 }
@@ -1074,7 +1175,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     createdAt: todayStr(),
-    program: useTemplate ? buildProgramVariant(["A", "B", "C"].includes(programVariant) ? programVariant : "B") : blankProgram(),
+    program: useTemplate ? buildProgramVariant(["A", "B"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -1088,8 +1189,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
 const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purple", "Brown", "Black"];
 const PROGRAM_VARIANT_LABELS = {
   A: "Program A — Condensed Conjugate",
-  B: "Program B — Traditional Split",
-  C: "Program C — Offseason Strength Build",
+  B: "Program B — Offseason Strength Build",
 };
 
 const MENTAL_COACHING_LIBRARY = [
@@ -1269,7 +1369,7 @@ function MainApp({ userId, onSignOut }) {
   };
   const refreshProgramTemplate = async (variantOverride) => {
     if (!client) return;
-    const variant = variantOverride || (["A", "B", "C"].includes(client.program?.variant) ? client.program.variant : "B");
+    const variant = variantOverride || (client.program?.variant === "A" ? "A" : "B");
     const updated = { ...client, program: buildProgramVariant(variant) };
     await persistClient(updated);
   };
@@ -1424,12 +1524,8 @@ function OnboardingScreen({ onSubmit }) {
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Every session trains two qualities — a max lift and a speed lift, back to back. Best for less mat time.</p>
       </div>
       <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
-        <div className="program-choice-title">Program B — Traditional Split</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>One quality per session, more recovery room. Best if your BJJ volume is already high.</p>
-      </div>
-      <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")}>
-        <div className="program-choice-title">Program C — Offseason Strength Build</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. Best when your only goal is getting as strong as possible.</p>
+        <div className="program-choice-title">Program B — Offseason Strength Build</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
       </div>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant })}>
@@ -1763,7 +1859,7 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       <p className="muted" style={{ marginBottom: 10 }}>
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
-      {["A", "B", "C"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
+      {["A", "B"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
         <button key={v} className="btn-ghost wide" onClick={async () => { await onRefreshProgram(v); setRefreshed(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>
@@ -2027,17 +2123,59 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} reps ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
-      <Card
-        title={
-          <div className="day-nav-row">
-            <button className="day-nav-btn" disabled={viewIndex <= 0} onClick={() => setViewIndex((i) => Math.max(0, i - 1))}><ChevronLeft size={16} /></button>
-            <span>Day {pos.day.label} — {mainLift}</span>
-            <button className="day-nav-btn" disabled={viewIndex >= totalSessions - 1} onClick={() => setViewIndex((i) => Math.min(totalSessions - 1, i + 1))}><ChevronRight size={16} /></button>
-            <button className="day-nav-btn" onClick={() => setShowJumpPicker((s) => !s)} title="Preview or skip ahead to a different day"><CalendarDays size={14} /></button>
+      <div className="hero-card">
+        <div className="hero-top-row">
+          <button className="hero-nav-btn" disabled={viewIndex <= 0} onClick={() => setViewIndex((i) => Math.max(0, i - 1))}><ChevronLeft size={16} /></button>
+          <div className="hero-eyebrow" style={{ marginBottom: 0 }}>Week {pos.weekNumber} · Day {pos.day.label}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="hero-nav-btn" onClick={() => setShowJumpPicker((s) => !s)} title="Preview or skip ahead to a different day"><CalendarDays size={14} /></button>
+            <button className="hero-nav-btn" disabled={viewIndex >= totalSessions - 1} onClick={() => setViewIndex((i) => Math.min(totalSessions - 1, i + 1))}><ChevronRight size={16} /></button>
           </div>
-        }
-        subtitle={pos.day.name}
-      >
+        </div>
+
+        <div className="hero-select-row">
+          <select className="hero-select" value={pos.phase.id} disabled><option>{pos.phase.name}</option></select>
+          <select className="hero-select" value={pos.day.id} disabled><option>Day {pos.day.label} — {pos.day.name}</option></select>
+        </div>
+
+        <div className="hero-title">{mainLift}</div>
+        <div className="hero-duration">{pos.day.name} · Estimated {30 + (pos.day.sections?.length || 0) * 5} minutes</div>
+
+        <div className="hero-quote"><b>{todaysMentalTip.title}.</b> {todaysMentalTip.body.split(".")[0]}.</div>
+        <div className="hero-quote-attr">— Mental Game, today's entry</div>
+
+        {isCurrent && (
+          readinessToday ? (
+            <div className="hero-readiness-badge">
+              <span className="hero-dot" style={{ background: READINESS_COPY[readinessToday.color].color }} />
+              {readinessToday.color === "GREEN" ? "Fresh — full session today" : readinessToday.color === "YELLOW" ? "Normal — session lightly adjusted" : "Beat up — session eased back"}
+            </div>
+          ) : (
+            <>
+              <div className="mood-row-label">How do you feel today?</div>
+              <div className="mood-row">
+                {[{ key: "fresh", label: "Fresh", entry: { sleep: 5, energy: 5, soreness: 1 } }, { key: "normal", label: "Normal", entry: { sleep: 3, energy: 3, soreness: 3 } }, { key: "beat", label: "Beat up", entry: { sleep: 1, energy: 1, soreness: 5 } }].map((m) => (
+                  <button key={m.key} className="mood-pill" onClick={async () => {
+                    const color = classifyReadiness(m.entry);
+                    await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
+                  }}>{m.label}</button>
+                ))}
+              </div>
+            </>
+          )
+        )}
+        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>{readinessToday ? "Edit full check-in (bodyweight, sleep, soreness)" : "Or do a full check-in instead"}</button>
+
+        {!isCurrent && (
+          <div className="adjust-box">
+            Previewing Week {pos.weekNumber}, Day {pos.day.label} — this is not today's actual session.
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button className="link-btn" onClick={() => setViewIndex(client.sessionsCompleted || 0)}>Jump back to today</button>
+              <button className="link-btn" onClick={async () => { await onPersist({ ...client, sessionsCompleted: viewIndex }); setShowJumpPicker(false); }}>Skip ahead — make this my current day</button>
+            </div>
+          </div>
+        )}
+
         {showJumpPicker && (
           <div className="jump-picker">
             {Array.from({ length: Math.ceil(totalSessions / (client.program.sessionsPerWeek || 3)) }, (_, i) => i + 1).map((w) => {
@@ -2061,17 +2199,10 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
             })}
           </div>
         )}
-        {!isCurrent && (
-          <div className="adjust-box">
-            Previewing Week {pos.weekNumber}, Day {pos.day.label} — this is not today's actual session.
-            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              <button className="link-btn" onClick={() => setViewIndex(client.sessionsCompleted || 0)}>Jump back to today</button>
-              <button className="link-btn" onClick={async () => { await onPersist({ ...client, sessionsCompleted: viewIndex }); setShowJumpPicker(false); }}>Skip ahead — make this my current day</button>
-            </div>
-          </div>
-        )}
+
         {pos.day.intent && <div className="intent-box">{pos.day.intent}</div>}
         {adjustment.adjustedNote && <div className="adjust-box">{adjustment.adjustedNote}</div>}
+
         <button className="preview-toggle" onClick={() => setShowPreview((s) => !s)}>
           <span>Preview today's workout</span>
           <ChevronRight size={16} className={showPreview ? "chev-open" : ""} />
@@ -2086,11 +2217,17 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           </div>
         )}
         {isCurrent ? (
-          <button className="btn-primary wide" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start workout</button>
+          <>
+            <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
+            <div className="hero-secondary-row">
+              <button className="hero-secondary-btn" onClick={onStartMobility}>Start Recovery</button>
+              <button className="hero-secondary-btn" onClick={() => setShowPreview(true)}>See Full Plan</button>
+            </div>
+          </>
         ) : (
           <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
         )}
-      </Card>
+      </div>
 
       <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — breathwork plus full-body stretch flow`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
@@ -3521,8 +3658,8 @@ function GlobalStyle() {
     <style>{`
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative;
         background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --bg:#0c0c0d; --card:#18181a; --border:#2b2b2d; --text:#f2f0ec; --text-dim:#9a9a9c; --accent:#e0323f; --accent-text:#ffffff; --green:#4f9d5c; --amber:#d9a22b; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f6f5f3; --card:#ffffff; --border:#e1dfda; --text:#141414; --text-dim:#68686a; --accent:#c81e2c; --accent-text:#ffffff; --green:#3f7d4a; --amber:#b9840f; --neon-gold:#c9b400; }
+      .app-shell[data-theme="dark"] { --bg:#0a0e17; --card:#131a28; --border:#232e42; --text:#eef2f9; --text-dim:#8592ab; --accent:#5bb8ff; --accent-text:#062033; --cta:#ff7a54; --cta2:#ff5470; --green:#4f9d5c; --amber:#d9a22b; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --bg:#eef1f6; --card:#ffffff; --border:#dbe1ea; --text:#0f1826; --text-dim:#5c6b82; --accent:#1e7fd6; --accent-text:#ffffff; --cta:#ff7a54; --cta2:#ff5470; --green:#3f7d4a; --amber:#b9840f; --neon-gold:#c9b400; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -3558,16 +3695,39 @@ function GlobalStyle() {
       .milestone-row.achieved { opacity: 1; border-color: var(--green); }
       .milestone-emoji { font-size: 26px; flex-shrink: 0; }
       .milestone-name { font-weight: 600; font-size: 13.5px; }
-      .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 10px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; }
+      .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
       .icon-btn.small { width: 30px; height: 30px; }
       .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; }
-      .nav-btn { flex: 1; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 10px; font-size: 9px; cursor: pointer; }
+      .nav-btn { flex: 1; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 10px; font-size: 9px; cursor: pointer; position: relative; }
       .nav-btn.active { color: var(--accent); }
+      .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
       .stat-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+      .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
+      .hero-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
+      .hero-nav-btn:disabled { opacity: 0.35; }
+      .hero-eyebrow { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
+      .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
+      .hero-select { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
+      .hero-title { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-style: italic; font-size: 28px; line-height: 1.15; color: var(--accent); letter-spacing: 0.005em; margin-bottom: 4px; }
+      .hero-duration { font-size: 12.5px; color: var(--text-dim); margin-bottom: 14px; }
+      .hero-quote { font-size: 13px; color: var(--accent); font-style: italic; line-height: 1.55; padding: 0; margin-bottom: 4px; }
+      .hero-quote b { font-style: italic; font-weight: 700; }
+      .hero-quote-attr { font-size: 11.5px; color: var(--text-dim); margin-bottom: 18px; }
+      .mood-row-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
+      .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
+      .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
+      .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .hero-full-checkin { display: block; text-align: center; font-size: 12px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 14px; background: none; border: none; cursor: pointer; width: 100%; }
+      .hero-start-btn { width: 100%; background: linear-gradient(135deg, var(--cta) 0%, var(--cta2) 100%); color: #fff; border: none; border-radius: 14px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 18px -6px rgba(255,90,90,0.4); }
+      .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
+      .hero-secondary-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+      .hero-readiness-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+      .hero-dot { width: 8px; height: 8px; border-radius: 50%; }
       .stat-chip { flex: 1 1 45%; min-width: 90px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
       .stat-chip-value { font-family: 'Bebas Neue', 'Oswald', sans-serif; font-size: 20px; letter-spacing: 0.02em; }
       .stat-chip-label { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-      .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
       .card-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
       .card-title { font-family: 'Bebas Neue', 'Oswald', sans-serif; font-size: 18px; letter-spacing: 0.02em; }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
@@ -3592,7 +3752,7 @@ function GlobalStyle() {
       .section-preview-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
       .section-preview-row:last-child { border-bottom: none; }
       .section-subheading { font-size: 11px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
-      .btn-primary { background: var(--accent); color: var(--accent-text); border: none; border-radius: 10px; padding: 12px 18px; font-weight: 700; font-size: 15px; cursor: pointer; }
+      .btn-primary { background: linear-gradient(135deg, var(--cta) 0%, var(--cta2) 100%); color: #fff; border: none; border-radius: 12px; padding: 13px 18px; font-weight: 700; font-size: 15px; cursor: pointer; box-shadow: 0 6px 16px -6px rgba(255,90,90,0.45); }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
       .btn-primary:disabled { opacity: 0.4; }
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
@@ -3622,7 +3782,7 @@ function GlobalStyle() {
       .progress-circle.green .progress-circle-arc { stroke: var(--green); }
       .progress-circle.neon .progress-circle-arc { stroke: var(--neon-gold); filter: drop-shadow(0 0 4px var(--neon-gold)); }
       .progress-circle-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--text); }
-      .rest-banner { display: flex; align-items: flex-start; gap: 8px; background: var(--accent); color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; }
+      .rest-banner { display: flex; align-items: flex-start; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; }
       .rest-banner span { flex: 1; }
       .rest-dismiss { background: rgba(255,255,255,0.2); border: none; border-radius: 999px; width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer; }
       .log-exercise { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
@@ -3686,7 +3846,7 @@ function GlobalStyle() {
       .phase-body { padding: 12px 4px; }
       .day-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
       .day-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .day-badge { background: var(--accent); color: #fff; font-weight: 800; font-size: 12px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+      .day-badge { background: var(--accent); color: var(--accent-text); font-weight: 800; font-size: 12px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
       .day-name { font-weight: 600; font-size: 14px; flex: 1; }
       .program-ex-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12.5px; border-top: 1px solid var(--border); gap: 10px; }
       .program-ex-row:first-of-type { border-top: none; }
