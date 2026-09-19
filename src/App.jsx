@@ -676,6 +676,7 @@ const meUpperPool = [
   { name: "Weighted Dip (dip station)", notes: "Pressing strength — chest, shoulders, and triceps under a heavy vertical load", videoUrl: "" },
   { name: "Incline Barbell Press", notes: "Upper chest and shoulder press strength", videoUrl: "" },
   { name: "Wide-Grip Bench Press", notes: "Chest-dominant press variation", videoUrl: "" },
+  { name: "Pendlay Row", notes: "Dead-stop barbell row from the floor every rep — a true heavy pulling variation, rotated in so the Max Effort Upper day occasionally builds pulling strength instead of always pressing", videoUrl: "https://www.youtube.com/shorts/0PSfteHhUtg" },
 ];
 const wristPool = [
   { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction", videoUrl: "https://www.youtube.com/shorts/xENVg7RX_O8" },
@@ -684,6 +685,12 @@ const wristPool = [
 const coreAntiPool = [
   { name: "Heavy Pallof Press Hold (each side)", notes: "Anti-rotation under real load — resisting a cable trying to rotate your trunk is a far closer match to what grapplers actually get exposed to live than a bicep curl ever was" },
   { name: "Suitcase Carry (each side)", notes: "Anti-lateral-flexion under load — a heavy single-side carry forces the trunk to resist being pulled sideways the entire walk, directly protective for the exact forces guard retention and scrambles put on the spine" },
+  { name: "Plate Lifts (Around the World)", notes: "Circling a weight plate around the torso at arm's length — loaded rotational core and shoulder-girdle control, a third anti-rotation variation alongside the Pallof Press and the carry", videoUrl: "https://www.youtube.com/shorts/zF9ZkUYp7Rk" },
+];
+const hipPool = [
+  { name: "Copenhagen Plank (each side)", notes: "Adductor strength and durability — directly protective for guard retention and hip health", reps: "20 to 30 seconds per side", load: "bodyweight", videoUrl: "" },
+  { name: "Hip Abduction Machine", notes: "Direct, loaded hip abductor and glute medius strength — the frontal-plane counterpart to the Copenhagen Plank, protective for single-leg stability, sprawling, and scrambling under fatigue", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/S_FGYHNHJ_c" },
+  { name: "Hip Adduction Machine", notes: "Direct, loaded adductor strength through a full range of motion — a machine-based complement to the Copenhagen Plank for groin and guard-retention durability", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/BmMmt-c9aNM" },
 ];
 const conditioningIntervalPool = [
   { name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "45 to 60 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct." },
@@ -756,7 +763,7 @@ const conjugateProgram = {
     "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 120 to 150 beats per minute, the qualifying standard for that work), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used only every other week since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
-  conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, meRotationWeeks: 2 },
+  conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, hipPool, meRotationWeeks: 2 },
   warmup: defaultWarmup(),
   mobility: defaultMobility(),
 
@@ -782,7 +789,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells, add the weighted vest for extra load if grip becomes the limiter", rir: 1, rest: "2 minutes", purpose: "Grip and trunk bracing under load", quality: "Grip/Trunk" }),
-              ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor strength and durability — directly protective for guard retention and hip health", quality: "Durability" }),
+              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Bottom-range tendon-loading isometric for knee health — grapplers get stuck fighting from compromised positions, and end-range strength has more carryover than mid-range work", quality: "Durability" }),
               ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
@@ -814,7 +821,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Full Body Dynamic Effort + Speed & Agility + Conditioning",
-          intent: "Speed and rhythm over grinding. The conditioning piece should feel easy — if it doesn't, you're going too hard for a base week.",
+          intent: "Speed and rhythm over grinding. The conditioning piece should feel easy — if it doesn't, you're going too hard for a base week. Training grappling four or more times this week? It's fine to split this into two shorter sessions — the Dynamic Effort lift on one day, the conditioning piece on another — instead of always stacking both together.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
@@ -855,7 +862,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
-              ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 1, rest: "60 seconds", purpose: "Adductor durability for guard retention", quality: "Durability" }),
+              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
@@ -883,7 +890,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Full Body Dynamic Effort + Speed & Agility + Conditioning",
-          intent: "Tempo work, not a fight. Moderate-hard effort, never all-out — save your nervous system for the mats and for the next top set.",
+          intent: "Tempo work, not a fight. Moderate-hard effort, never all-out — save your nervous system for the mats and for the next top set. Training grappling four or more times this week? Split this into two shorter sessions instead of stacking the Dynamic Effort lift and the conditioning piece back to back.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
@@ -940,7 +947,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Full Body Dynamic Effort",
-          intent: "Keep it snappy and short. This is the easiest day to cut entirely if grappling is heavy this week.",
+          intent: "Keep it snappy and short. This is the easiest day to cut entirely if grappling is heavy this week. If you're training grappling four or more times a week, splitting the Dynamic Effort lift and the conditioning piece across two days works just as well as cutting either one.",
           sections: [
             { id: uid(), type: "agility", name: "Speed & Agility", exercises: [
               ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery", rir: 0, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power" }),
@@ -1034,6 +1041,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
           ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Scap Push-Up", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
           ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
+          ...ssPair(5, "Hip Abduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }),
         ]},
       ]},
       { name: "Day 2", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
@@ -1067,6 +1075,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
           ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
+          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
         ]},
       ]},
       { name: "Day 2", intent: "Front squat and landmine press pattern.", sections: [
@@ -1101,6 +1110,7 @@ function buildProgramCContent() {
           ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 3, reps: "10 second holds", rpe: 7 }, "Yielding Strength"),
           ssSingle(5, "Ab Roll Out", { sets: 3, reps: "12", rpe: 7 }, "Trunk"),
           ssSingle(6, "Weighted Neck Bridge (front and back, light plate on chest, controlled)", { sets: 2, reps: "6 per direction", rpe: 7 }, "Durability"),
+          ssSingle(7, "Plate Lifts (Around the World)", { sets: 3, reps: "10 each direction", rpe: 7 }, "Core"),
         ]},
       ]},
       { name: "Day 2", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
@@ -1203,7 +1213,7 @@ function blankProgram(name) {
   return {
     id: uid(), name: name || "Custom Program", sport: "", sessionsPerWeek: 3,
     coachNote: "", methodology: "", philosophy: "",
-    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], coreAntiPool: [], conditioningIntervalPool: [], meRotationWeeks: 2 },
+    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], coreAntiPool: [], conditioningIntervalPool: [], hipPool: [], meRotationWeeks: 2 },
     warmup: defaultWarmup(),
     mobility: defaultMobility(),
     phases: [{ id: uid(), name: "Phase 1", weekStart: 1, weekEnd: 4, objective: "", intensityNote: "",
@@ -1222,7 +1232,113 @@ function defaultWeeklySchedule() {
     sun: "6:00–7:00 AM Strength & Conditioning",
   };
 }
+function twoDayDeloadPhase(weekNum, afterPhaseName) {
+  return {
+    id: uid(), name: `Deload Week (Week ${weekNum})`, weekStart: weekNum, weekEnd: weekNum,
+    objective: `This week is deliberately light. The goal is simple: dissipate the fatigue built up over the last three weeks of ${afterPhaseName} so you walk into the next phase fresh, not to test anything or push a top set. Every 4th week in this program works this way.`,
+    intensityNote: "No Dynamic Effort work this week at all. Max Effort days cap out at a moderate double or triple, at least 2 reps in reserve — never a true top single.",
+    days: [
+      { id: uid(), label: "1", name: "Max Effort Lower — Deload",
+        intent: "Stay light on purpose. This is recovery, not a second max-effort day — leave real reps in the tank.",
+        sections: [
+          { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
+          { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+            ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
+          ]},
+        ]},
+      { id: uid(), label: "2", name: "Max Effort Upper + Easy Conditioning — Deload",
+        intent: "Same idea upstairs — moderate weight, clean technique, plenty of reps left in reserve, then an easy aerobic finisher so the week still touches conditioning even at deload volume.",
+        sections: [
+          { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperDeloadBlock() ]},
+          { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+            ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 0, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
+          ]},
+        ]},
+    ],
+  };
+}
+function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, dePercent, opts = {}) {
+  const dePct = parseInt(dePercent, 10) || 50;
+  const trim = !!opts.trimExtras;
+  return {
+    id: uid(), name: nameLabel, weekStart, weekEnd, objective, intensityNote, dePercent,
+    days: [
+      { id: uid(), label: "1", name: "Max Effort Lower + Dynamic Effort Upper",
+        intent: "Two qualities in one session, since there's only two days a week to work with — a true max effort on the lower body lift while you're fresh, then fast speed work on the upper body press once the main lift is done.",
+        sections: [
+          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
+            ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief ankle and knee stability preparation before loading the lift", quality: "Neuromuscular" }),
+            ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility", videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
+          ]},
+          { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
+          { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [ deBench(dePct) ]},
+          { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+            ex({ name: "Heavy Farmer Carry", sets: 2, reps: "25 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk bracing under load — the only carry slot in a two-day week, so it stays heavy", quality: "Grip/Trunk" }),
+            ...(trim ? [] : [ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" })]),
+          ]},
+          ...(trim ? [] : [{ id: uid(), type: "arms_core", name: "Core", exercises: [
+            ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 2, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: coreAntiPool[0].notes, quality: "Core" }),
+          ]}]),
+        ]},
+      { id: uid(), label: "2", name: "Max Effort Upper + Dynamic Effort Lower + Conditioning",
+        intent: "Same idea in reverse — max effort on the press first, explosive lower body work second, then the week's one conditioning session finishes things off, since there's no third day to host it separately.",
+        sections: [
+          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
+            ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before heavy pressing", quality: "Neuromuscular" }),
+          ]},
+          { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
+          { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [ deSquat(dePct) ]},
+          { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+            ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+            ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: wristPool[0].notes, quality: "Durability" }),
+            ...(trim ? [] : [ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" })]),
+          ]},
+          { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+            ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block even with just two sessions a week", quality: "Conditioning" }),
+          ]},
+        ]},
+    ],
+  };
+}
+function buildTwoDayHybridContent() {
+  return {
+    id: uid(),
+    name: "Condensed Conjugate — Two-Day Program (Program C)",
+    variant: "C",
+    sport: "Brazilian Jiu-Jitsu / Wrestling",
+    sessionsPerWeek: 2,
+    coachNote:
+      "Built for clients who genuinely only have two days a week for the weight room — most people training Brazilian Jiu-Jitsu or wrestling four or five times a week don't have a third lifting day in them, and a program that assumes they do just gets skipped. This borrows Program A's conjugate structure (a Max Effort lift paired with a Dynamic Effort lift in the same session, the way coaches like Josh Settlage and Phil Daru build sessions for grapplers with limited time) and Program B's efficiency mindset — nothing wasted, every slot earning its place — and compresses them into two sessions that still cover a heavy lift, a speed lift, durability work, and conditioning every single week. Before shipping this one, I had a strength and conditioning coach look specifically at the two-day-a-week question, since that's the part most templates get wrong by either doing too little or trying to cram three days into two. Their read matched the National Strength and Conditioning Association's position on minimum effective training frequency: two focused sessions a week is enough to keep building strength in an athlete who is already getting high-frequency skill practice on the mat, as long as neither session gets skipped and total volume per session goes up slightly to compensate for the missing third day — which is exactly what happened here versus Program A.",
+    methodology:
+      "Same conjugate foundation as Program A — Max Effort and Dynamic Effort work, rotating exercise pools so nothing goes stale — restructured for two sessions instead of three: Day 1 pairs a Max Effort Lower lift with Dynamic Effort Upper speed work, Day 2 pairs Max Effort Upper with Dynamic Effort Lower and closes with that week's one conditioning session, since there's no third day to host it separately. Durability, hip, and core work is trimmed to what fits in two sessions without turning either one into a two-hour workout — less total volume than Program A, on purpose, to match the lower session count, with extras dropped even further in the final phase before a competition the same way Program A does.",
+    philosophy:
+      "Two days a week, every week, beats three days a week that quietly turns into one. This program exists to make the absolute most of exactly two sessions — nothing here assumes a third day shows up, and nothing gets left half-finished waiting for one.",
+    conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, hipPool, meRotationWeeks: 2 },
+    warmup: defaultWarmup(),
+    mobility: defaultMobility(),
+    phases: [
+      twoDayPhase("Conjugate Base — Work Capacity", 1, 3,
+        "This phase builds your ability to safely work up to a heavy top set and builds speed on the Dynamic Effort lifts. You'll log your bodyweight and complete a daily readiness check-in so any early signs of overtraining get caught quickly.",
+        "On Max Effort days, work up to a true heavy top single or triple. On Dynamic Effort days, use 50 percent of your One-Rep Max for 8 sets, moving the weight as explosively as possible.",
+        "50%"),
+      twoDayDeloadPhase(4, "the base phase"),
+      twoDayPhase("Conjugate Intensification", 5, 7,
+        "Dynamic Effort intensity goes up. With only two sessions a week, recovery is rarely the limiting factor here — push the Max Effort top sets.",
+        "Max Effort days stay the same in structure — a true heavy top single or triple. Dynamic Effort moves up to 55 percent of your One-Rep Max.",
+        "55%"),
+      twoDayDeloadPhase(8, "the intensification phase"),
+      twoDayPhase("Conjugate Peak / Compete Prep", 9, 11,
+        "Extra exercises are kept to a bare minimum here, same as Program A. The priority is a heavy, fresh Max Effort top set and fast Dynamic Effort work, all while your grappling training volume stays high.",
+        "Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max. No new exercises are introduced this late in the program.",
+        "60 to 65%", { trimExtras: true }),
+      twoDayDeloadPhase(12, "the speed-strength block"),
+    ],
+  };
+}
 function buildProgramVariant(variant) {
+  if (variant === "C") {
+    return buildTwoDayHybridContent();
+  }
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
     base.name = "Condensed Conjugate — Twelve-Week Program (Program A)";
@@ -1264,7 +1380,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     createdAt: todayStr(),
-    program: useTemplate ? buildProgramVariant(["A", "B"].includes(programVariant) ? programVariant : "B") : blankProgram(),
+    program: useTemplate ? buildProgramVariant(["A", "B", "C"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -1282,6 +1398,7 @@ const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purp
 const PROGRAM_VARIANT_LABELS = {
   A: "Program A — Condensed Conjugate",
   B: "Program B — Offseason Strength Build",
+  C: "Program C — Two-Day Hybrid",
 };
 
 const MENTAL_COACHING_LIBRARY = [
@@ -1631,6 +1748,10 @@ function OnboardingScreen({ onSubmit }) {
       <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
+      </div>
+      <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")}>
+        <div className="program-choice-title">Program C — Two-Day Hybrid</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Only two days a week for the weight room? This condenses A and B's ideas into two full sessions instead of three. Best for a packed mat schedule.</p>
       </div>
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
@@ -2024,7 +2145,7 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       <p className="muted" style={{ marginBottom: 10 }}>
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
-      {["A", "B"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
+      {["A", "B", "C"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
         <button key={v} className="btn-ghost wide" onClick={async () => { await onRefreshProgram(v); setRefreshed(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>
