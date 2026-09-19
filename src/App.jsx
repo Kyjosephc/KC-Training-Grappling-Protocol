@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
   Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard
+  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1491,6 +1491,7 @@ function MainApp({ userId, onSignOut }) {
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1607,7 +1608,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} />
+      <TopBar client={client} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -1637,6 +1638,7 @@ function MainApp({ userId, onSignOut }) {
         }} />
       )}
       {showCalculator && <OneRepMaxCalculator onClose={() => setShowCalculator(false)} />}
+      {showShare && <ShareModal onClose={() => setShowShare(false)} />}
       {showDashboard && <ClientDashboard client={client} onClose={() => setShowDashboard(false)} />}
       {logging && (
         <DaySessionScreen client={client} phaseId={logging.phaseId} dayId={logging.dayId} onClose={() => setLogging(null)}
@@ -1777,7 +1779,7 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard }) {
+function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
       <div>
@@ -1793,6 +1795,7 @@ function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpe
       </button>
       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
         <div style={{ display: "flex", gap: 6 }}>
+          <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
           <button className="icon-btn" onClick={onOpenCoachDashboard} aria-label="Coach Dashboard"><LayoutDashboard size={20} /></button>
           <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
           <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
@@ -1841,6 +1844,51 @@ function TermsModal({ onClose }) {
   );
 }
 
+function smsHref(text) {
+  const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+  const encoded = encodeURIComponent(text);
+  return isIOS ? `sms:&body=${encoded}` : `sms:?body=${encoded}`;
+}
+function ShareModal({ onClose }) {
+  const [copied, setCopied] = useState(false);
+  const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const shareText = "I've been training with Strength Matrix, a strength and conditioning program built for BJJ and wrestling — come join me:";
+  const fullMessage = `${shareText} ${shareUrl}`;
+  const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
+
+  const handleNativeShare = async () => {
+    try {
+      await navigator.share({ title: "Strength Matrix", text: shareText, url: shareUrl });
+    } catch (err) {
+      // The person canceled the share sheet or it failed silently — nothing to surface here.
+    }
+  };
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(fullMessage);
+      setCopied(true);
+      emitToast({ message: "Link copied", autoDismissMs: 2500 });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      emitToast({ kind: "error", message: "Couldn't copy the link — try selecting it manually.", autoDismissMs: 4000 });
+    }
+  };
+
+  return (
+    <ModalShell onClose={onClose} title="Share Strength Matrix">
+      <p className="muted" style={{ marginBottom: 16 }}>Invite a friend to train with you — they'll get their own account and can pick their own program.</p>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 8 }}>Your invite link</div>
+        <p className="muted" style={{ fontSize: 13.5, wordBreak: "break-all", marginBottom: 0 }}>{shareUrl}</p>
+      </div>
+      {canNativeShare && (
+        <button className="btn-primary wide" style={{ marginBottom: 10 }} onClick={handleNativeShare}>Share</button>
+      )}
+      <a className="btn-ghost wide" style={{ marginTop: 0, marginBottom: 10, justifyContent: "center", textDecoration: "none" }} href={smsHref(fullMessage)}>Text a Friend</a>
+      <button className="btn-ghost wide" style={{ marginTop: 0 }} onClick={handleCopy}>{copied ? "Copied!" : "Copy Link"}</button>
+    </ModalShell>
+  );
+}
 function TutorialModal({ onClose }) {
   const [page, setPage] = useState(0);
   const isLast = page === TUTORIAL_PAGES.length - 1;
