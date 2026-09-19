@@ -428,7 +428,6 @@ const VIDEO_LIBRARY = {
   "cable pull-apart": "https://www.youtube.com/shorts/Ol-QWheu9Yg",
   "multi-planar lunge matrix": "https://www.youtube.com/shorts/6hiVTg5rD7Y",
   "cable diagonal chop": "https://www.youtube.com/shorts/8OZImYISmSg",
-  "cross-crawl march with reach": "https://www.youtube.com/shorts/_65SkNk2Esc",
   "glute bridge": "https://www.youtube.com/shorts/mSuDY5J0Fwo",
   "bodyweight lateral squat walk": "https://www.youtube.com/shorts/vIEmbHOSY2U",
   "dead bug": "https://www.youtube.com/shorts/DqLL45uk2Tk",
@@ -514,6 +513,8 @@ const VIDEO_LIBRARY = {
   "banded pull-apart": "https://www.youtube.com/shorts/SuvO4TBwSu4",
   "banded clamshell": "https://www.youtube.com/shorts/Y1vuVuP754M",
   "90/90 hip switch flow": "https://www.youtube.com/watch?v=m51AZSXMvEA",
+  "single-leg balance reach": "https://www.youtube.com/shorts/X6isWRdfCE4",
+  "pogo hops": "https://www.youtube.com/shorts/L_khHgMz9uU",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
@@ -1082,7 +1083,6 @@ function defaultWarmup() {
     { id: uid(), block: "Fascial & Multi-Planar Preparation", duration: "3 to 4 minutes", items: [
       { id: uid(), name: "Multi-Planar Lunge Matrix", detail: "Forward, lateral, and rotational lunge, each direction, bodyweight", videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" },
       { id: uid(), name: "Cable Diagonal Chop (light load)", detail: "High-to-low and low-to-high, 6 reps per side", videoUrl: "https://www.youtube.com/shorts/8OZImYISmSg" },
-      { id: uid(), name: "Cross-Crawl March with Reach", detail: "10 total, slow and controlled", videoUrl: "https://www.youtube.com/shorts/_65SkNk2Esc" },
     ]},
     { id: uid(), block: "Activation", duration: "3 to 4 minutes", items: [
       { id: uid(), name: "Glute Bridge", detail: "12 reps", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
