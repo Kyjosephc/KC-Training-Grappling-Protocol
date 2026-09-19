@@ -2468,7 +2468,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       const poolArr = client.program.conjugate?.[poolKey] || [];
       const chosen = poolArr.find((p) => p.name === newName);
       if (!chosen) return prev;
-      list[exIdx] = { ...list[exIdx], name: chosen.name, target: { ...list[exIdx].target, name: chosen.name, rotatingPool: poolKey, purpose: chosen.notes, videoUrl: chosen.videoUrl || "" } };
+      list[exIdx] = { ...list[exIdx], name: chosen.name, target: { ...list[exIdx].target, name: chosen.name, rotatingPool: poolKey, purpose: chosen.notes, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "" } };
       return { ...prev, [sectionId]: list };
     });
   };
