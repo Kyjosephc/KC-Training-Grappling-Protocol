@@ -194,7 +194,10 @@ function pctFromRpeReps(rpe, reps) {
     base = PCT_AT_RPE10_BY_REPS[lo] + t * (PCT_AT_RPE10_BY_REPS[hi] - PCT_AT_RPE10_BY_REPS[lo]);
   }
   const pct = base - (10 - rpe) * 2.5;
-  return Math.max(30, Math.min(100, Math.round(pct)));
+  const clamped = Math.max(30, Math.min(100, pct));
+  // Round up to the nearest 5 percent — 79% becomes 80%, 74% becomes 75% — so every
+  // percentage shown anywhere in the app is a clean, easy-to-load number on the bar.
+  return Math.ceil(clamped / 5) * 5;
 }
 // A rep target counts as "loadable" (worth a %1RM suggestion) only if it's a genuine number of reps —
 // "6", "3 each side", "10 to 12 each" all count. Holds, carries, and distance work (seconds, meters,
@@ -2407,11 +2410,14 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         </button>
         {showPreview && (
           <div className="section-preview-list">
-            <div className="section-preview-row"><span>Warm-Up</span><span className="muted">{(client.program.warmup || []).reduce((n, b) => n + b.items.length, 0)} items</span></div>
-            {adjustment.sections.map((sec) => (
-              <div key={sec.id} className="section-preview-row"><span>{sectionHeadline(sec)}{sec.skipped ? " (skipped today)" : ""}</span><span className="muted">{sec.exercises.length} {sec.exercises.length === 1 ? "item" : "items"}</span></div>
+            {adjustment.sections.filter((sec) => sec.exercises.length > 0).map((sec) => (
+              <div key={sec.id}>
+                <div className="section-subheading" style={{ margin: "10px 0 4px" }}>{SECTION_LABELS[sec.type] || sec.name}{sec.skipped ? " (skipped today)" : ""}</div>
+                {sec.exercises.map((e, i) => (
+                  <div key={e.id || i} className="section-preview-ex-row">{e.name}</div>
+                ))}
+              </div>
             ))}
-            <div className="section-preview-row"><span>Cool-Down Mobility</span><span className="muted">{mobilityMinutes} minutes</span></div>
           </div>
         )}
         {isCurrent ? (
@@ -4005,6 +4011,7 @@ function GlobalStyle() {
       .preview-toggle { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 8px; }
       .section-preview-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
       .section-preview-row:last-child { border-bottom: none; }
+      .section-preview-ex-row { font-size: 13px; color: var(--text); padding: 3px 0 3px 8px; border-left: 2px solid var(--border); margin-left: 2px; }
       .section-subheading { font-size: 12px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
       .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 13px 18px; font-weight: 700; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.02em; box-shadow: none; }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
