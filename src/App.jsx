@@ -533,6 +533,24 @@ function lookupVideo(name) {
   const found = Object.keys(VIDEO_LIBRARY).find((k) => key.includes(k) || k.includes(key));
   return found ? VIDEO_LIBRARY[found] : "";
 }
+// Exercises that are held or worked for TIME rather than counted in reps — their target
+// text already says "seconds"/"time" (e.g. "30 to 45 seconds", "maximum time"), so anywhere
+// the app would otherwise show a numeric "Reps" field for these, it should say "Seconds" instead.
+const TIME_BASED_EXERCISES = new Set([
+  "pull-up bar dead hang",
+  "copenhagen plank",
+  "heavy isometric wall sit",
+  "dip station support hold",
+  "paused bottom-position bench press hold",
+  "paused bottom-position incline press hold",
+  "heavy landmine anti-rotation hold",
+  "half-kneeling landmine press hold",
+  "rice bucket grip drills",
+]);
+function isTimedExercise(name) {
+  const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
+  return TIME_BASED_EXERCISES.has(key);
+}
 function ex(o) {
   const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
   if (!base.videoUrl) base.videoUrl = lookupVideo(base.name);
@@ -1652,7 +1670,7 @@ function ClientDashboard({ client, onClose }) {
       <div className="card">
         <div className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</div>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
-          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} reps — {fmtDate(p.date)}</span></div>
+          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} {isTimedExercise(p.exerciseName) ? "seconds" : "reps"} — {fmtDate(p.date)}</span></div>
         ))}
       </div>
     </ModalShell>
@@ -2130,7 +2148,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </Card>
 
       {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} reps ({fmtDate(recentPR.date)})</span></div></Card>
+        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} {isTimedExercise(recentPR.name) ? "seconds" : "reps"} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
       <div className="hero-card">
@@ -2697,9 +2715,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
                   {lastWeek ? (
-                    <div className="last-logged">Last week, heaviest: {lastWeek.weight} pounds × {lastWeek.reps} reps</div>
+                    <div className="last-logged">Last week, heaviest: {lastWeek.weight} pounds × {lastWeek.reps} {isTimedExercise(displayName) ? "seconds" : "reps"}</div>
                   ) : (
-                    last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} reps ({fmtDate(last.date)})</div>
+                    last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} {isTimedExercise(displayName) ? "seconds" : "reps"} ({fmtDate(last.date)})</div>
                   )}
                   <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} />
                   {poolOptions.length > 0 && (
@@ -2713,7 +2731,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     </div>
                   )}
                 </div>
-                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>Reps</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
+                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{isTimedExercise(displayName) ? "Seconds" : "Reps"}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
@@ -3179,7 +3197,7 @@ function EditableLogBody({ log, client, onPersist }) {
         {draft.map((e, exIdx) => (
           <div key={e.exerciseId} className="edit-ex-card">
             <div className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</div>
-            <div className="set-grid-header"><span>Set</span><span>Weight</span><span>Reps</span><span>Rate of Perceived Exertion</span></div>
+            <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{isTimedExercise(e.name) ? "Seconds" : "Reps"}</span><span>Rate of Perceived Exertion</span></div>
             {e.sets.map((s, setIdx) => (
               <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
                 <span className="set-num">{setIdx + 1}</span>
@@ -3561,7 +3579,7 @@ function PRsTab({ client }) {
                 {earlier.length > 0 && <ChevronRight size={18} className={open ? "chev-open" : ""} />}
               </div>
               <div className="pr-side-row" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
-                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} reps</span>
+                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {isTimedExercise(name) ? "seconds" : "reps"}</span>
               </div>
               <div className="pr-side-row"><CalendarDays size={13} color="var(--text-dim)" /><span className="muted">{fmtDate(mostRecent.date)} — most recent</span></div>
               {earlier.length > 0 && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{earlier.length} earlier Personal Record{earlier.length === 1 ? "" : "s"}</div>}
@@ -3570,7 +3588,7 @@ function PRsTab({ client }) {
               <div className="pr-history">
                 {earlier.map((h) => (
                   <div key={h.id} className="pr-history-row-v2">
-                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} reps</div>
+                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {isTimedExercise(name) ? "seconds" : "reps"}</div>
                     <div className="pr-history-date"><CalendarDays size={12} /> {fmtDate(h.date)}</div>
                   </div>
                 ))}
