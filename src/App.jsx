@@ -1211,6 +1211,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     weeklySchedule: defaultWeeklySchedule(),
     beltLevel: beltLevel || "White",
     bjjNotes: [],
+    paid: false,
   };
 }
 
@@ -1323,6 +1324,7 @@ function MainApp({ userId, onSignOut }) {
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
+        if (c.paid === undefined) c.paid = true;
         if (!c.program.mobility) c.program.mobility = defaultMobility();
 
         // Self-heal: older versions of this app briefly saved rotating Max Effort
@@ -1865,6 +1867,18 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       <p className="muted" style={{ marginBottom: 10 }}>If you're the coach, open this to see every athlete who has shared their progress with one of your roster codes.</p>
       <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
 
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</div>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        {client?.paid
+          ? "This athlete is marked as paid — they have full access to the program going forward, with no more payment prompts."
+          : "The first week is free. Starting in Week 2, this athlete will be shown your payment info and won't be able to start that session until you mark them as paid here."}
+      </p>
+      {client?.paid ? (
+        <button className="btn-ghost wide" onClick={() => onPersist({ ...client, paid: false })}>Mark as Unpaid</button>
+      ) : (
+        <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
+      )}
+
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
       <p className="muted" style={{ marginBottom: 10 }}>
         Your athlete's program is saved the moment their profile is created, so improvements made to the program afterward don't automatically reach an existing profile. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
@@ -2245,13 +2259,29 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           </div>
         )}
         {isCurrent ? (
-          <>
-            <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
-            <div className="hero-secondary-row">
-              <button className="hero-secondary-btn" onClick={onStartMobility}>Start Recovery</button>
-              <button className="hero-secondary-btn" onClick={() => setShowPreview(true)}>See Full Plan</button>
+          pos.weekNumber >= 2 && !client.paid ? (
+            <div className="adjust-box" style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
+              <p className="muted" style={{ marginBottom: 10 }}>Send $10 to unlock the rest of your program. Your coach will confirm it on their end — this screen updates automatically once they do, no need to do anything else here.</p>
+              {(coachVenmo || coachCashApp || coachPaymentLink) ? (
+                <div style={{ textAlign: "center" }}>
+                  {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
+                  {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
+                </div>
+              ) : (
+                <p className="muted" style={{ marginBottom: 0 }}>Contact your coach for payment instructions.</p>
+              )}
             </div>
-          </>
+          ) : (
+            <>
+              <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
+              <div className="hero-secondary-row">
+                <button className="hero-secondary-btn" onClick={onStartMobility}>Start Recovery</button>
+                <button className="hero-secondary-btn" onClick={() => setShowPreview(true)}>See Full Plan</button>
+              </div>
+            </>
+          )
         ) : (
           <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
         )}
