@@ -1318,6 +1318,7 @@ function MainApp({ userId, onSignOut }) {
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [showPayments, setShowPayments] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -1457,9 +1458,10 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onOpenPayments={() => { setShowSettings(false); setShowPayments(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && <CoachDashboard onClose={() => setShowCoachDashboard(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showPayments && <AllClientsPaymentModal userId={userId} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowPayments(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -1865,7 +1867,7 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
+function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onOpenPayments, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
@@ -2005,6 +2007,7 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       ) : (
         <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
       )}
+      <button className="btn-ghost wide" style={{ marginTop: 8 }} onClick={onOpenPayments}>View All Athletes' Payment Status</button>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Liability Waiver</div>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -2122,6 +2125,68 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
 }
 
 /* ============================== COACH DASHBOARD ============================== */
+
+function AllClientsPaymentModal({ userId, clients, activeId, onPersistActive, onClose }) {
+  const [records, setRecords] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await Promise.all(clients.map(async (c) => ({ id: c.id, name: c.name, full: await getClient(userId, c.id) })));
+      if (!cancelled) setRecords(list);
+    })();
+    return () => { cancelled = true; };
+  }, [clients, userId]);
+
+  const togglePaid = async (id, full) => {
+    if (!full) return;
+    setBusyId(id);
+    const updated = { ...full, paid: !full.paid };
+    if (id === activeId) {
+      await onPersistActive(updated);
+    } else {
+      await setClient(userId, id, updated);
+    }
+    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, full: updated } : r)));
+    setBusyId(null);
+  };
+
+  const paidCount = records ? records.filter((r) => r.full?.paid).length : 0;
+
+  return (
+    <ModalShell onClose={onClose} title="Payment Status">
+      {!records ? (
+        <p className="muted">Loading…</p>
+      ) : records.length === 0 ? (
+        <EmptyState text="No athletes yet — add one from the Athletes/Clients screen." />
+      ) : (
+        <>
+          <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athletes marked paid.</p>
+          {records.map((r) => (
+            <div key={r.id} className="card">
+              <div className="payment-row">
+                <div>
+                  <div className="card-title" style={{ marginBottom: 2 }}>{r.name}</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>{r.full?.paid ? "Paid — full access" : "Unpaid — locks after Week 1"}</div>
+                </div>
+                <span className={`pill ${r.full?.paid ? "pill-paid" : "pill-unpaid"}`}>{r.full?.paid ? "Paid" : "Unpaid"}</span>
+              </div>
+              <button
+                className={r.full?.paid ? "btn-ghost wide" : "btn-primary wide"}
+                style={{ marginTop: 10 }}
+                disabled={busyId === r.id || !r.full}
+                onClick={() => togglePaid(r.id, r.full)}
+              >
+                {busyId === r.id ? "Updating…" : r.full?.paid ? "Mark as Unpaid" : "Mark as Paid"}
+              </button>
+            </div>
+          ))}
+        </>
+      )}
+    </ModalShell>
+  );
+}
 
 function CoachDashboard({ onClose }) {
   const [code, setCode] = useState("");
@@ -3947,6 +4012,9 @@ function GlobalStyle() {
       .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text-dim); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
+      .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .pill-paid { background: var(--green); }
+      .pill-unpaid { background: var(--amber); }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
