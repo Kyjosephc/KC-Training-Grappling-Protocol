@@ -1198,7 +1198,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, waiverAcceptedAt, waiverSignedBy, parqAnswers, parqFlagged }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1212,6 +1212,10 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     beltLevel: beltLevel || "White",
     bjjNotes: [],
     paid: false,
+    waiverAcceptedAt: waiverAcceptedAt || null,
+    waiverSignedBy: waiverSignedBy || "",
+    parqAnswers: parqAnswers || [],
+    parqFlagged: !!parqFlagged,
   };
 }
 
@@ -1325,6 +1329,10 @@ function MainApp({ userId, onSignOut }) {
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
         if (c.paid === undefined) c.paid = true;
+        if (c.waiverAcceptedAt === undefined) c.waiverAcceptedAt = null;
+        if (c.waiverSignedBy === undefined) c.waiverSignedBy = "";
+        if (!c.parqAnswers) c.parqAnswers = [];
+        if (c.parqFlagged === undefined) c.parqFlagged = false;
         if (!c.program.mobility) c.program.mobility = defaultMobility();
 
         // Self-heal: older versions of this app briefly saved rotating Max Effort
@@ -1511,6 +1519,73 @@ function GrapplingMark({ opacity = 0.14 }) {
   );
 }
 
+const PARQ_QUESTIONS = [
+  "Has a doctor ever said you have a heart condition and recommended only medically supervised physical activity?",
+  "Do you feel pain in your chest during physical activity, or have you had chest pain in the past month when not doing physical activity?",
+  "Do you lose your balance because of dizziness, or have you lost consciousness in the past 12 months?",
+  "Do you have a bone or joint problem (for example, back, knee, or hip) that could be made worse by a change in physical activity?",
+  "Are you currently taking medication for blood pressure or a heart condition?",
+  "Do you know of any other reason you should not do physical activity right now?",
+];
+
+const WAIVER_PARAGRAPHS = [
+  "Strength training, conditioning, and grappling-related exercise carry an inherent risk of injury — including but not limited to muscle strain, joint injury, and cardiovascular strain. This athlete is participating in this program voluntarily and with full knowledge of that risk.",
+  "This confirms the athlete is in suitable physical condition to participate, or has answered \"yes\" to one or more of the health questions below and will get clearance from a physician before starting.",
+  "By signing below, the athlete releases Kyle Cox and KC Grappling Protocol from any and all claims, liability, or damages arising from participation in this training program, to the fullest extent permitted by law.",
+  "This program is not a substitute for medical advice. The athlete will stop any exercise immediately and seek medical attention if they experience pain, dizziness, shortness of breath, or any other concerning symptom.",
+];
+
+function useWaiverState() {
+  const [parqAnswers, setParqAnswers] = useState(() => PARQ_QUESTIONS.map(() => false));
+  const [accepted, setAccepted] = useState(false);
+  const [signatureName, setSignatureName] = useState("");
+  const flagged = parqAnswers.some(Boolean);
+  const complete = accepted && signatureName.trim().length > 0;
+  return { parqAnswers, setParqAnswers, accepted, setAccepted, signatureName, setSignatureName, flagged, complete };
+}
+
+function waiverPayload(w) {
+  return {
+    waiverAcceptedAt: new Date().toISOString(),
+    waiverSignedBy: w.signatureName.trim(),
+    parqAnswers: PARQ_QUESTIONS.map((q, i) => ({ question: q, yes: !!w.parqAnswers[i] })),
+    parqFlagged: w.flagged,
+  };
+}
+
+function LiabilityWaiverFields({ w, athleteName }) {
+  const [expanded, setExpanded] = useState(false);
+  const name = athleteName || "this athlete";
+  return (
+    <div className="waiver-box">
+      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Health History &amp; Liability Waiver</div>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Required before this athlete's first session.</p>
+      {PARQ_QUESTIONS.map((q, i) => (
+        <label key={i} className="waiver-check-row">
+          <input type="checkbox" checked={w.parqAnswers[i]} onChange={(e) => { const next = [...w.parqAnswers]; next[i] = e.target.checked; w.setParqAnswers(next); }} />
+          <span>{q}</span>
+        </label>
+      ))}
+      {w.flagged && (
+        <div className="adjust-box" style={{ marginTop: 4, marginBottom: 14 }}>
+          <p className="muted" style={{ marginBottom: 0 }}>One or more answers above is a flag to get clearance from a physician before starting. This won't stop {name} from using the app, but it should be addressed before training begins.</p>
+        </div>
+      )}
+      <button type="button" className="waiver-toggle" onClick={() => setExpanded((v) => !v)}>{expanded ? "Hide full waiver text" : "Read the full liability waiver"}</button>
+      {expanded && (
+        <div className="waiver-text-box">
+          {WAIVER_PARAGRAPHS.map((p, i) => <p key={i}>{p}</p>)}
+        </div>
+      )}
+      <LabeledInput label={`Type ${name}'s full name to sign`} value={w.signatureName} onChange={w.setSignatureName} />
+      <label className="waiver-check-row" style={{ marginTop: 4 }}>
+        <input type="checkbox" checked={w.accepted} onChange={(e) => w.setAccepted(e.target.checked)} />
+        <span>I have read the liability waiver above and agree to its terms on behalf of {name}.</span>
+      </label>
+    </div>
+  );
+}
+
 function OnboardingScreen({ onSubmit }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -1520,7 +1595,8 @@ function OnboardingScreen({ onSubmit }) {
   const [beltLevel, setBeltLevel] = useState("White");
   const [programVariant, setProgramVariant] = useState("B");
   const [logoImageOk, setLogoImageOk] = useState(true);
-  const canSubmit = firstName.trim() && lastName.trim() && weight;
+  const w = useWaiverState();
+  const canSubmit = firstName.trim() && lastName.trim() && weight && w.complete;
 
   return (
     <div className="pad" style={{ paddingTop: 40, maxWidth: 420, margin: "0 auto" }}>
@@ -1557,8 +1633,9 @@ function OnboardingScreen({ onSubmit }) {
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>No competition on the calendar — every phase keeps building, nothing tapers off. RPE and superset based. Best when your only goal is getting as strong as possible.</p>
       </div>
+      <LiabilityWaiverFields w={w} athleteName={`${firstName} ${lastName}`.trim()} />
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, ...waiverPayload(w) })}>
         Get started
       </button>
     </div>
@@ -1878,6 +1955,13 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       ) : (
         <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
       )}
+
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Liability Waiver</div>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        {client?.waiverAcceptedAt
+          ? `Signed by ${client.waiverSignedBy || client?.name} on ${fmtDate(client.waiverAcceptedAt.slice(0, 10))}.${client.parqFlagged ? " Health-history flag on file — confirm this athlete has physician clearance before training." : ""}`
+          : "No waiver on file — this profile was created before the waiver step was added."}
+      </p>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -3649,7 +3733,8 @@ function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose })
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [template, setTemplate] = useState("bjj");
-  const canCreate = firstName.trim() && lastName.trim();
+  const w = useWaiverState();
+  const canCreate = firstName.trim() && lastName.trim() && w.complete;
 
   return (
     <ModalShell onClose={onClose} title="Athletes / Clients">
@@ -3672,9 +3757,10 @@ function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose })
             <label className={`radio-pill ${template === "bjj" ? "active" : ""}`}><input type="radio" checked={template === "bjj"} onChange={() => setTemplate("bjj")} />Conjugate Brazilian Jiu-Jitsu / Wrestling template</label>
             <label className={`radio-pill ${template === "blank" ? "active" : ""}`}><input type="radio" checked={template === "blank"} onChange={() => setTemplate("blank")} />Blank — build custom</label>
           </div>
+          <LiabilityWaiverFields w={w} athleteName={`${firstName} ${lastName}`.trim()} />
           <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canCreate}
             onClick={() => {
-              onAdd({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0 }, template === "bjj");
+              onAdd({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, ...waiverPayload(w) }, template === "bjj");
               setFirstName(""); setLastName(""); setWeight(""); setHeightFeet(""); setHeightInches(""); setAdding(false);
             }}>Create athlete</button>
         </div>
@@ -3800,6 +3886,13 @@ function GlobalStyle() {
       .pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .waiver-box { margin-top: 4px; }
+      .waiver-check-row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; font-size: 13px; color: var(--text); line-height: 1.4; cursor: pointer; }
+      .waiver-check-row input { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+      .waiver-toggle { background: none; border: none; padding: 0; margin: 6px 0 12px; color: var(--accent); font-size: 12.5px; text-decoration: underline; cursor: pointer; }
+      .waiver-text-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 14px; max-height: 220px; overflow-y: auto; }
+      .waiver-text-box p { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin: 0 0 10px; }
+      .waiver-text-box p:last-child { margin-bottom: 0; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 12.5px; cursor: pointer; padding: 0; }
       .day-nav-row { display: flex; align-items: center; gap: 8px; }
       .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
