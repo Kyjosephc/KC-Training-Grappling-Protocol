@@ -2633,6 +2633,15 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     return (
       <ModalShell onClose={onClose} title="Workout complete" fullscreen>
         <div className="finish-summary">
+          {summary.prNames.length > 0 && (
+            <div className="pr-celebration">
+              <div className="pr-celebration-icon"><Trophy size={28} /></div>
+              <div className="pr-celebration-title">{summary.prNames.length === 1 ? "New Personal Record!" : `${summary.prNames.length} New Personal Records!`}</div>
+              <div className="pr-celebration-list">
+                {summary.prNames.map((n) => <div key={n} className="pr-celebration-chip"><Trophy size={14} color="var(--accent)" /> {n}</div>)}
+              </div>
+            </div>
+          )}
           <div className="finish-stat"><div className="finish-stat-value">{summary.totalVolume.toLocaleString()} pounds</div><div className="finish-stat-label">Total volume</div></div>
           <div className="finish-stat"><div className="finish-stat-value">{summary.avgRPE}</div><div className="finish-stat-label">Session Rate of Perceived Exertion</div></div>
           {summary.newMilestones.length > 0 && (
@@ -2642,7 +2651,6 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
               ))}
             </Card>
           )}
-          {summary.prNames.length > 0 && <Card title="New Personal Records">{summary.prNames.map((n) => <div key={n} className="pr-line"><Trophy size={16} color="var(--accent)" /> {n}</div>)}</Card>}
           {summary.isFinalSession && (
             <Card title="Twelve-Week Program Complete">
               <p className="muted" style={{ marginBottom: 12 }}>That's the final session of this block. Every workout, check-in, and Personal Record you've logged stays saved permanently — restarting only resets your week and day back to the beginning.</p>
@@ -3895,6 +3903,12 @@ function GlobalStyle() {
       .finish-stat { text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
       .finish-stat-value { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 30px; color: var(--accent); }
       .finish-stat-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+      .pr-celebration { text-align: center; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--card)) 0%, var(--card) 100%); border: 1px solid var(--accent); border-radius: 16px; padding: 24px 18px; }
+      .pr-celebration-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; animation: pr-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+      .pr-celebration-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 15px; color: var(--accent); margin-bottom: 12px; }
+      .pr-celebration-list { display: flex; flex-direction: column; gap: 8px; }
+      .pr-celebration-chip { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 600; text-align: left; }
+      @keyframes pr-pop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
       .program-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 19px; margin-bottom: 14px; }
       .phase-block { margin-bottom: 10px; }
       .phase-header { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--text); }
