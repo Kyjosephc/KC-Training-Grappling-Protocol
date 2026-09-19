@@ -1285,32 +1285,39 @@ const PROGRAM_VARIANT_LABELS = {
 };
 
 const MENTAL_COACHING_LIBRARY = [
-  { title: "The tap is outside your judgment of it", body: "A tap is an event. Your account of what it means is a separate act, one you perform afterward and one you control completely. The event cannot harm you; only the account can. Train yourself to notice the gap between the two, and hold your account to the facts: this position, this day, did not work. Nothing more is true without your adding it. \"Man's anger does not achieve God's righteousness\" (James 1:20) — neither does turning a tap into a verdict on your worth." },
-  { title: "Govern what is yours to govern", body: "Some things are in your power — effort, technique, composure, whether you show up tomorrow. Others are not — your opponent's skill, the outcome of a scramble, whether the call goes your way. Grief and frustration in grappling almost always come from mistaking the second category for the first. Sort clearly, every session, which is which." },
-  { title: "Return to white belt as often as needed", body: "Each new rank strips away your competence and hands you back the discomfort of being a beginner. This is not a defect in the process; it is the process. \"Whoever humbles himself will be exalted\" (Matthew 23:12). The man unwilling to look clumsy again has already decided where his growth stops." },
-  { title: "A worthy opponent asks nothing of your pride", body: "Being caught by someone with fewer stripes than you costs you nothing but the story you attach to it. Take the position calmly, examine it without flinching, and train it. What you protect by refusing the lesson is not your skill — only your image of it." },
-  { title: "Name the sensation correctly", body: "The tightening chest and the quickened breath before a match are not fear by nature; they are simply the body preparing for effort. Whether you call it dread or readiness is your choice to make, made freely, and it changes nothing about the sensation except your relationship to it. Choose the name that serves you." },
-  { title: "Attend to the hand, not the scoreboard", body: "Concern yourself with the frame in front of you, the grip you currently hold, the base beneath you — not with a result that has not yet occurred and may never occur as you imagine it. \"Sufficient unto the day is the evil thereof\" (Matthew 6:34). The present exchange is the whole of your task; give it your whole attention." },
-  { title: "Stagnation is often invisible labor", body: "Weeks that feel unproductive are frequently the weeks in which the body is quietly consolidating what came before. Judge the process by its discipline, not by how it feels on a given Tuesday. Endurance that waits for a feeling is not endurance at all." },
-  { title: "One bad exchange is not the round", body: "Treat a lost scramble as a single closed event, fully finished the moment it ends. Carrying it into the next exchange is a choice you make, not a consequence you suffer. Set it down. Begin again, clean." },
-  { title: "Rehearse the precise problem, not a vague victory", body: "Imagining yourself winning changes little. Imagining, in exact detail, your answer to a collar tie or a stalling guard trains the same pathways your body will use under real pressure. Precision in rehearsal is not optional decoration — it is the actual work." },
-  { title: "Guard the ones who train beside you", body: "Skill without regard for your training partners is a poor inheritance; a gym you have emptied through carelessness is no gym at all. Roll with full effort and full restraint at once — these are not opposites, and a serious man holds both." },
-  { title: "Seek the position that unsettles you", body: "A drill that feels easy is rarely still teaching you anything. Deliberately return to the position, the grip, the partner that makes you uncomfortable — that is where the actual curriculum is kept. Ease is a poor teacher and a worse judge of your progress." },
-  { title: "Frustration measures your standard, not your failure", body: "You are frustrated because you expect more of yourself than you are currently producing — this is evidence of a standard, not evidence of decline. Notice it, name it plainly, and return your attention to the single next detail. Do not mistake the noticing for the problem." },
-  { title: "Show up regardless of the day you have had", body: "A man is not required to feel ready before he trains; he is required to train, and to adjust his expectations honestly to what the day allows. \"I have learned, in whatsoever state I am, therewith to be content\" (Philippians 4:11). Maintenance on a hard day is not failure — it is the discipline itself." },
-  { title: "Confidence is earned by repetition, not declared", body: "Telling yourself you are ready accomplishes little if the movement has not been drilled until the body no longer waits for the mind's permission. Competition confidence is the residue of hours already spent, not a mood summoned beforehand." },
-  { title: "Discipline what panic would otherwise command", body: "A fine technical game collapses the instant the nervous system floods with alarm. Train composure directly and on purpose — begin from the worst position, hold the bad spot longer than is comfortable — so that when it happens for real, the body has already rehearsed staying calm." },
-  { title: "How you treat the weaker partner is the whole measure", body: "Restraint with an overmatched or injured training partner reveals more of a man's character than any medal will. Control is a different thing entirely from domination, and only one of the two is worth having a reputation for." },
-  { title: "Separate the event from the account you give it", body: "A loss, even a repeated one to the same opponent, is a fact with a fixed size. The account — 'I will never beat him,' 'I am not good enough' — is usually far larger than the fact and entirely of your own construction. Write down only what occurred. The rest is not information; it is a story you are choosing to suffer under." },
-  { title: "Pressure exposes; it does not create", body: "Whatever surfaces when you are tired, losing, or overmatched was already present — pressure has simply removed the energy required to conceal it. Treat hard rounds as the most honest report you will ever receive on your own training, not as an unfair test of your character." },
-  { title: "Slowness now buys speed later", body: "Explosiveness pursued before control is mastered only produces faster errors. Roll slowly enough that you could narrate every grip and every shift of weight aloud — this is the foundation that speed is eventually built upon, and there is no shortcut around laying it." },
-  { title: "The partner you avoid is instructing you already", body: "Notice who you quietly steer away from rolling, and ask yourself plainly why. That roll, not the comfortable ones, is where the lesson you most need is waiting for you to stop declining it." },
-  { title: "Rest is a discipline, not a concession", body: "Forcing a hard round on an exhausted body does not build toughness — it builds the very patterns that will fail you later, when it matters. Recognizing the difference between fatigue and weakness, and choosing rest when it is fatigue, is itself an act of self-command, not a surrender of one." },
-  { title: "Measure only against the man you were", body: "Every training partner began from a different place, with a different body and a different burden outside the gym. The single honest comparison available to you is against yourself six months ago. \"Let every man prove his own work, and then shall he have rejoicing in himself alone, and not in another\" (Galatians 6:4)." },
-  { title: "Name what moves through you before it acts", body: "Fear, frustration, and anger each narrow the attention and turn a man against the position rather than toward solving it. Naming the emotion plainly the instant it arises — simply, 'this is frustration' — restores the faculty of reason that the emotion was about to seize for itself." },
-  { title: "A disrupted camp does not disqualify the competitor", body: "If injury, work, or life have cut into your preparation, walk onto the mat with an adjusted aim rather than an abandoned one. To survive and to learn is a complete and honorable objective on its own. Competing under-prepared, deliberately and without excuse, builds more than skipping ever could." },
-  { title: "Ego and growth do not want the same thing", body: "Ego wants an unbroken record and an audience that never sees you fail. Growth wants you in bad positions, against harder partners, failing where people can see it. Notice, each time you choose a training partner or an intensity, which of the two is actually making the choice." },
-  { title: "Strength is provided to the tired", body: "\"He giveth power to the faint; and to them that have no might he increaseth strength... they that wait upon the Lord shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint\" (Isaiah 40:29, 31). On the days your own reserve runs out, this is worth remembering — endurance is not always a resource you generate alone." },
+  { quote: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
+  { quote: "Waste no more time arguing about what a good man should be. Be one.", author: "Marcus Aurelius" },
+  { quote: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
+  { quote: "We suffer more often in imagination than in reality.", author: "Seneca" },
+  { quote: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
+  { quote: "The man who moves a mountain begins by carrying away small stones.", author: "Confucius" },
+  { quote: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
+  { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
+  { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { quote: "Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.", author: "Theodore Roosevelt" },
+  { quote: "Far and away the best prize that life offers is the chance to work hard at work worth doing.", author: "Theodore Roosevelt" },
+  { quote: "Never give in, never give in, never, never, never, never — in nothing, great or small, large or petty — never give in.", author: "Winston Churchill" },
+  { quote: "Always bear in mind that your own resolution to succeed is more important than any other one thing.", author: "Abraham Lincoln" },
+  { quote: "Nothing in the world can take the place of persistence.", author: "Calvin Coolidge" },
+  { quote: "Energy and persistence conquer all things.", author: "Benjamin Franklin" },
+  { quote: "You must do the thing you think you cannot do.", author: "Eleanor Roosevelt" },
+  { quote: "It's not whether you get knocked down, it's whether you get up.", author: "Vince Lombardi" },
+  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
+  { quote: "Failure is not fatal, but failure to change might be.", author: "John Wooden" },
+  { quote: "It's what you learn after you know it all that counts.", author: "John Wooden" },
+  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
+  { quote: "Every strike brings me closer to the next home run.", author: "Babe Ruth" },
+  { quote: "Champions keep playing until they get it right.", author: "Billie Jean King" },
+  { quote: "Great things come from hard work and perseverance. No excuses.", author: "Kobe Bryant" },
+  { quote: "Genius is one percent inspiration, ninety-nine percent perspiration.", author: "Thomas Edison" },
+  { quote: "I have not failed. I've just found 10,000 ways that won't work.", author: "Thomas Edison" },
+  { quote: "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.", author: "Stephen King" },
+  { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
+  { quote: "He who has a why to live can bear almost any how.", author: "Friedrich Nietzsche" },
+  { quote: "Fall seven times, stand up eight.", author: "Japanese Proverb" },
+  { quote: "The best time to plant a tree was twenty years ago. The second best time is now.", author: "Chinese Proverb" },
+  { quote: "Smooth seas do not make skillful sailors.", author: "African Proverb" },
 ];
 
 function mentalTipForDate(dateStr) {
@@ -2287,10 +2294,10 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
       </Card>
 
-      <Card title="Mental Game" subtitle="A new one every day">
-        <div className="log-exercise-name" style={{ fontSize: 14, marginBottom: 6 }}>{todaysMentalTip.title}</div>
-        <p className="muted" style={{ marginBottom: 10 }}>{todaysMentalTip.body}</p>
-        <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Mental Game Entries</button>
+      <Card title="Daily Motivation" subtitle="A new one every day">
+        <p className="log-exercise-name" style={{ fontSize: 15, fontStyle: "italic", fontWeight: 500, lineHeight: 1.5, marginBottom: 6 }}>"{todaysMentalTip.quote}"</p>
+        <p className="muted" style={{ marginBottom: 10 }}>— {todaysMentalTip.author}</p>
+        <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Quotes</button>
       </Card>
 
       {(coachVenmo || coachCashApp || coachQrOk) && (
@@ -2342,8 +2349,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <div className="hero-title">{mainLift}</div>
         <div className="hero-duration">{pos.day.name} · Estimated {30 + (pos.day.sections?.length || 0) * 5} minutes</div>
 
-        <div className="hero-quote"><b>{todaysMentalTip.title}.</b> {todaysMentalTip.body.split(".")[0]}.</div>
-        <div className="hero-quote-attr">— Mental Game, today's entry</div>
+        <div className="hero-quote">"{todaysMentalTip.quote}"</div>
+        <div className="hero-quote-attr">— {todaysMentalTip.author}</div>
 
         {isCurrent && (
           readinessToday ? (
@@ -2470,12 +2477,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       )}
       {showAccomplishments && <AccomplishmentsPage client={client} onClose={() => setShowAccomplishments(false)} />}
       {showMentalLibrary && (
-        <ModalShell onClose={() => setShowMentalLibrary(false)} title="Mental Game Library">
-          <p className="muted" style={{ marginBottom: 14 }}>Every entry in the rotation — today's is highlighted.</p>
+        <ModalShell onClose={() => setShowMentalLibrary(false)} title="Motivational Quotes">
+          <p className="muted" style={{ marginBottom: 14 }}>Every quote in the rotation — today's is highlighted.</p>
           {MENTAL_COACHING_LIBRARY.map((tip) => (
-            <div key={tip.title} className="card" style={{ marginBottom: 10, borderColor: tip.title === todaysMentalTip.title ? "var(--accent)" : "var(--border)" }}>
-              <div className="log-exercise-name" style={{ fontSize: 14, marginBottom: 6 }}>{tip.title}</div>
-              <p className="muted" style={{ marginBottom: 0 }}>{tip.body}</p>
+            <div key={tip.quote} className="card" style={{ marginBottom: 10, borderColor: tip.quote === todaysMentalTip.quote ? "var(--accent)" : "var(--border)" }}>
+              <p style={{ fontSize: 14, fontStyle: "italic", marginBottom: 6 }}>"{tip.quote}"</p>
+              <p className="muted" style={{ marginBottom: 0 }}>— {tip.author}</p>
             </div>
           ))}
         </ModalShell>
