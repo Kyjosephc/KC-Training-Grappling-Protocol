@@ -585,6 +585,10 @@ const VIDEO_LIBRARY = {
   "landmine rotational press": "https://www.youtube.com/watch?v=ONDeomDVlbE",
   "speed bench press — dynamic effort": "https://www.youtube.com/shorts/32SZmZgc1KI",
   "trap bar jump squat — dynamic effort": "https://www.youtube.com/shorts/2TfyFQRndNk",
+  "hip abduction machine": "https://www.youtube.com/shorts/S_FGYHNHJ_c",
+  "hip adduction machine": "https://www.youtube.com/shorts/BmMmt-c9aNM",
+  "plate lifts": "https://www.youtube.com/shorts/zF9ZkUYp7Rk",
+  "pendlay row": "https://www.youtube.com/shorts/0PSfteHhUtg",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
