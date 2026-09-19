@@ -305,7 +305,7 @@ function resolveExercise(e, weekNumber, program, phase) {
     const rotW = program.conjugate.meRotationWeeks || 2;
     const idx = Math.floor((weekNumber - 1) / rotW) % pool.length;
     const chosen = pool[idx];
-    return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || "",
+    return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
       poolLabel: e.rotatingPool === "meLowerPool" ? "Max Effort Lower" : "Max Effort Upper" };
   }
