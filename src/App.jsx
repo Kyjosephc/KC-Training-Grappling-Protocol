@@ -1818,7 +1818,7 @@ const TUTORIAL_PAGES = [
 ];
 
 const TERMS_SECTIONS = [
-  { heading: "What this app is", body: "KC Grappling Protocol is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
+  { heading: "What this app is", body: "Strength Matrix is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
   { heading: "Your data", body: "The app stores what it needs to run your program: your name, body measurements, workout logs, readiness check-ins, personal records, and the health-history answers from your liability waiver. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
   { heading: "Payment", body: "Any payment (such as the Week 2 continuation fee) is handled directly between you and your coach through Venmo or Cash App. This app does not process, transmit, or store card or bank account numbers." },
   { heading: "Not medical advice", body: "This program is coaching, not medical care. See the liability waiver and health-history questionnaire for the full details — when in doubt, check with a physician before training." },
