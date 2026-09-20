@@ -1354,17 +1354,28 @@ function blankProgram(name) {
 // each client's actual week instead of any one person's. Starts blank; nothing is
 // assumed.
 const SCHEDULE_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
-const SCHEDULE_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ", "Strength/Conditioning"];
+const REST_DAY = "Rest Day";
+const SCHEDULE_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ", "Strength/Conditioning", REST_DAY];
 function defaultWeeklySchedule() {
   const blank = {};
   SCHEDULE_DAYS.forEach(([key]) => { blank[key] = []; });
   return blank;
 }
 function WeeklyScheduleEditor({ schedule, onChange }) {
+  // Rest Day is exclusive — picking it clears anything else selected that day, and
+  // picking a training activity while Rest Day is set replaces it, since "rest" and
+  // "train" can't both be true for the same day.
   const toggle = (dayKey, activity) => {
     onChange((prev) => {
       const current = prev[dayKey] || [];
-      const next = current.includes(activity) ? current.filter((a) => a !== activity) : [...current, activity];
+      let next;
+      if (activity === REST_DAY) {
+        next = current.includes(REST_DAY) ? [] : [REST_DAY];
+      } else if (current.includes(activity)) {
+        next = current.filter((a) => a !== activity);
+      } else {
+        next = [...current.filter((a) => a !== REST_DAY), activity];
+      }
       return { ...prev, [dayKey]: next };
     });
   };
@@ -3951,10 +3962,11 @@ function HistoryTab({ client, onPersist }) {
           {SCHEDULE_DAYS.map(([key, label]) => {
             const activities = client.weeklySchedule[key] || [];
             if (activities.length === 0) return null;
+            const isRestDay = activities.length === 1 && activities[0] === REST_DAY;
             return (
               <div key={key} className="schedule-row">
                 <div className="schedule-day">{label}</div>
-                <div className="schedule-detail">{activities.map((a, i) => <div key={i}>{a}</div>)}</div>
+                <div className={`schedule-detail ${isRestDay ? "off" : ""}`}>{activities.map((a, i) => <div key={i}>{a}</div>)}</div>
               </div>
             );
           })}
