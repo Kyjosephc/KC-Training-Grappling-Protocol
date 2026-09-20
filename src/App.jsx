@@ -128,7 +128,14 @@ async function setSettings(userId, s) { return kvSet(userId, SETTINGS_KEY, s); }
 /* ============================== ID / MATH HELPERS ============================== */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Local calendar date, not UTC — new Date().toISOString() rolls over to the next
+// day for anyone west of UTC once it's evening locally (all of the US, for example),
+// which silently mis-logs workouts/bodyweight/check-ins to tomorrow's date.
+const todayStr = () => {
+  const d = new Date();
+  const offsetMs = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
+};
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 function daysSinceLastActivity(client) {
