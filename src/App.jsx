@@ -534,6 +534,7 @@ const VIDEO_LIBRARY = {
   "multi-planar lunge matrix": "https://www.youtube.com/shorts/6hiVTg5rD7Y",
   "cable diagonal chop": "https://www.youtube.com/shorts/8OZImYISmSg",
   "glute bridge": "https://www.youtube.com/shorts/mSuDY5J0Fwo",
+  "supine hamstring single leg glute bridge": "https://www.youtube.com/watch?v=sNIePOcTVTs",
   "bodyweight lateral squat walk": "https://www.youtube.com/shorts/vIEmbHOSY2U",
   "dead bug": "https://www.youtube.com/shorts/DqLL45uk2Tk",
   "lateral shuffle": "https://www.youtube.com/shorts/nqLsCj7pgbw",
