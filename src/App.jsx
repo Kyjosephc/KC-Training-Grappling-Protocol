@@ -3182,7 +3182,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       {showFirstSetHelp && (
         <div className="rest-banner" style={{ background: "var(--green)" }}>
           <Info size={16} />
-          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. Reps in Reserve is already filled in for you — you don't need to touch it. Tap the checkmark once you've finished the set, and the trophy only if it's a genuine Personal Record.</span>
+          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. That's saved automatically as you type it — no extra step needed. Reps in Reserve is already filled in for you — you don't need to touch it. Only tap the trophy if it's a genuine Personal Record.</span>
           <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
         </div>
       )}
