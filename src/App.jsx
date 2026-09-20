@@ -1292,9 +1292,6 @@ function defaultWarmup() {
       { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "8 reps per side", videoUrl: "https://www.youtube.com/shorts/Lfn-Fv_xmmQ" },
       { id: uid(), name: "Cable Pull-Apart (light, rope attachment)", detail: "15 reps", videoUrl: "https://www.youtube.com/shorts/Ol-QWheu9Yg" },
     ]},
-    { id: uid(), block: "Movement-Specific Ramp-Up", duration: "3 to 5 minutes", items: [
-      { id: uid(), name: "Ramp up today's first lift", detail: "2 to 3 warm-up sets with the empty bar and increasing load, building to the first working set", videoUrl: "" },
-    ]},
   ];
 }
 
