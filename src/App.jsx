@@ -2329,7 +2329,10 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Veteran Athlete Mode</div>
       <p className="muted" style={{ marginBottom: 10 }}>
         {(client?.sessionsCompleted || 0)} sessions logged since {client?.createdAt ? fmtDate(client.createdAt) : "you started"}
-        {client?.createdAt ? ` (roughly ${Math.max(1, Math.round((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30)))} months)` : ""}.
+        {client?.createdAt ? (() => {
+          const months = Math.round((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30));
+          return months >= 1 ? ` (roughly ${months} month${months === 1 ? "" : "s"})` : "";
+        })() : ""}.
         {" "}After several months of accumulated training, a deeper deload tends to pay off more than the standard one. Turning this on doesn't change your everyday lifting — only deload weeks, which go a further 10 percent lighter with an extra rep in reserve on every set.
       </p>
       <button className="btn-ghost wide" onClick={async () => { await onPersist({ ...client, veteranMode: !client?.veteranMode }); }}>
