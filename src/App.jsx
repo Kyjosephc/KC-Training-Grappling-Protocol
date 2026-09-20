@@ -309,15 +309,33 @@ function pluralizeMilestoneName(rawName, count) {
   else main += "s";
   return `${count} ${main}${paren}`;
 }
+// The first 5 milestones are 50,000 pounds apart; every one after that is 100,000
+// pounds apart, so the full climb to all 300 takes noticeably longer than an
+// object-weight-derived scale would. Each threshold still gets a fun real-world
+// comparison — whichever base object (at 1 to 5 of it) lands closest to that exact
+// number, so the name shown next to a milestone stays consistent with its weight.
 function generateMilestones() {
-  const list = [];
-  LIFT_MILESTONE_BASE.forEach((obj) => {
-    for (let m = 1; m <= 5; m++) {
-      list.push({ name: pluralizeMilestoneName(obj.name, m), weight: obj.weight * m, emoji: obj.emoji });
-    }
+  const thresholds = [];
+  for (let i = 0; i < 300; i++) {
+    thresholds.push(i < 5 ? 50000 * (i + 1) : 250000 + 100000 * (i - 4));
+  }
+  let prevKey = null;
+  return thresholds.map((weight) => {
+    let best = null;
+    LIFT_MILESTONE_BASE.forEach((obj) => {
+      for (let count = 1; count <= 5; count++) {
+        const approx = obj.weight * count;
+        const err = Math.abs(approx - weight) / weight;
+        const key = `${obj.name}|${count}`;
+        // Slightly penalize repeating the exact same object+count as the milestone
+        // right before it, so a long run of identical names is rare, not the norm.
+        const adjErr = key === prevKey ? err + 0.01 : err;
+        if (!best || adjErr < best.adjErr) best = { obj, count, adjErr, key };
+      }
+    });
+    prevKey = best.key;
+    return { name: pluralizeMilestoneName(best.obj.name, best.count), weight, emoji: best.obj.emoji };
   });
-  list.sort((a, b) => a.weight - b.weight);
-  return list.slice(0, 300);
 }
 const LIFT_MILESTONES = generateMilestones();
 
