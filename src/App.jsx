@@ -589,6 +589,9 @@ const VIDEO_LIBRARY = {
   "hip adduction machine": "https://www.youtube.com/shorts/BmMmt-c9aNM",
   "plate lifts": "https://www.youtube.com/shorts/zF9ZkUYp7Rk",
   "pendlay row": "https://www.youtube.com/shorts/0PSfteHhUtg",
+  "cable triceps pushdown": "https://www.youtube.com/shorts/Fmiob5b0EAk",
+  "acceleration sprint": "https://www.youtube.com/shorts/7_-gaumnzWw",
+  "neck bridge": "https://www.youtube.com/shorts/hxMolBuXmY0",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
@@ -795,7 +798,7 @@ const conjugateProgram = {
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells, add the weighted vest for extra load if grip becomes the limiter", rir: 1, rest: "2 minutes", purpose: "Grip and trunk bracing under load", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Bottom-range tendon-loading isometric for knee health — grapplers get stuck fighting from compromised positions, and end-range strength has more carryover than mid-range work", quality: "Durability" }),
-              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -829,7 +832,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 0, rest: "90 seconds", purpose: "Combines acceleration, deceleration, lateral movement, and change of direction in a single drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
@@ -838,7 +841,7 @@ const conjugateProgram = {
               ex({ name: "Heavy Landmine Anti-Rotation Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort, not light", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded rotation — grappling is a rotational sport, and this is the missing piece next to the rotational power work above: real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
-              ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms" }),
+              ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
               ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block", quality: "Conditioning" }),
@@ -867,7 +870,7 @@ const conjugateProgram = {
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -898,7 +901,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 0, rest: "90 seconds", purpose: "Acceleration, deceleration, lateral movement, and change of direction in one drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
@@ -908,7 +911,7 @@ const conjugateProgram = {
               ex({ name: "Trap Bar High Pull", sets: 4, reps: "5", load: "moderate, explosive intent", rir: 1, rest: "2 minutes", purpose: "Total-body explosive triple extension and grip demand — the closest barbell-based equivalent to a loaded sandbag or sled push without either", quality: "Power" , videoUrl: "https://www.youtube.com/watch?v=_reAqpSF-m0" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
-              ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms" }),
+              ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
               ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system actually gets trained across the block instead of the same stimulus every week", quality: "Conditioning" }),
@@ -932,7 +935,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 2, reps: "20 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk maintenance, low volume for freshness", quality: "Grip/Trunk" }),
-              ex({ name: "Neck Bridge (front and back, controlled)", sets: 1, reps: "6 per direction, slow and controlled", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability" }),
+              ex({ name: "Neck Bridge (front and back, controlled)", sets: 1, reps: "6 per direction, slow and controlled", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Hanging Leg Raise", sets: 2, reps: "10", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Trunk flexion strength, kept brief to protect freshness", quality: "Trunk" }),
             ]},
           ]},
@@ -954,7 +957,7 @@ const conjugateProgram = {
           intent: "Keep it snappy and short. This is the easiest day to cut entirely if grappling is heavy this week. If you're training grappling four or more times a week, splitting the Dynamic Effort lift and the conditioning piece across two days works just as well as cutting either one.",
           sections: [
             { id: uid(), type: "agility", name: "Speed & Agility", exercises: [
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery", rir: 0, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery", rir: 0, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
             ]},
             { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
               deSquat(62), deBench(62),
@@ -1273,7 +1276,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
             ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief ankle and knee stability preparation before loading the lift", quality: "Neuromuscular" }),
             ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility", videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
-            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week", quality: "Alactic Power" }),
+            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
           { id: uid(), type: "power", name: trim ? "Dynamic Effort Upper" : "Dynamic Effort Upper + Rotational Power", exercises: [
@@ -2761,12 +2764,13 @@ function SectionHeader({ title, subtitle, complete, onToggleComplete, expanded, 
     </button>
   );
 }
-function VideoLinkBlock({ url, onSave, onDelete }) {
+function VideoLinkBlock({ url, onSave, onDelete, label }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(url || "");
   if (editing) {
     return (
       <div className="video-edit-row" onClick={(e) => e.stopPropagation()}>
+        {label && <span className="muted" style={{ fontSize: 11, marginRight: 2 }}>{label}</span>}
         <input className="edit-input" style={{ flex: 1 }} placeholder="Paste a video link" value={draft} onChange={(e) => setDraft(e.target.value)} />
         <button className="btn-ghost" style={{ marginTop: 0 }} onClick={() => { onSave(draft.trim()); setEditing(false); }}>Save</button>
         <button className="icon-btn small" onClick={() => setEditing(false)} aria-label="Cancel editing"><X size={13} /></button>
@@ -2776,13 +2780,19 @@ function VideoLinkBlock({ url, onSave, onDelete }) {
   if (url) {
     return (
       <div className="ex-links-row" onClick={(e) => e.stopPropagation()}>
+        {label && <span className="muted" style={{ fontSize: 11, marginRight: 4 }}>{label}</span>}
         <a className="video-link" href={url} target="_blank" rel="noopener noreferrer">Watch video</a>
         <button className="link-x-btn" onClick={onDelete} title="Remove this link"><X size={12} /></button>
         <button className="link-edit-btn" onClick={() => { setDraft(url); setEditing(true); }}>Edit</button>
       </div>
     );
   }
-  return <button className="add-link-btn" onClick={(e) => { e.stopPropagation(); setEditing(true); }}>+ Add a video link</button>;
+  return (
+    <div className="ex-links-row" onClick={(e) => e.stopPropagation()}>
+      {label && <span className="muted" style={{ fontSize: 11, marginRight: 4 }}>{label}</span>}
+      <button className="add-link-btn" onClick={(e) => { e.stopPropagation(); setEditing(true); }}>+ Add a video link</button>
+    </div>
+  );
 }
 function ProgressBadge({ percent }) {
   const pct = Math.round(percent);
@@ -2916,22 +2926,22 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     }
     onUpdateProgram(newProgram);
   };
-  const setVideoForEntry = (sectionId, exIdx, url) => {
+  const setVideoForEntry = (sectionId, exIdx, url, field = "videoUrl") => {
     const en = entriesBySection[sectionId][exIdx];
     setEntriesBySection((prev) => {
       const list = [...prev[sectionId]];
-      list[exIdx] = { ...list[exIdx], target: { ...list[exIdx].target, videoUrl: url } };
+      list[exIdx] = { ...list[exIdx], target: { ...list[exIdx].target, [field]: url } };
       return { ...prev, [sectionId]: list };
     });
     const newProgram = JSON.parse(JSON.stringify(client.program));
     if (en.target.rotatingPool) {
       const pool = newProgram.conjugate[en.target.rotatingPool];
       const item = pool.find((p) => p.name === en.name);
-      if (item) item.videoUrl = url;
+      if (item) item[field] = url;
     } else {
       for (const ph of newProgram.phases) for (const d of ph.days) for (const s of d.sections) {
         const found = s.exercises.find((x) => x.id === en.exerciseId);
-        if (found) found.videoUrl = url;
+        if (found) found[field] = url;
       }
     }
     onUpdateProgram(newProgram);
@@ -3104,7 +3114,10 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   ) : (
                     last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} {isTimedExercise(displayName) ? "seconds" : "reps"} ({fmtDate(last.date)})</div>
                   )}
-                  <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} />
+                  <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
+                  {en.target.videoUrl2 !== undefined && (
+                    <VideoLinkBlock url={en.target.videoUrl2} onSave={(url) => setVideoForEntry(sec.id, exIdx, url, "videoUrl2")} onDelete={() => setVideoForEntry(sec.id, exIdx, "", "videoUrl2")} label="Demo 2" />
+                  )}
                   {poolOptions.length > 0 && (
                     <div className="sub-row">
                       <div className="muted" style={{ fontSize: 12, width: "100%" }}>Bothered by this one? Tap another exercise to swap it in:</div>
@@ -3463,6 +3476,7 @@ function DayEditor({ client, phaseId, dayId, onClose, onPersist }) {
                 : <LabeledInput label="Load" value={e.load} onChange={(v) => updateExField(sIdx, exIdx, "load", v)} />}
               <LabeledInput label="Purpose" value={e.purpose} onChange={(v) => updateExField(sIdx, exIdx, "purpose", v)} />
               {!e.rotatingPool && <LabeledInput label="Video link" value={e.videoUrl} onChange={(v) => updateExField(sIdx, exIdx, "videoUrl", v)} />}
+              {!e.rotatingPool && <LabeledInput label="Second video link (optional)" value={e.videoUrl2 || ""} onChange={(v) => updateExField(sIdx, exIdx, "videoUrl2", v)} />}
             </div>
           ))}
           <button className="btn-ghost wide" onClick={() => addExercise(sIdx)}><Plus size={16} /> Add exercise to section</button>
