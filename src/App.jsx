@@ -1349,16 +1349,44 @@ function blankProgram(name) {
   };
 }
 
+// Every client's own weekly training schedule, built from scratch — what days they
+// do Low Intensity BJJ, High Intensity BJJ, and Strength/Conditioning, so it fits
+// each client's actual week instead of any one person's. Starts blank; nothing is
+// assumed.
+const SCHEDULE_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
+const SCHEDULE_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ", "Strength/Conditioning"];
 function defaultWeeklySchedule() {
-  return {
-    mon: "6:00–7:00 AM Brazilian Jiu-Jitsu\n6:30–8:00 PM Brazilian Jiu-Jitsu",
-    tue: "6:00–7:00 AM Strength & Conditioning\n6:30–8:00 PM Brazilian Jiu-Jitsu",
-    wed: "6:30–8:00 PM Brazilian Jiu-Jitsu",
-    thu: "Off",
-    fri: "6:00–7:00 AM Brazilian Jiu-Jitsu\n7:30–8:30 AM Strength & Conditioning",
-    sat: "12:00–1:00 PM Brazilian Jiu-Jitsu",
-    sun: "6:00–7:00 AM Strength & Conditioning",
+  const blank = {};
+  SCHEDULE_DAYS.forEach(([key]) => { blank[key] = []; });
+  return blank;
+}
+function WeeklyScheduleEditor({ schedule, onChange }) {
+  const toggle = (dayKey, activity) => {
+    onChange((prev) => {
+      const current = prev[dayKey] || [];
+      const next = current.includes(activity) ? current.filter((a) => a !== activity) : [...current, activity];
+      return { ...prev, [dayKey]: next };
+    });
   };
+  return (
+    <div className="schedule-editor">
+      {SCHEDULE_DAYS.map(([key, label]) => (
+        <div key={key} className="schedule-edit-row">
+          <div className="schedule-edit-day">{label}</div>
+          <div className="schedule-edit-chips">
+            {SCHEDULE_ACTIVITIES.map((activity) => {
+              const active = (schedule[key] || []).includes(activity);
+              return (
+                <button type="button" key={activity} className={`schedule-chip ${active ? "active" : ""}`} onClick={() => toggle(key, activity)} aria-pressed={active}>
+                  {activity}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 function twoDayDeloadPhase(weekNum, afterPhaseName) {
   return {
@@ -1508,7 +1536,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount, weeklySchedule }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1519,7 +1547,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
     hasSeenTutorial: false,
-    weeklySchedule: defaultWeeklySchedule(),
+    weeklySchedule: weeklySchedule || defaultWeeklySchedule(),
     beltLevel: beltLevel || "White",
     bjjNotes: [],
     paid: false,
@@ -1658,6 +1686,14 @@ function MainApp({ userId, onSignOut }) {
         // stored data forever. Repair any of those on load, and any pool entries
         // that are missing a name, using the current default pools as reference.
         let healed = false;
+        // Weekly schedule used to be free-typed text per day; it's now a set of
+        // fixed activity chips per day (an array). A schedule saved in the old
+        // text format can't be mapped onto the new chips automatically, so it
+        // resets to blank once, to be re-picked with the new selector.
+        if (c.weeklySchedule && SCHEDULE_DAYS.some(([key]) => c.weeklySchedule[key] !== undefined && !Array.isArray(c.weeklySchedule[key]))) {
+          c.weeklySchedule = defaultWeeklySchedule();
+          healed = true;
+        }
         if (c.program?.conjugate) {
           ["meLowerPool", "meUpperPool", "wristPool", "coreAntiPool", "conditioningIntervalPool"].forEach((key) => {
             const defaults = conjugateProgram.conjugate[key];
@@ -1852,6 +1888,7 @@ function OnboardingScreen({ onSubmit }) {
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [beltLevel, setBeltLevel] = useState("White");
+  const [schedule, setSchedule] = useState(defaultWeeklySchedule());
   const [programVariant, setProgramVariant] = useState("B");
   const [injuryNotes, setInjuryNotes] = useState("");
   const [logoImageOk, setLogoImageOk] = useState(true);
@@ -1910,6 +1947,9 @@ function OnboardingScreen({ onSubmit }) {
           {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
       </label>
+      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</div>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. You can change this any time in Settings.</p>
+      <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
       <div role="radiogroup" aria-label="Choose Your Program">
@@ -1933,7 +1973,7 @@ function OnboardingScreen({ onSubmit }) {
         By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
       </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture, weeklySchedule: schedule })}>
         Get started
       </button>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -2323,13 +2363,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </p>
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</div>
-      <p className="muted" style={{ marginBottom: 10 }}>Enter your regular Brazilian Jiu-Jitsu and Strength & Conditioning times for each day. This shows up on the History tab so you always know what's coming this week.</p>
-      {[["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]].map(([key, label]) => (
-        <label key={key} className="labeled-input">
-          <span>{label}</span>
-          <textarea className="notes-box" rows={2} style={{ fontSize: 13 }} value={schedule[key] || ""} onChange={(e) => setSchedule((prev) => ({ ...prev, [key]: e.target.value }))} placeholder="For example: 6:00–7:00 AM Brazilian Jiu-Jitsu" />
-        </label>
-      ))}
+      <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
+      <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
       {isCoach && (
@@ -3911,16 +3946,15 @@ function HistoryTab({ client, onPersist }) {
 
   return (
     <div className="pad">
-      {client.weeklySchedule && (
+      {client.weeklySchedule && SCHEDULE_DAYS.some(([key]) => (client.weeklySchedule[key] || []).length > 0) && (
         <Card title="Your Weekly Training Schedule">
-          {[["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]].map(([key, label]) => {
-            const text = client.weeklySchedule[key];
-            if (!text || !text.trim()) return null;
-            const isOff = text.trim().toLowerCase() === "off";
+          {SCHEDULE_DAYS.map(([key, label]) => {
+            const activities = client.weeklySchedule[key] || [];
+            if (activities.length === 0) return null;
             return (
               <div key={key} className="schedule-row">
                 <div className="schedule-day">{label}</div>
-                <div className={`schedule-detail ${isOff ? "off" : ""}`}>{text.split("\n").map((line, i) => <div key={i}>{line}</div>)}</div>
+                <div className="schedule-detail">{activities.map((a, i) => <div key={i}>{a}</div>)}</div>
               </div>
             );
           })}
@@ -4659,6 +4693,13 @@ function GlobalStyle() {
       .schedule-day { width: 76px; flex-shrink: 0; font-weight: 700; font-size: 12.5px; padding-top: 1px; }
       .schedule-detail { font-size: 12.5px; color: var(--text); line-height: 1.5; }
       .schedule-detail.off { color: var(--text-dim); font-style: italic; }
+      .schedule-editor { margin-bottom: 4px; }
+      .schedule-edit-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+      .schedule-edit-row:last-child { border-bottom: none; }
+      .schedule-edit-day { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+      .schedule-edit-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .schedule-chip { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 7px 12px; cursor: pointer; }
+      .schedule-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
       .cal-grid-header { margin-bottom: 4px; }
       .cal-day-label { text-align: center; font-size: 12px; color: var(--text-dim); font-weight: 700; padding-bottom: 2px; }
