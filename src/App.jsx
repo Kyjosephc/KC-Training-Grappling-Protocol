@@ -1911,8 +1911,9 @@ function OnboardingScreen({ onSubmit }) {
         )}
         <div className="brand-title" style={{ position: "relative" }}>Strength Matrix</div>
       </div>
-      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome</div>
-      <p className="muted" style={{ marginBottom: 20 }}>Set up your profile to get started with your training system.</p>
+      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
+      <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
+      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Set up your profile below to get started.</p>
       <div className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</div>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
         <div className="settings-avatar-preview">
