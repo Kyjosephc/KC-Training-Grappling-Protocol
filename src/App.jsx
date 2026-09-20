@@ -1597,7 +1597,7 @@ function MainApp({ userId, onSignOut }) {
   };
   const refreshProgramTemplate = async (variantOverride) => {
     if (!client) return;
-    const variant = variantOverride || (client.program?.variant === "A" ? "A" : "B");
+    const variant = variantOverride || client.program?.variant || "B";
     const updated = { ...client, program: buildProgramVariant(variant) };
     await persistClient(updated);
   };
