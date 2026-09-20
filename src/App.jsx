@@ -908,8 +908,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Single-Leg Balance Reach", sets: 2, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Reactive neuromuscular training for ankle and knee stability before loading the lift", quality: "Neuromuscular" }),
-              ex({ name: "Lateral Shuffle", sets: 4, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility" , videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
-              ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Low-amplitude reactive hops — primes ankle and tendon stiffness before heavy lifting", quality: "Neuromuscular" }),
+              ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility" , videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
@@ -919,34 +918,27 @@ const conjugateProgram = {
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells, add the weighted vest for extra load if grip becomes the limiter", rir: 1, rest: "2 minutes", purpose: "Grip and trunk bracing under load", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "Heavy Isometric Wall Sit", sets: 2, reps: "30 to 45 seconds", load: "bodyweight, or holding a dumbbell", rir: 1, rest: "90 seconds", purpose: "Bottom-range tendon-loading isometric for knee health — grapplers get stuck fighting from compromised positions, and end-range strength has more carryover than mid-range work", quality: "Durability" }),
               ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "6 to 8 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — close to non-negotiable for anyone taking regular guillotine and choke pressure, and isometric holds alone don't cover it", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
-        { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
-          intent: "Same approach on the press — one hard top set, then light shoulder-health, grip and tendon, arm, and core work. Don't chase extra volume this early in the block.",
+        { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
+          intent: "Same approach on the press — one hard top set, then shoulder-health, pulling, grip, and core work. Don't chase extra volume this early in the block.",
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before heavy pressing", quality: "Neuromuscular" }),
-              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception, isometric support on the dip bars before heavy pressing", quality: "Neuromuscular" , videoUrl: "https://www.youtube.com/watch?v=_vPttkLHZMw" }),
-              ex({ name: "Cable External Rotation (light)", sets: 2, reps: "12 per side", load: "light", rir: 2, rest: "45 seconds", purpose: "Rotator cuff activation and shoulder health before heavy pressing", quality: "Agility" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
               ex({ name: "Weighted Pull-Up", sets: 4, reps: "5", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength, grappling transfer", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
-              ex({ name: "Single-Arm Dumbbell Row", sets: 3, reps: "8 per side", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral pull, scapular resilience", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/i9BJwVCK5VQ" }),
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
-              ex({ name: "Paused Bottom-Position Bench Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength — grapplers get stuck pressing out of compromised, stretched positions under load, and this trains exactly that range instead of just the mid-range most pressing already covers", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/YHtd4XKsd7I" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
-              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through a full range of motion — protective against neck cranks, guillotines, and posture under pressure", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
             ]},
-            { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
+            { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, alternated every 2 weeks between the two variations", quality: "Core" }),
-              ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength — resisting rotation is as important for grappling as producing it", quality: "Core" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -995,12 +987,11 @@ const conjugateProgram = {
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
-        { id: uid(), label: "2", name: "Max Effort Upper + Durability + Arms & Core",
+        { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
           intent: "Same logic upstairs — hard top set, short accessory list. If grappling was rough this week, this is the day to trim first.",
           sections: [
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Serratus activation before pressing", quality: "Neuromuscular" }),
-              ex({ name: "Dip Station Support Hold", sets: 2, reps: "15 seconds", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Shoulder stability and proprioception", quality: "Neuromuscular" , videoUrl: "https://www.youtube.com/watch?v=_vPttkLHZMw" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
@@ -1008,13 +999,10 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
-              ex({ name: "Paused Bottom-Position Incline Press Hold", sets: 2, reps: "10 to 15 seconds", load: "light to moderate, bar an inch off the chest", rir: 1, rest: "90 seconds", purpose: "End-range isometric strength at a different pressing angle than the base phase — grapplers get stuck pressing out of compromised, stretched positions under load", quality: "Durability" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
-              ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 2, reps: "10 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Neck strength and durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
             ]},
-            { id: uid(), type: "arms_core", name: "Arms & Core Isolation", exercises: [
+            { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, alternated every 2 weeks between the two variations", quality: "Core" }),
-              ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength", quality: "Core" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
