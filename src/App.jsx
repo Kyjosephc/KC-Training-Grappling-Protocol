@@ -656,6 +656,40 @@ const DISTANCE_BASED_EXERCISES = new Set([
   "suitcase carry",
   "lateral shuffle",
 ]);
+// Exercises with no external load at all — sprints, shuttles, bodyweight conditioning, band
+// work, and isometric neck holds done without a plate. The Weight input is hidden for these
+// rather than shown unused, since a client typing a pounds figure into a shuttle run just adds
+// noise. Reviewed and confirmed by Kyle on 2026-09-20.
+const NO_WEIGHT_EXERCISES = new Set([
+  "4-way isometric neck holds",
+  "ab roll out",
+  "acceleration sprint",
+  "assault bike or incline treadmill walk — aerobic base",
+  "assault bike or treadmill — aerobic maintenance",
+  "assault bike or treadmill — easy aerobic",
+  "assault bike or treadmill — sustained effort",
+  "assault bike or treadmill — vo2max 4x4 intervals",
+  "assault bike, treadmill, or outdoor — aerobic base",
+  "band pull-apart",
+  "banded clamshell",
+  "banded face pulls",
+  "banded lat row",
+  "banded single leg single arm row",
+  "banded terminal knee extension",
+  "copenhagen plank",
+  "dip station support hold",
+  "five-ten-five pro agility shuttle",
+  "lateral shuffle",
+  "neck bridge",
+  "pogo hops",
+  "rice bucket grip drills",
+  "rice grips",
+  "side plank",
+  "single-leg balance reach",
+  "supine hamstring single leg glute bridge",
+  "toes to bar",
+  "valslide hamstring curls",
+]);
 function normalizeExerciseKey(name) {
   return (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
 }
@@ -682,6 +716,11 @@ function exerciseUnitLabel(name, repsText) {
 }
 function isTimedExercise(name) {
   return exerciseUnit(name) === "seconds";
+}
+// Whether an exercise takes an external load at all — false for sprints, shuttles, band work,
+// and unweighted conditioning drills, so the logging grid can skip the Weight input for them.
+function needsWeight(name) {
+  return !NO_WEIGHT_EXERCISES.has(normalizeExerciseKey(name));
 }
 function ex(o) {
   const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
@@ -1110,7 +1149,7 @@ function buildProgramCContent() {
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Back Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Side Plank", { sets: 4, reps: "20 seconds each side", rpe: 7 }),
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
-          ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Scap Push-Up", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
+          ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Scapular Push-Up", { sets: 3, reps: "10", tempo: "1/3/0", rpe: 7 }),
           ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
           ...ssPair(5, "Hip Abduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }),
         ]},
@@ -1119,7 +1158,7 @@ function buildProgramCContent() {
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Zercher Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Supine Hamstring Single Leg Glute Bridge (ball or slides)", { sets: 4, reps: "8 each side", tempo: "2/0/X", rpe: 8 }),
           ...ssPair(2, "Upright Shoulder Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
-          ...ssPair(3, "Weighted Pull-Ups", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Banded Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
+          ...ssPair(3, "Weighted Pull-Up", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Banded Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
           ...ssPair(4, "Toes to Bar", { sets: 2, reps: "10", tempo: "3/0/1", rpe: 8 }, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }),
           ssSingle(5, "Rice Grips", { sets: 2, reps: "20 each direction", rpe: 6 }, "Grip"),
         ]},
@@ -1143,7 +1182,7 @@ function buildProgramCContent() {
       { name: "Day 1", intent: "Trap bar deadlift and floor press pattern, finishing on a pull-up hold and neck work.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Trap Bar Deadlift", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Banded Clamshell", { sets: 4, reps: "8", tempo: "2/1/1", rpe: 7 }),
-          ...ssPair(2, "Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
+          ...ssPair(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
           ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
           ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
@@ -1159,7 +1198,7 @@ function buildProgramCContent() {
       ]},
       { name: "Day 3", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
-          ...ssPair(1, "Bulgarian Split Squat", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(1, "Bulgarian Split Squat (rear foot elevated, dumbbells)", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
@@ -1188,9 +1227,9 @@ function buildProgramCContent() {
         { id: uid(), type: "power", name: "Working Sets", exercises: [
           ...ssPair(1, "Front Squat", { sets: 6, reps: "3", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 6, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
           ssSingle(2, "Incline Close Grip Bench Press", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
-          ssSingle(3, "Renegade Rows", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(3, "Renegade Row", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 3, reps: "15 seconds each side", rpe: 6 }, "Core"),
-          ssSingle(5, "Cable Pallof Press", { sets: 2, reps: "10 each side", rpe: 7 }, "Contralateral Stability"),
+          ssSingle(5, "Pallof Press (Anti-Rotation)", { sets: 2, reps: "10 each side", rpe: 7 }, "Contralateral Stability"),
         ]},
       ]},
       { name: "Day 3", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
@@ -1213,7 +1252,7 @@ function buildProgramCContent() {
       { name: "Day 1 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
         { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
           ...ssPair(1, weekNum === 4 ? "Back Squat" : weekNum === 8 ? "Trap Bar Deadlift" : "Split Stance Trap Bar Deadlift", { sets: 3, reps: weekNum === 12 ? "5 each side" : "6", tempo: "1/2/X", rpe: 6 }, weekNum === 4 ? "Side Plank" : weekNum === 8 ? "Banded Clamshell" : "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: "15 to 20 seconds", rpe: 6 }),
-          ssSingle(2, weekNum === 4 ? "Bench Press" : weekNum === 8 ? "Glute Bridge Floor Press" : "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Strength"),
+          ssSingle(2, weekNum === 4 ? "Bench Press" : weekNum === 8 ? "Dumbbell Glute Bridge Floor Press" : "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Strength"),
           ssSingle(3, "4-Way Isometric Neck Holds", { sets: 3, reps: "15 seconds each way", rpe: 5 }, "Durability"),
         ]},
       ]},
@@ -2067,7 +2106,7 @@ function ClientDashboard({ client, onClose }) {
       <div className="card">
         <div className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</div>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
-          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} {exerciseUnit(p.exerciseName)} — {fmtDate(p.date)}</span></div>
+          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {exerciseUnit(p.exerciseName)} — {fmtDate(p.date)}</span></div>
         ))}
       </div>
     </ModalShell>
@@ -2484,7 +2523,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
                   <div className="adjust-box" style={{ marginTop: 10 }}>Working around: {full.injuryNotes}</div>
                 )}
                 <div className="dash-grid" style={{ marginTop: 10 }}>
-                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight} lb × ${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
+                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
                   <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
                   <DashStat
                     label="Readiness"
@@ -2647,7 +2686,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </Card>
 
       {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
+        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
       <div className="hero-card">
@@ -3030,7 +3069,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     const s = en.sets[setIdx];
     const w = Number(s.weight) || 0;
     const r = Number(s.reps) || 0;
-    if (!w || !r) return;
+    if (!r || (needsWeight(en.name) && !w)) return;
     const key = `${en.exerciseId}:${setIdx}`;
     if (manualPRs[key]) {
       const recordId = manualPRs[key].recordId;
@@ -3248,9 +3287,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
                   {lastWeek ? (
-                    <div className="last-logged">Last week, heaviest: {lastWeek.weight} pounds × {lastWeek.reps} {exerciseUnit(displayName, en.target.reps)}</div>
+                    <div className="last-logged">Last week, heaviest: {needsWeight(displayName) ? `${lastWeek.weight} pounds × ` : ""}{lastWeek.reps} {exerciseUnit(displayName, en.target.reps)}</div>
                   ) : (
-                    last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} {exerciseUnit(displayName, en.target.reps)} ({fmtDate(last.date)})</div>
+                    last?.best && <div className="last-logged">Last logged: {needsWeight(displayName) ? `${last.best.weight} pounds × ` : ""}{last.best.reps} {exerciseUnit(displayName, en.target.reps)} ({fmtDate(last.date)})</div>
                   )}
                   <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
                   {en.target.videoUrl2 !== undefined && (
@@ -3267,7 +3306,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     </div>
                   )}
                 </div>
-                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
+                <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
@@ -3278,13 +3317,17 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     const perSet = en.target.perSetTargets ? en.target.perSetTargets[setIdx] : null;
                     const effectivePct = perSet?.pct1rm ?? en.target.pct1rmFlat;
                     const setFlagged = !!manualPRs[`${en.exerciseId}:${setIdx}`];
-                    const setHasData = (Number(s.weight) || 0) > 0;
+                    const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
                     const targetWeight = effectivePct && priorBestForPct ? Math.round((priorBestForPct.e1rm * effectivePct) / 100) : null;
                     return (
                       <React.Fragment key={setIdx}>
                         <div className="set-grid-row">
                           <span className="set-num">{setIdx + 1}{perSet?.note ? <span className="set-note">{perSet.note}</span> : null}</span>
-                          <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
+                          {needsWeight(displayName) ? (
+                            <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
+                          ) : (
+                            <span aria-hidden="true" />
+                          )}
                           <input type="text" inputMode="text" placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
                           <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} disabled aria-label="Rate of Perceived Exertion, calculated from reps in reserve" />
                           <button className={`set-pr ${setFlagged ? "flagged" : ""}`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); setTimeout(() => setPrHint(null), 3000); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
@@ -3734,11 +3777,15 @@ function EditableLogBody({ log, client, onPersist }) {
         {draft.map((e, exIdx) => (
           <div key={e.exerciseId} className="edit-ex-card">
             <div className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</div>
-            <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{exerciseUnitLabel(e.name)}</span><span>Rate of Perceived Exertion</span></div>
+            <div className="set-grid-header"><span>Set</span><span>{needsWeight(e.name) ? "Weight" : ""}</span><span>{exerciseUnitLabel(e.name)}</span><span>Rate of Perceived Exertion</span></div>
             {e.sets.map((s, setIdx) => (
               <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
                 <span className="set-num">{setIdx + 1}</span>
-                <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(ev) => updateDraftSet(exIdx, setIdx, "weight", ev.target.value)} />
+                {needsWeight(e.name) ? (
+                  <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(ev) => updateDraftSet(exIdx, setIdx, "weight", ev.target.value)} />
+                ) : (
+                  <span aria-hidden="true" />
+                )}
                 <input type="text" placeholder="reps" value={s.reps} onChange={(ev) => updateDraftSet(exIdx, setIdx, "reps", ev.target.value)} />
                 <input type="number" min="1" max="10" placeholder="RPE" aria-label="Rate of Perceived Exertion" value={s.rir !== "" && s.rir !== undefined ? rpeFromRir(s.rir) : ""} onChange={(ev) => updateDraftSet(exIdx, setIdx, "rir", ev.target.value === "" ? "" : String(10 - Number(ev.target.value)))} />
               </div>
