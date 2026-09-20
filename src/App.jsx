@@ -3374,6 +3374,45 @@ function lastAllTimeBest(client, exerciseName) {
   for (const log of client.logs) { const en = log.exercises.find((e) => e.name === exerciseName); if (!en) continue; const b = bestSetOf(en.sets); if (b && (!best || b.e1rm > best.e1rm)) best = { ...b, date: log.date }; }
   return best;
 }
+// Every session this exercise was logged, not just the ones flagged as a Personal
+// Record — the continuous trend a client actually needs to see whether they're
+// getting stronger or weaker, with PR dates called out within it rather than
+// shown as the only points on the chart. One point per date: the best set that
+// session (heaviest weight for loaded lifts, highest reps/seconds/meters for
+// exercises with no external load). Falls back to the Personal Record entry
+// itself if a flagged PR has no matching session log.
+function exerciseHistorySeries(client, exerciseName) {
+  const useWeight = needsWeight(exerciseName);
+  const byDate = new Map();
+  for (const log of client.logs || []) {
+    const en = log.exercises.find((e) => e.name === exerciseName);
+    if (!en) continue;
+    let value = null;
+    let reps = null;
+    if (useWeight) {
+      const best = bestSetOf(en.sets);
+      if (!best) continue;
+      value = best.weight;
+      reps = best.reps;
+    } else {
+      for (const s of en.sets || []) {
+        const r = Number(s.reps) || 0;
+        if (!r) continue;
+        if (value === null || r > value) { value = r; reps = r; }
+      }
+      if (value === null) continue;
+    }
+    const existing = byDate.get(log.date);
+    if (!existing || value > existing.value) byDate.set(log.date, { date: log.date, value, reps, isPR: existing ? existing.isPR : false });
+  }
+  for (const p of client.prLog || []) {
+    if (p.exerciseName !== exerciseName) continue;
+    const existing = byDate.get(p.date);
+    if (existing) existing.isPR = true;
+    else byDate.set(p.date, { date: p.date, value: useWeight ? p.weight : p.reps, reps: p.reps, isPR: true });
+  }
+  return Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
 
 /* ============================== MOBILITY / RECOVERY SESSION ============================== */
 
@@ -4155,8 +4194,10 @@ function PRsTab({ client }) {
         const mostRecent = records[0];
         const earlier = records.slice(1);
         const open = openName === name;
-        const chartData = [...records].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => ({ date: fmtDate(r.date), weight: r.weight, reps: r.reps }));
         const unit = exerciseUnit(name);
+        const useWeight = needsWeight(name);
+        const history = open ? exerciseHistorySeries(client, name) : [];
+        const chartData = history.map((h) => ({ date: fmtDate(h.date), value: h.value, reps: h.reps, isPR: h.isPR }));
         return (
           <div key={name} className="pr-card-wrap">
             <button className="pr-card-v2" onClick={() => setOpenName(open ? null : name)}>
@@ -4172,26 +4213,42 @@ function PRsTab({ client }) {
             </button>
             {open && (
               <div className="pr-history">
-                {records.length > 1 ? (
+                {chartData.length > 1 ? (
                   <>
-                    <div style={{ height: 170 }}>
+                    <div style={{ height: 190 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
+                        <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                           <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
-                          <YAxis stroke="var(--text-dim)" fontSize={11} domain={["auto", "auto"]} />
+                          <YAxis stroke="var(--text-dim)" fontSize={11} domain={["auto", "auto"]} label={useWeight ? { value: "pounds", angle: -90, position: "insideLeft", fill: "var(--text-dim)", fontSize: 10 } : undefined} />
                           <Tooltip
                             contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
-                            formatter={(value, key, props) => [`${value} lb × ${props.payload.reps} ${unit}`, "Personal Record"]}
+                            formatter={(value, key, props) => [
+                              useWeight ? `${value} lb × ${props.payload.reps} reps` : `${value} ${unit}`,
+                              props.payload.isPR ? "Personal Record" : "Logged set",
+                            ]}
                           />
-                          <Line type="monotone" dataKey="weight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="var(--accent)"
+                            strokeWidth={2}
+                            dot={(dotProps) => {
+                              const { cx, cy, payload, index } = dotProps;
+                              return payload.isPR ? (
+                                <circle key={`pr-${index}`} cx={cx} cy={cy} r={6} fill="var(--accent)" stroke="var(--card)" strokeWidth={2} />
+                              ) : (
+                                <circle key={`set-${index}`} cx={cx} cy={cy} r={3.5} fill="var(--text)" stroke="var(--card)" strokeWidth={1} />
+                              );
+                            }}
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="muted" style={{ fontSize: 11.5, margin: "2px 0 10px" }}>Weight lifted at each Personal Record on this lift, oldest to newest.</div>
+                    <div className="muted" style={{ fontSize: 11.5, margin: "2px 0 10px" }}>Every logged session's top set on this lift, oldest to newest — the larger highlighted dots mark your Personal Records.</div>
                   </>
                 ) : (
-                  <p className="muted" style={{ fontSize: 12.5, marginBottom: 4 }}>Log another Personal Record on this lift to start seeing your progress graph here.</p>
+                  <p className="muted" style={{ fontSize: 12.5, marginBottom: 4 }}>Log this lift again to start seeing your progress graph here.</p>
                 )}
                 {earlier.map((h) => (
                   <div key={h.id} className="pr-history-row-v2">
