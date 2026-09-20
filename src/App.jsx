@@ -20,6 +20,7 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
+const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
 
 /* ============================== STORAGE HELPERS ============================== */
 // These five functions are the ONLY place the rest of the app talks to storage.
@@ -2371,22 +2372,42 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const list = await Promise.all(clients.map(async (c) => ({ id: c.id, name: c.name, full: await getClient(userId, c.id) })));
-      if (!cancelled) setRecords(list);
+      const ownList = await Promise.all(clients.map(async (c) => ({ id: c.id, name: c.name, full: await getClient(userId, c.id), ownerId: userId })));
+      let linkedList = [];
+      // If this is the coach's own account, also pull in every client who signed up
+      // for their own account and got auto-linked to this coach — those clients' data
+      // lives under their own separate accounts, so it has to be fetched separately.
+      if (userId === COACH_USER_ID && supabase) {
+        try {
+          const { data: links } = await supabase.from("client_links").select("client_user_id, client_email").eq("coach_user_id", userId);
+          for (const link of links || []) {
+            const clientProfiles = await getClientList(link.client_user_id);
+            if (!clientProfiles || clientProfiles.length === 0) {
+              linkedList.push({ id: null, name: link.client_email || "New client", full: null, ownerId: link.client_user_id, pending: true });
+              continue;
+            }
+            for (const c of clientProfiles) {
+              const full = await getClient(link.client_user_id, c.id);
+              linkedList.push({ id: c.id, name: c.name || link.client_email, full, ownerId: link.client_user_id });
+            }
+          }
+        } catch {}
+      }
+      if (!cancelled) setRecords([...ownList, ...linkedList]);
     })();
     return () => { cancelled = true; };
   }, [clients, userId]);
 
-  const togglePaid = async (id, full) => {
+  const togglePaid = async (id, full, ownerId) => {
     if (!full) return;
     setBusyId(id);
     const updated = { ...full, paid: !full.paid };
-    if (id === activeId) {
+    if (id === activeId && ownerId === userId) {
       await onPersistActive(updated);
     } else {
-      await setClient(userId, id, updated);
+      await setClient(ownerId, id, updated);
     }
-    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, full: updated } : r)));
+    setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId ? { ...r, full: updated } : r)));
     setBusyId(null);
   };
 
@@ -2409,11 +2430,11 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
             const recentBW = full?.bodyweightLog?.length ? full.bodyweightLog[full.bodyweightLog.length - 1] : null;
             const recentReadiness = full ? Object.values(full.readiness || {}).sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
             return (
-              <div key={r.id} className="card">
+              <div key={`${r.ownerId}:${r.id || "pending"}`} className="card">
                 <div className="payment-row">
                   <div>
-                    <div className="card-title" style={{ marginBottom: 2 }}>{r.name}</div>
-                    <div className="muted" style={{ fontSize: 12.5 }}>{full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
+                    <div className="card-title" style={{ marginBottom: 2 }}>{r.name}{r.ownerId !== userId && <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}> · self sign-up</span>}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{r.pending ? "Signed up — hasn't started their program yet" : full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
                   </div>
                   <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>
                 </div>
@@ -2438,7 +2459,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
                   className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
                   style={{ marginTop: 10 }}
                   disabled={busyId === r.id || !full}
-                  onClick={() => togglePaid(r.id, full)}
+                  onClick={() => togglePaid(r.id, full, r.ownerId)}
                 >
                   {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
                 </button>
@@ -4531,9 +4552,19 @@ function AuthScreen() {
     setError(""); setInfo(""); setBusy(true);
     try {
       if (mode === "signup") {
-        const { error: err } = await supabase.auth.signUp({ email: email.trim(), password });
+        const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
         if (err) setError(err.message);
-        else setInfo("Check your email to confirm your account, then sign in below.");
+        else {
+          const newUserId = signUpData?.user?.id;
+          if (newUserId && COACH_USER_ID && newUserId !== COACH_USER_ID) {
+            // Best-effort: link this new client to the coach so they show up in the
+            // Coach Dashboard automatically. Never blocks or fails signup if it errors.
+            try {
+              await supabase.from("client_links").insert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email });
+            } catch {}
+          }
+          setInfo("Account created! Setting up your program...");
+        }
       } else if (mode === "forgot") {
         const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
         if (err) setError(err.message);
