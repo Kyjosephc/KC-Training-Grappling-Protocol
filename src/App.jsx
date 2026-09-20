@@ -1923,7 +1923,7 @@ function smsHref(text) {
 function ShareModal({ onClose }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const shareText = "I've been training with Strength Matrix, a strength and conditioning program built for BJJ and wrestling — come join me:";
+  const shareText = "Strength Matrix is a strength and conditioning program built for BJJ and wrestling. Get started here:";
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
