@@ -4562,7 +4562,8 @@ function AuthScreen() {
         {mode === "signup" && hasPaymentInfo && (
           <div className="card" style={{ marginBottom: 18, textAlign: "center" }}>
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
-            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Please send payment before starting your program.</p>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>First Week Free / $10 Fee At The Start Of Week 2 For Unlimited Access</p>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment needed today — your first week is on the house. You'll be prompted here again once Week 2 starts.</p>
             {qrOk && (
               coachPaymentLink ? (
                 <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
