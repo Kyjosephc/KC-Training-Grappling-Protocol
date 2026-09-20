@@ -949,16 +949,15 @@ const conjugateProgram = {
               ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength — resisting rotation is as important for grappling as producing it", quality: "Core" }),
             ]},
           ]},
-        { id: uid(), label: "3", name: "Full Body Dynamic Effort + Speed & Agility + Conditioning",
-          intent: "Speed and rhythm over grinding. The conditioning piece should feel easy — if it doesn't, you're going too hard for a base week. Training grappling four or more times this week? It's fine to split this into two shorter sessions — the Dynamic Effort lift on one day, the conditioning piece on another — instead of always stacking both together.",
+        { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
+          intent: "Speed and rhythm over grinding. The conditioning piece should feel easy — if it doesn't, you're going too hard for a base week. Training grappling four or more times this week? It's fine to split the rotational power work and the conditioning piece into two shorter sessions instead of stacking them together.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
               ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 0, rest: "90 seconds", purpose: "Combines acceleration, deceleration, lateral movement, and change of direction in a single drill", quality: "Agility" }),
             ]},
-            { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
-              deSquat(50), deBench(50),
+            { id: uid(), type: "power", name: "Grappling Power", exercises: [
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles", quality: "Rotational Power" }),
               ex({ name: "Heavy Landmine Anti-Rotation Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort, not light", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded rotation — grappling is a rotational sport, and this is the missing piece next to the rotational power work above: real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
             ]},
@@ -1018,19 +1017,17 @@ const conjugateProgram = {
               ex({ name: "Pallof Press (Anti-Rotation)", sets: 3, reps: "10 per side", load: "light to moderate cable", rir: 2, rest: "60 seconds", purpose: "Anti-rotation trunk strength", quality: "Core" }),
             ]},
           ]},
-        { id: uid(), label: "3", name: "Full Body Dynamic Effort + Speed & Agility + Conditioning",
-          intent: "Tempo work, not a fight. Moderate-hard effort, never all-out — save your nervous system for the mats and for the next top set. Training grappling four or more times this week? Split this into two shorter sessions instead of stacking the Dynamic Effort lift and the conditioning piece back to back.",
+        { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
+          intent: "Tempo work, not a fight. Moderate-hard effort, never all-out — save your nervous system for the mats and for the next top set. Training grappling four or more times this week? Split the rotational power work and the conditioning piece across two shorter sessions instead of stacking them back to back.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
               ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 0, rest: "90 seconds", purpose: "Acceleration, deceleration, lateral movement, and change of direction in one drill", quality: "Agility" }),
             ]},
-            { id: uid(), type: "power", name: "Dynamic Effort & Grappling Power", exercises: [
-              deSquat(55), deBench(55),
+            { id: uid(), type: "power", name: "Grappling Power", exercises: [
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power for throws and scrambles", quality: "Rotational Power" }),
               ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" , videoUrl: "https://www.youtube.com/watch?v=fx6lSVNvu-4" }),
-              ex({ name: "Trap Bar High Pull", sets: 4, reps: "5", load: "moderate, explosive intent", rir: 1, rest: "2 minutes", purpose: "Total-body explosive triple extension and grip demand — the closest barbell-based equivalent to a loaded sandbag or sled push without either", quality: "Power" , videoUrl: "https://www.youtube.com/watch?v=_reAqpSF-m0" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
@@ -1436,6 +1433,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
         sections: [
           { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
             ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Brief ankle and knee stability preparation before loading the lift", quality: "Neuromuscular" }),
+            ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before this session's Dynamic Effort press", quality: "Neuromuscular" }),
             ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility", videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
             ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 0, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
           ]},
@@ -1446,6 +1444,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Heavy Farmer Carry", sets: 2, reps: "25 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk bracing under load — the only carry slot in a two-day week, so it stays heavy", quality: "Grip/Trunk" }),
+            ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure", quality: "Durability" }),
             ...(trim ? [] : [ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" })]),
           ]},
           ...(trim ? [] : [{ id: uid(), type: "arms_core", name: "Core", exercises: [
@@ -1453,18 +1452,12 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           ]}]),
         ]},
       { id: uid(), label: "2", name: "Max Effort Upper + Dynamic Effort Lower + Conditioning",
-        intent: "Same idea in reverse — max effort on the press first, explosive lower body work second, then the week's one conditioning session finishes things off, since there's no third day to host it separately.",
+        intent: "Same idea in reverse — max effort on the press first, explosive lower body work second, then the week's one conditioning session finishes things off, since there's no third day to host it separately. Shoulder activation and neck work moved to Day 1 to keep this day, with its long conditioning finisher, well clear of the two-hour mark.",
         sections: [
-          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-            ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 0, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before heavy pressing", quality: "Neuromuscular" }),
-          ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
           { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [ deSquat(dePct) ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
-            ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: wristPool[0].notes, quality: "Durability" }),
-            ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure, and the single most time-efficient way to cover it in a two-day week", quality: "Durability" }),
-            ...(trim ? [] : [ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" })]),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
             ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block even with just two sessions a week", quality: "Conditioning" }),
