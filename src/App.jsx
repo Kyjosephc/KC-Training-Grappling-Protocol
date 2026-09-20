@@ -1833,17 +1833,19 @@ function OnboardingScreen({ onSubmit }) {
       </label>
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
-      <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")}>
+      <div role="radiogroup" aria-label="Choose Your Program">
+      <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")} role="radio" aria-checked={programVariant === "A"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("A"); } }}>
         <div className="program-choice-title">Program A — Condensed Conjugate</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week.</p>
       </div>
-      <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")}>
+      <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")} role="radio" aria-checked={programVariant === "B"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("B"); } }}>
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal.</p>
       </div>
-      <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")}>
+      <div className={`program-choice-card ${programVariant === "C" ? "active" : ""}`} onClick={() => setProgramVariant("C")} role="radio" aria-checked={programVariant === "C"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("C"); } }}>
         <div className="program-choice-title">Program C — Two-Day Hybrid</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>2 days a week — built for a packed mat schedule with no room for a 3rd lifting day. Each session pairs a Max Effort lift with a Dynamic Effort lift like Program A, with slightly more work per session to make up for it. Best if you're training grappling 4 or more times a week.</p>
+      </div>
       </div>
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
