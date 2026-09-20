@@ -4635,12 +4635,12 @@ function AuthScreen() {
         <form onSubmit={submit}>
           <label className="labeled-input">
             <span><Mail size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Email</span>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
           </label>
           {mode !== "forgot" && (
             <label className="labeled-input">
               <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Password</span>
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
+              <input type="password" required minLength={6} autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
             </label>
           )}
           {mode === "signin" && (
@@ -4689,7 +4689,7 @@ function ResetPasswordScreen({ onDone }) {
         <form onSubmit={submit}>
           <label className="labeled-input">
             <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />New password</span>
-            <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
+            <input type="password" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
           </label>
           {error && <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>{error}</div>}
           <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : "Update Password"}</button>
