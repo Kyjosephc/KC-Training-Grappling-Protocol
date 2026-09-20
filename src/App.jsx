@@ -21,6 +21,9 @@ const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
+const PROGRAM_PRICE = 20;
+// Promo codes map to a dollar amount off PROGRAM_PRICE. Add more codes here as needed.
+const PROMO_CODES = { INFINITI: 5 };
 
 /* ============================== STORAGE HELPERS ============================== */
 // These five functions are the ONLY place the rest of the app talks to storage.
@@ -1426,7 +1429,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1441,6 +1444,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     beltLevel: beltLevel || "White",
     bjjNotes: [],
     paid: false,
+    promoDiscount: promoDiscount || 0,
     excludedExercises: [],
     injuryNotes: injuryNotes ? injuryNotes.trim() : "",
   };
@@ -1608,7 +1612,13 @@ function MainApp({ userId, onSignOut }) {
 
   const completeOnboarding = async (profile) => {
     const id = uid();
-    const c = buildClient({ id, ...profile, useTemplate: true });
+    let promoDiscount = 0;
+    try {
+      const { data } = await supabase.auth.getUser();
+      const code = (data?.user?.user_metadata?.promoCode || "").trim().toUpperCase();
+      promoDiscount = PROMO_CODES[code] || 0;
+    } catch {}
+    const c = buildClient({ id, ...profile, useTemplate: true, promoDiscount });
     await setClient(userId, id, c);
     const list = [{ id, name: c.name }];
     setClients(list);
@@ -2713,7 +2723,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           pos.weekNumber >= 2 && !client.paid ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
-              <p className="muted" style={{ marginBottom: 10 }}>Send $10 to unlock the rest of your program. Your coach will confirm it on their end — this screen updates automatically once they do, no need to do anything else here.</p>
+              <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach will confirm it on their end — this screen updates automatically once they do, no need to do anything else here.`}</p>
               {(coachVenmo || coachCashApp || coachPaymentLink) ? (
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
@@ -4550,6 +4560,9 @@ function AuthScreen() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [qrOk, setQrOk] = useState(true);
+  const [promoCode, setPromoCode] = useState("");
+  const promoDiscount = PROMO_CODES[promoCode.trim().toUpperCase()] || 0;
+  const duePrice = PROGRAM_PRICE - promoDiscount;
   const hasPaymentInfo = coachVenmo || coachCashApp;
 
   const submit = async (e) => {
@@ -4557,7 +4570,7 @@ function AuthScreen() {
     setError(""); setInfo(""); setBusy(true);
     try {
       if (mode === "signup") {
-        const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
+        const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { promoCode: promoCode.trim().toUpperCase() } } });
         if (err) setError(err.message);
         else {
           const newUserId = signUpData?.user?.id;
@@ -4598,8 +4611,13 @@ function AuthScreen() {
         {mode === "signup" && hasPaymentInfo && (
           <div className="card" style={{ marginBottom: 18, textAlign: "center" }}>
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
-            <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>First Week Free / $10 Fee At The Start Of Week 2 For Unlimited Access</p>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>{`First Week Free / $${duePrice} Fee At The Start Of Week 2 For Unlimited Access`}</p>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment needed today — your first week is on the house. You'll be prompted here again once Week 2 starts.</p>
+            <label className="labeled-input" style={{ marginBottom: 10, textAlign: "left" }}>
+              <span>Promo Code (optional)</span>
+              <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="Enter code" style={{ textTransform: "uppercase" }} />
+            </label>
+            {promoDiscount > 0 && <p style={{ color: "var(--green)", fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>{`✓ Promo code applied — $${promoDiscount} off, $${duePrice} due at Week 2`}</p>}
             {qrOk && (
               coachPaymentLink ? (
                 <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
