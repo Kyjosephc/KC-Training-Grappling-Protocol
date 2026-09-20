@@ -354,6 +354,21 @@ function weeklyVolumeSeries(client) {
 
 /* ============================== CONJUGATE HELPERS ============================== */
 
+// Human-readable label for each rotating exercise pool. Falls back to "Max Effort Upper"
+// only for the two known Max Effort pools; anything else (durability, core, conditioning
+// pools, or a pool added later) gets its own real label instead of being mislabeled.
+const ROTATING_POOL_LABELS = {
+  meLowerPool: "Max Effort Lower",
+  meUpperPool: "Max Effort Upper",
+  hipPool: "Hip & Adductor Durability",
+  wristPool: "Wrist & Grip Durability",
+  coreAntiPool: "Anti-Rotation Core",
+  conditioningIntervalPool: "Conditioning",
+};
+function poolLabelFor(rotatingPool) {
+  return ROTATING_POOL_LABELS[rotatingPool] || "Rotating Exercise";
+}
+
 function resolveExercise(e, weekNumber, program, phase, opts = {}) {
   const blockNumber = opts.blockNumber || 1;
   const excludedExercises = opts.excludedExercises || [];
@@ -369,7 +384,7 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     const chosen = pool[idx];
     return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
-      poolLabel: e.rotatingPool === "meLowerPool" ? "Max Effort Lower" : "Max Effort Upper" };
+      poolLabel: poolLabelFor(e.rotatingPool) };
   }
   if (e.deWave) {
     const pct = phase?.dePercent || "55%";
@@ -3510,7 +3525,7 @@ function ProgramTab({ client, onPersist }) {
                         <div key={e.id} className="program-ex-row">
                           <span>
                             {e.rotatingPool
-                              ? `${e.rotatingPool === "meLowerPool" ? "Max Effort Lower" : "Max Effort Upper"} — rotates through: ${(client.program.conjugate?.[e.rotatingPool] || []).map((p) => p.name).join(", ")}`
+                              ? `${poolLabelFor(e.rotatingPool)} — rotates through: ${(client.program.conjugate?.[e.rotatingPool] || []).map((p) => p.name).join(", ")}`
                               : e.name}
                           </span>
                           <span className="muted">{e.sets} sets of {e.reps}{e.rir !== undefined ? `, Rate of Perceived Exertion ${rpeFromRir(e.rir)}` : ""}</span>
