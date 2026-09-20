@@ -601,9 +601,10 @@ function lookupVideo(name) {
   const found = Object.keys(VIDEO_LIBRARY).find((k) => key.includes(k) || k.includes(key));
   return found ? VIDEO_LIBRARY[found] : "";
 }
-// Exercises that are held or worked for TIME rather than counted in reps — their target
-// text already says "seconds"/"time" (e.g. "30 to 45 seconds", "maximum time"), so anywhere
-// the app would otherwise show a numeric "Reps" field for these, it should say "Seconds" instead.
+// Exercises whose logged number isn't a rep count — held for TIME or covering DISTANCE rather
+// than counted in reps. Historical logs and Personal Records only ever store an exercise's name
+// (the number a client typed carries no unit with it), so these two lists cover exercises by
+// name for that case.
 const TIME_BASED_EXERCISES = new Set([
   "pull-up bar dead hang",
   "copenhagen plank",
@@ -614,10 +615,47 @@ const TIME_BASED_EXERCISES = new Set([
   "heavy landmine anti-rotation hold",
   "half-kneeling landmine press hold",
   "rice bucket grip drills",
+  "4-way isometric neck holds",
+  "briefcase carry",
+  "heavy pallof press hold",
+  "pull-up hold",
+  "side plank",
+  "single arm kettlebell hold",
+  "trap bar static hold",
+  "weighted plank",
 ]);
+const DISTANCE_BASED_EXERCISES = new Set([
+  "heavy farmer carry",
+  "moderate farmer carry",
+  "suitcase carry",
+  "lateral shuffle",
+]);
+function normalizeExerciseKey(name) {
+  return (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
+}
+// The unit a client's logged number represents for a given exercise: "seconds", "meters", or
+// "reps". Pass the exercise's actual prescribed reps text (repsText) whenever it's on hand — a
+// live program target — since reading it directly also catches any future exercise whose target
+// text says "meters"/"seconds"/"minutes" even before its name is added to the lists above.
+// Historical logs and Personal Records only ever store the exercise's name, so those fall back
+// to the name lookup.
+function exerciseUnit(name, repsText) {
+  if (repsText) {
+    const t = String(repsText).toLowerCase();
+    if (/meter|yard/.test(t)) return "meters";
+    if (/second|minute|\bsec\b|\bmin\b|\bhold\b|\btime\b/.test(t)) return "seconds";
+  }
+  const key = normalizeExerciseKey(name);
+  if (TIME_BASED_EXERCISES.has(key)) return "seconds";
+  if (DISTANCE_BASED_EXERCISES.has(key)) return "meters";
+  return "reps";
+}
+function exerciseUnitLabel(name, repsText) {
+  const u = exerciseUnit(name, repsText);
+  return u === "seconds" ? "Seconds" : u === "meters" ? "Meters" : "Reps";
+}
 function isTimedExercise(name) {
-  const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
-  return TIME_BASED_EXERCISES.has(key);
+  return exerciseUnit(name) === "seconds";
 }
 function ex(o) {
   const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
@@ -1387,10 +1425,11 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
+    profilePicture: profilePicture || null,
     createdAt: todayStr(),
     program: useTemplate ? buildProgramVariant(["A", "B", "C"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
@@ -1726,7 +1765,20 @@ function OnboardingScreen({ onSubmit }) {
   const [injuryNotes, setInjuryNotes] = useState("");
   const [logoImageOk, setLogoImageOk] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [uploadingPic, setUploadingPic] = useState(false);
+  const [picError, setPicError] = useState("");
   const canSubmit = firstName.trim() && lastName.trim() && weight;
+  const handlePictureUpload = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setPicError("");
+    setUploadingPic(true);
+    processProfilePictureFile(file)
+      .then((dataUrl) => { setProfilePicture(dataUrl); setUploadingPic(false); })
+      .catch((err) => { setPicError(err.message); setUploadingPic(false); });
+  };
 
   return (
     <div className="pad" style={{ paddingTop: 40, maxWidth: 420, margin: "0 auto" }}>
@@ -1740,6 +1792,20 @@ function OnboardingScreen({ onSubmit }) {
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome</div>
       <p className="muted" style={{ marginBottom: 20 }}>Set up your profile to get started with your training system.</p>
+      <div className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
+        <div className="settings-avatar-preview">
+          {profilePicture ? <img src={profilePicture} alt="" /> : <span>{(firstName || "?").trim().charAt(0).toUpperCase()}</span>}
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="btn-ghost" style={{ display: "inline-block", cursor: "pointer" }}>
+            {uploadingPic ? "Uploading…" : profilePicture ? "Change Picture" : "Upload Picture"}
+            <input type="file" accept="image/*" onChange={handlePictureUpload} style={{ display: "none" }} disabled={uploadingPic} />
+          </label>
+          {profilePicture && <button className="btn-ghost" style={{ marginLeft: 8 }} onClick={() => setProfilePicture(null)}>Remove</button>}
+          {picError && <p className="muted" style={{ color: "var(--accent)", fontSize: 12, marginTop: 6 }}>{picError}</p>}
+        </div>
+      </div>
       <LabeledInput label="First name" value={firstName} onChange={setFirstName} />
       <LabeledInput label="Last name" value={lastName} onChange={setLastName} />
       <LabeledInput label="Bodyweight (pounds)" type="number" step="0.1" inputMode="decimal" min="1" max="600" value={weight} onChange={setWeight} />
@@ -1774,7 +1840,7 @@ function OnboardingScreen({ onSubmit }) {
         By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
       </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture })}>
         Get started
       </button>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -1965,7 +2031,7 @@ function ClientDashboard({ client, onClose }) {
       <div className="card">
         <div className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</div>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
-          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} {isTimedExercise(p.exerciseName) ? "seconds" : "reps"} — {fmtDate(p.date)}</span></div>
+          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight} pounds × {p.reps} {exerciseUnit(p.exerciseName)} — {fmtDate(p.date)}</span></div>
         ))}
       </div>
     </ModalShell>
@@ -2031,6 +2097,33 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
+// Reads an uploaded image file, center-crops it to a 300x300 square, and resolves to a JPEG
+// data URL. Shared by Settings (changing an existing client's picture) and onboarding (setting
+// one before the client even exists yet, so there's no client to persist it to).
+function processProfilePictureFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) { reject(new Error("No file selected.")); return; }
+    if (!file.type.startsWith("image/")) { reject(new Error("Please choose an image file.")); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 300;
+        const canvas = document.createElement("canvas");
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => reject(new Error("Couldn't read that image — try a different file."));
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.readAsDataURL(file);
+  });
+}
 function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
@@ -2057,28 +2150,10 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
     e.target.value = "";
     if (!file) return;
     setPicError("");
-    if (!file.type.startsWith("image/")) { setPicError("Please choose an image file."); return; }
     setUploadingPic(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = async () => {
-        const size = 300;
-        const canvas = document.createElement("canvas");
-        canvas.width = size; canvas.height = size;
-        const ctx = canvas.getContext("2d");
-        const scale = Math.max(size / img.width, size / img.height);
-        const w = img.width * scale, h = img.height * scale;
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-        await onPersist({ ...client, profilePicture: dataUrl });
-        setUploadingPic(false);
-      };
-      img.onerror = () => { setPicError("Couldn't read that image — try a different file."); setUploadingPic(false); };
-      img.src = ev.target.result;
-    };
-    reader.onerror = () => { setPicError("Couldn't read that file."); setUploadingPic(false); };
-    reader.readAsDataURL(file);
+    processProfilePictureFile(file)
+      .then(async (dataUrl) => { await onPersist({ ...client, profilePicture: dataUrl }); setUploadingPic(false); })
+      .catch((err) => { setPicError(err.message); setUploadingPic(false); });
   };
   const removePicture = async () => { await onPersist({ ...client, profilePicture: null }); };
   const lastSynced = useLastSynced();
@@ -2346,7 +2421,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
                   <div className="adjust-box" style={{ marginTop: 10 }}>Working around: {full.injuryNotes}</div>
                 )}
                 <div className="dash-grid" style={{ marginTop: 10 }}>
-                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight} lb × ${recentPR.reps} ${isTimedExercise(recentPR.exerciseName) ? "seconds" : "reps"}` : "None yet"} wide />
+                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight} lb × ${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
                   <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
                   <DashStat
                     label="Readiness"
@@ -2509,7 +2584,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </Card>
 
       {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} {isTimedExercise(recentPR.name) ? "seconds" : "reps"} ({fmtDate(recentPR.date)})</span></div></Card>
+        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight} pounds × {recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
       <div className="hero-card">
@@ -3110,9 +3185,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
                   {lastWeek ? (
-                    <div className="last-logged">Last week, heaviest: {lastWeek.weight} pounds × {lastWeek.reps} {isTimedExercise(displayName) ? "seconds" : "reps"}</div>
+                    <div className="last-logged">Last week, heaviest: {lastWeek.weight} pounds × {lastWeek.reps} {exerciseUnit(displayName, en.target.reps)}</div>
                   ) : (
-                    last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} {isTimedExercise(displayName) ? "seconds" : "reps"} ({fmtDate(last.date)})</div>
+                    last?.best && <div className="last-logged">Last logged: {last.best.weight} pounds × {last.best.reps} {exerciseUnit(displayName, en.target.reps)} ({fmtDate(last.date)})</div>
                   )}
                   <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
                   {en.target.videoUrl2 !== undefined && (
@@ -3129,7 +3204,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     </div>
                   )}
                 </div>
-                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{isTimedExercise(displayName) ? "Seconds" : "Reps"}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
+                <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
@@ -3596,7 +3671,7 @@ function EditableLogBody({ log, client, onPersist }) {
         {draft.map((e, exIdx) => (
           <div key={e.exerciseId} className="edit-ex-card">
             <div className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</div>
-            <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{isTimedExercise(e.name) ? "Seconds" : "Reps"}</span><span>Rate of Perceived Exertion</span></div>
+            <div className="set-grid-header"><span>Set</span><span>Weight</span><span>{exerciseUnitLabel(e.name)}</span><span>Rate of Perceived Exertion</span></div>
             {e.sets.map((s, setIdx) => (
               <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
                 <span className="set-num">{setIdx + 1}</span>
@@ -3971,7 +4046,7 @@ function PRsTab({ client }) {
         const earlier = records.slice(1);
         const open = openName === name;
         const chartData = [...records].sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => ({ date: fmtDate(r.date), weight: r.weight, reps: r.reps }));
-        const unit = isTimedExercise(name) ? "seconds" : "reps";
+        const unit = exerciseUnit(name);
         return (
           <div key={name} className="pr-card-wrap">
             <button className="pr-card-v2" onClick={() => setOpenName(open ? null : name)}>
