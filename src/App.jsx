@@ -1523,6 +1523,7 @@ const TABS = [
 ];
 
 function MainApp({ userId, onSignOut }) {
+  const isCoach = !!COACH_USER_ID && userId === COACH_USER_ID;
   const [clients, setClients] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [client, setClientState] = useState(null);
@@ -1651,7 +1652,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
+      <TopBar client={client} isCoach={isCoach} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -1671,8 +1672,8 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
-      {showCoachDashboard && <CoachDashboard userId={userId} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowCoachDashboard(false)} />}
+      {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowCoachDashboard(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
@@ -1849,7 +1850,7 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
+function TopBar({ client, isCoach, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
       <div>
@@ -1866,7 +1867,7 @@ function TopBar({ client, onOpenClients, onOpenSettings, onOpenCalculator, onOpe
       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
-          <button className="icon-btn" onClick={onOpenCoachDashboard} aria-label="Coach Dashboard"><LayoutDashboard size={20} /></button>
+          {isCoach && <button className="icon-btn" onClick={onOpenCoachDashboard} aria-label="Coach Dashboard"><LayoutDashboard size={20} /></button>}
           <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
           <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
         </div>
@@ -2125,7 +2126,7 @@ function processProfilePictureFile(file) {
     reader.readAsDataURL(file);
   });
 }
-function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
+function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
@@ -2239,20 +2240,24 @@ function SettingsModal({ client, onPersist, theme, onChangeTheme, onClose, onRes
       ))}
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</div>
-      <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
-      <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
+      {isCoach && (
+        <>
+          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</div>
+          <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
+          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</div>
-      <p className="muted" style={{ marginBottom: 10 }}>
-        {client?.paid
-          ? "This athlete is marked as paid — they have full access to the program going forward, with no more payment prompts."
-          : "The first week is free. Starting in Week 2, this athlete will be shown your payment info and won't be able to start that session until you mark them as paid here."}
-      </p>
-      {client?.paid ? (
-        <button className="btn-ghost wide" onClick={() => onPersist({ ...client, paid: false })}>Mark as Unpaid</button>
-      ) : (
-        <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
+          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</div>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            {client?.paid
+              ? "This athlete is marked as paid — they have full access to the program going forward, with no more payment prompts."
+              : "The first week is free. Starting in Week 2, this athlete will be shown your payment info and won't be able to start that session until you mark them as paid here."}
+          </p>
+          {client?.paid ? (
+            <button className="btn-ghost wide" onClick={() => onPersist({ ...client, paid: false })}>Mark as Unpaid</button>
+          ) : (
+            <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
+          )}
+        </>
       )}
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
