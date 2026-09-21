@@ -651,6 +651,7 @@ function lookupVideo(name) {
 // (the number a client typed carries no unit with it), so these two lists cover exercises by
 // name for that case.
 const TIME_BASED_EXERCISES = new Set([
+  "assault bike or treadmill — repeated-effort tempo",
   "pull-up bar dead hang",
   "copenhagen plank",
   "heavy isometric wall sit",
@@ -675,6 +676,19 @@ const DISTANCE_BASED_EXERCISES = new Set([
   "suitcase carry",
   "lateral shuffle",
 ]);
+// Exercises prescribed and logged in MINUTES rather than seconds — continuous
+// aerobic/conditioning pieces (Zone 2 base work, power intervals, deload-phase
+// easy aerobic and maintenance pieces). Kept separate from TIME_BASED_EXERCISES
+// so the set-logging grid can label these "Minutes" instead of "Seconds".
+const MINUTE_BASED_EXERCISES = new Set([
+  "assault bike or incline treadmill walk — aerobic base",
+  "assault bike or treadmill — aerobic maintenance",
+  "assault bike or treadmill — easy aerobic",
+  "assault bike or treadmill — vo2max 4x4 intervals",
+  "assault bike or treadmill — sustained effort",
+  "assault bike, treadmill, or outdoor — aerobic base",
+  "assault bike or treadmill — aerobic power intervals",
+]);
 // Exercises with no external load at all — sprints, shuttles, bodyweight conditioning, band
 // work, and isometric neck holds done without a plate. The Weight input is hidden for these
 // rather than shown unused, since a client typing a pounds figure into a shuttle run just adds
@@ -689,6 +703,8 @@ const NO_WEIGHT_EXERCISES = new Set([
   "assault bike or treadmill — sustained effort",
   "assault bike or treadmill — vo2max 4x4 intervals",
   "assault bike, treadmill, or outdoor — aerobic base",
+  "assault bike or treadmill — aerobic power intervals",
+  "assault bike or treadmill — repeated-effort tempo",
   "band pull-apart",
   "banded clamshell",
   "banded face pulls",
@@ -719,19 +735,28 @@ function normalizeExerciseKey(name) {
 // Historical logs and Personal Records only ever store the exercise's name, so those fall back
 // to the name lookup.
 function exerciseUnit(name, repsText) {
-  if (repsText) {
-    const t = String(repsText).toLowerCase();
-    if (/meter|yard/.test(t)) return "meters";
-    if (/second|minute|\bsec\b|\bmin\b|\bhold\b|\btime\b/.test(t)) return "seconds";
-  }
+  if (repsText && /meter|yard/i.test(repsText)) return "meters";
+  // A curated name match is the author's explicit intent and wins over parsing
+  // the reps text — e.g. "Weighted Plank" is prescribed as "1 minute" but is
+  // always logged in seconds for precision, while "Assault Bike... Aerobic Base"
+  // isn't in either list, so it falls through to the reps-text check below and
+  // correctly reads as minutes.
   const key = normalizeExerciseKey(name);
   if (TIME_BASED_EXERCISES.has(key)) return "seconds";
+  if (MINUTE_BASED_EXERCISES.has(key)) return "minutes";
   if (DISTANCE_BASED_EXERCISES.has(key)) return "meters";
+  if (repsText) {
+    const t = String(repsText).toLowerCase();
+    const hasMinute = /\bminutes?\b|\bmin\b/.test(t);
+    const hasSecond = /\bseconds?\b|\bsec\b/.test(t);
+    if (hasMinute && !hasSecond) return "minutes";
+    if (hasSecond || /\bhold\b|\btime\b/.test(t)) return "seconds";
+  }
   return "reps";
 }
 function exerciseUnitLabel(name, repsText) {
   const u = exerciseUnit(name, repsText);
-  return u === "seconds" ? "Seconds" : u === "meters" ? "Meters" : "Reps";
+  return u === "seconds" ? "Seconds" : u === "minutes" ? "Minutes" : u === "meters" ? "Meters" : "Reps";
 }
 function isTimedExercise(name) {
   return exerciseUnit(name) === "seconds";
