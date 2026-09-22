@@ -1688,9 +1688,9 @@ function classifyReadiness(r) {
   return "YELLOW";
 }
 const READINESS_COPY = {
-  GREEN: { detail: "Complete today's session as written.", color: "var(--green)" },
-  YELLOW: { detail: "Session automatically adjusted: one extra rep in reserve on strength and power, durability and arm/core work trimmed.", color: "var(--amber)" },
-  RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--red)" },
+  GREEN: { detail: "Complete today's session as written.", color: "var(--green)", textColor: "var(--bg)" },
+  YELLOW: { detail: "Session automatically adjusted: one extra rep in reserve on strength and power, durability and arm/core work trimmed.", color: "var(--amber)", textColor: "var(--bg)" },
+  RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--red)", textColor: "#ffffff" },
 };
 
 /* ============================== APP SHELL ============================== */
@@ -2146,9 +2146,9 @@ const TUTORIAL_PAGES = [
 
 const TERMS_SECTIONS = [
   { heading: "What this app is", body: "Strength Matrix is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
-  { heading: "Your data", body: "The app stores what it needs to run your program: your name, body measurements, workout logs, readiness check-ins, personal records, and the health-history answers from your liability waiver. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
+  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, and anything you choose to type into the injury notes box. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
   { heading: "Payment", body: "Any payment (such as the Week 2 continuation fee) is handled directly between you and your coach through Venmo or Cash App. This app does not process, transmit, or store card or bank account numbers." },
-  { heading: "Not medical advice", body: "This program is coaching, not medical care. See the liability waiver and health-history questionnaire for the full details — when in doubt, check with a physician before training." },
+  { heading: "Not medical advice", body: "This program is coaching, not medical care. It can't account for an injury, a medical condition, or anything else your coach doesn't know about, so tell your coach about anything relevant and check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you feel, but it can't see you." },
   { heading: "Your data, your call", body: "You can ask your coach at any time to export or permanently delete your data from this app." },
   { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
 ];
@@ -2960,7 +2960,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         </Card>
       )}
 
-      <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color }}>{readinessToday.color}</span> : null}>
+      <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color, color: READINESS_COPY[readinessToday.color].textColor }}>{readinessToday.color}</span> : null}>
         {readinessToday ? (
           <div><p className="muted" style={{ marginBottom: 10 }}>{READINESS_COPY[readinessToday.color].detail}</p><button className="btn-ghost" onClick={() => setShowReadiness(true)}>Update today's check-in</button></div>
         ) : (
@@ -3215,13 +3215,16 @@ function SliderRow({ label, value, max, onChange }) {
 
 function SectionHeader({ title, subtitle, complete, onToggleComplete, expanded, onToggleExpand }) {
   return (
-    <button className="section-header" onClick={onToggleExpand}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span className={`section-check ${complete ? "checked" : ""}`} onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}>{complete && <Check size={13} />}</span>
+    <div className="section-header-row">
+      <button type="button" className={`section-check ${complete ? "checked" : ""}`} onClick={onToggleComplete}
+        aria-pressed={complete} aria-label={complete ? `Mark ${title} as not complete` : `Mark ${title} complete`}>
+        <span className="section-check-box">{complete && <Check size={14} />}</span>
+      </button>
+      <button type="button" className="section-header" onClick={onToggleExpand} aria-expanded={expanded}>
         <div style={{ textAlign: "left" }}><div className="log-exercise-name">{title}</div>{subtitle && <div className="muted" style={{ fontSize: 12 }}>{subtitle}</div>}</div>
-      </div>
-      <ChevronRight size={16} className={expanded ? "chev-open" : ""} />
-    </button>
+        <ChevronRight size={16} className={expanded ? "chev-open" : ""} />
+      </button>
+    </div>
   );
 }
 function VideoLinkBlock({ url, onSave, onDelete, label }) {
@@ -3493,7 +3496,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   }
 
   return (
-    <ModalShell onClose={onClose} title={`Day ${day.label} — ${mainLift}`}
+    <ModalShell onClose={onClose} dismissOnEscape={false} title={`Day ${day.label} — ${mainLift}`}
       headerLeftExtra={<button className="icon-btn" onClick={() => setConfirmingReset(true)} title="Clear every input for this session" aria-label="Clear every input for this session"><RotateCcw size={16} /></button>}
       headerRight={<ProgressBadge percent={percent} />} fullscreen>
       {confirmingReset && (
@@ -3506,14 +3509,14 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
         </div>
       )}
       {prHint && (
-        <div className="rest-banner" style={{ background: "var(--amber)" }}>
+        <div className="rest-banner" style={{ background: "var(--amber)", color: "#101010" }}>
           <Trophy size={16} />
           <span>Type the actual weight and reps you did for {prHint} into those two boxes first — the numbers you see now are just the recommended target, not something you've entered yet. Then tap the trophy again.</span>
           <button className="rest-dismiss" onClick={() => setPrHint(null)}><X size={14} /></button>
         </div>
       )}
       {showFirstSetHelp && (
-        <div className="rest-banner" style={{ background: "var(--green)" }}>
+        <div className="rest-banner" style={{ background: "var(--green)", color: "#101010" }}>
           <Info size={16} />
           <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. That's saved automatically as you type it — no extra step needed. Reps in Reserve is already filled in for you — you don't need to touch it. Only tap the trophy if it's a genuine Personal Record.</span>
           <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
@@ -3661,7 +3664,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                           )}
                           <input type="text" inputMode="numeric" aria-label={`${exerciseUnitLabel(displayName, en.target.reps)} completed`} placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
                           <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} readOnly aria-label="Effort for this set, already set for you" />
-                          <button className={`set-pr ${setFlagged ? "flagged" : ""}`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); setTimeout(() => setPrHint(null), 3000); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
+                          <button type="button" className={`set-pr ${setFlagged ? "flagged" : ""}`} aria-pressed={setFlagged} aria-label={`${setFlagged ? "Remove" : "Mark"} set ${setIdx + 1} as a Personal Record`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
                         </div>
                       </React.Fragment>
                     );
@@ -3822,7 +3825,7 @@ function MobilitySession({ client, onClose, onSave, onUpdateProgram }) {
   const secs = remaining % 60;
 
   return (
-    <ModalShell onClose={onClose} title="Recovery & Mobility" fullscreen>
+    <ModalShell onClose={onClose} dismissOnEscape={false} title="Recovery & Mobility" fullscreen>
       <div className="muted" style={{ marginBottom: 8 }}>Segment {idx + 1} of {segments.length} — {Math.round(elapsedBefore / 60)} of {Math.round(totalSeconds / 60)} minutes elapsed</div>
       <div className="card" style={{ textAlign: "center" }}>
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
@@ -4702,13 +4705,23 @@ function EmptyState({ text, icon, actionLabel, onAction }) {
     </div>
   );
 }
-function ModalShell({ title, children, onClose, fullscreen, headerRight, headerLeftExtra }) {
+function ModalShell({ title, children, onClose, fullscreen, headerRight, headerLeftExtra, dismissOnEscape = true }) {
+  const closeRef = useRef(null);
+  useEffect(() => {
+    if (!dismissOnEscape || !onClose) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dismissOnEscape, onClose]);
+  // Move focus into the dialog so a keyboard or screen-reader user isn't left
+  // behind on the page underneath it.
+  useEffect(() => { if (closeRef.current) closeRef.current.focus(); }, []);
   return (
     <div className={`modal-overlay ${fullscreen ? "fullscreen" : ""}`}>
-      <div className="modal-box">
+      <div className="modal-box" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : undefined}>
         <div className="modal-head">
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button className="icon-btn" onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>
+            <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>
             {headerLeftExtra}
           </div>
           <div className="modal-title">{title}</div>
@@ -4805,8 +4818,8 @@ function GlobalStyle() {
       .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
       .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
       .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-      .pill-paid { background: var(--green); }
-      .pill-unpaid { background: var(--amber); }
+      .pill-paid { background: var(--green); color: var(--bg); }
+      .pill-unpaid { background: var(--amber); color: var(--bg); }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
@@ -4862,7 +4875,7 @@ function GlobalStyle() {
       .progress-circle-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--text); }
       .rest-banner { display: flex; align-items: flex-start; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; }
       .rest-banner span { flex: 1; }
-      .rest-dismiss { background: rgba(255,255,255,0.2); border: none; border-radius: 999px; width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer; }
+      .rest-dismiss { background: rgba(0,0,0,0.18); border: none; border-radius: 999px; width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: inherit; cursor: pointer; }
       .log-exercise { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
       .log-exercise-head { margin-bottom: 10px; }
       .log-exercise-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -4886,22 +4899,24 @@ function GlobalStyle() {
       .link-edit-btn { background: none; border: none; color: var(--text-dim); font-size: 12px; text-decoration: underline; cursor: pointer; }
       .add-link-btn { background: none; border: 1px dashed var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; padding: 3px 10px; cursor: pointer; margin-top: 8px; }
       .video-edit-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
-      .set-pr { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
-      .set-pr.flagged { background: var(--amber); border-color: var(--amber); color: #fff; }
+      .set-pr { background: var(--card); border: 1px solid var(--border); border-radius: 8px; min-height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
+      .set-pr.flagged { background: var(--amber); border-color: var(--amber); color: var(--bg); }
       .sub-row { display: flex; flex-wrap: wrap; margin-top: 8px; gap: 6px; }
       .sub-pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
       .sub-pill { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 6px 11px; cursor: pointer; }
       .sub-pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .set-note { display: block; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.02em; margin-top: 2px; }
-      .section-header { width: 100%; background: none; border: none; color: var(--text); display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 0; }
-      .section-check { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; cursor: pointer; }
-      .section-check.checked { background: var(--green); border-color: var(--green); }
+      .section-header { flex: 1; min-width: 0; background: none; border: none; color: var(--text); display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 8px 0; }
+      .section-header-row { display: flex; align-items: center; gap: 4px; }
+      .section-check { width: 44px; height: 44px; flex-shrink: 0; background: none; border: none; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+      .section-check-box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--bg); }
+      .section-check.checked .section-check-box { background: var(--green); border-color: var(--green); }
       .warmup-block { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
       .warmup-block-head { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
       .warmup-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
       .warmup-item input { margin-top: 3px; accent-color: var(--accent); }
       .warmup-item-name { font-size: 13.5px; }
-      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 34px 1fr 1fr 1fr 32px; gap: 5px; align-items: center; }
+      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px; gap: 5px; align-items: center; }
       .set-grid-header { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
