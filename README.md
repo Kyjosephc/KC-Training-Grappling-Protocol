@@ -94,6 +94,43 @@ npm install
 npm run dev
 ```
 
+## Optional — connecting clients' Oura rings
+
+Clients who wear an Oura ring can link it so their sleep, heart rate
+variability, and resting heart rate fill in their daily check-in
+automatically. Sleep quality gets set for them; energy and soreness stay
+theirs to rate, because a ring has no idea how hard training actually was.
+
+You register one application, once, and every client connects their own ring
+through it. You don't need a ring yourself.
+
+1. Go to https://cloud.ouraring.com, sign in, and open **My Applications**
+2. Create a new application. For the redirect address, enter:
+   `https://YOUR-DOMAIN/api/oura/callback`
+   (your live site's address — the app also shows this exact string under
+   **Settings → Oura Ring** once deployed, so you can copy it from there)
+3. Copy the **Client ID** and **Client Secret** it gives you
+4. In Vercel → your project → Settings → Environment Variables, add:
+   - `OURA_CLIENT_ID`
+   - `OURA_CLIENT_SECRET`
+5. Redeploy
+
+Until both values are set, the app just shows Oura as not switched on and
+nothing else changes — so it's safe to deploy before you get to this.
+
+Each client then taps **Settings → Oura Ring → Connect Oura Ring**, approves
+access on Oura's own screen, and they're done. They can disconnect from the
+same place at any time.
+
+A note on how this is wired: the connection runs through this project's own
+`/api/oura` endpoints rather than from the browser, because Oura's token
+exchange needs the client secret (which must never ship in frontend code) and
+Oura doesn't allow direct browser calls to its API. Access tokens are stored
+against each client's own account row, protected by the same row-level
+security as the rest of their training data, and are never shared with the
+coach dashboard. The integration only ever reads from Oura — it can't write
+anything back to anyone's Oura account.
+
 ## A note on cost
 
 Supabase's free tier covers a generous amount of usage — almost certainly
