@@ -1364,18 +1364,31 @@ function defaultWarmup() {
 }
 
 function defaultMobility() {
+  // Fifteen minutes, ordered the way the evidence supports.
+  //
+  // Breathing comes first, while heart rate is still high — that's when
+  // shifting out of sympathetic drive is worth the most. Six breaths a minute
+  // rather than box breathing: tested head to head in athletes straight after
+  // high-intensity work, box breathing left them at a HIGHER heart rate (165
+  // versus 155 beats per minute) and a higher perceived exertion, and the
+  // authors advised against it in this window — most likely the breath holds.
+  //
+  // The stretching is here for range of motion and for down-regulation, which
+  // is what it demonstrably does. It is not here to reduce soreness or speed
+  // recovery, because post-exercise stretching does neither to any meaningful
+  // degree, and the cue text says so rather than promising otherwise.
   return [
-    { id: uid(), name: "Down-Regulation Breathing", seconds: 120, type: "breath", detail: "Box breathing — inhale 4, hold 4, exhale 4, hold 4. Let your heart rate settle after training.", videoUrl: "" },
-    { id: uid(), name: "Couch Stretch (each side)", seconds: 180, type: "stretch", detail: "90 seconds per side. Rear knee down, hips squared forward, glute of the back leg engaged.", videoUrl: "" },
-    { id: uid(), name: "90/90 Hip Switch Flow", seconds: 60, type: "stretch", detail: "Flow slowly side to side, feeling both hips through internal and external rotation.", videoUrl: "" },
-    { id: uid(), name: "Figure-4 / Pigeon Stretch (each side)", seconds: 180, type: "stretch", detail: "90 seconds per side. Sit into the hip, keep the spine tall, breathe into the stretch.", videoUrl: "" },
-    { id: uid(), name: "Deep Squat Hold", seconds: 60, type: "stretch", detail: "Heels down if possible, hands inside the knees gently pressing them out.", videoUrl: "" },
-    { id: uid(), name: "Open Book Thoracic Rotation (each side)", seconds: 90, type: "stretch", detail: "45 seconds per side, slow controlled rotation, follow the top hand with your eyes.", videoUrl: "" },
-    { id: uid(), name: "Overhead Lat and Shoulder Stretch (each side)", seconds: 90, type: "stretch", detail: "45 seconds per side, hand on the rack or a bar, side-bend away to lengthen the lat.", videoUrl: "" },
-    { id: uid(), name: "Neck Mobility Flow", seconds: 60, type: "stretch", detail: "Slow flexion, extension, and side-to-side — no forcing, stay pain-free.", videoUrl: "" },
-    { id: uid(), name: "Straddle Hamstring and Adductor Hold", seconds: 120, type: "stretch", detail: "Long hold. Hinge from the hips and relax deeper into the stretch on each exhale.", videoUrl: "" },
-    { id: uid(), name: "Child's Pose with Lateral Reach", seconds: 60, type: "stretch", detail: "Walk your hands to each side to open the lats and obliques.", videoUrl: "" },
-    { id: uid(), name: "Closing Breathwork / Body Scan", seconds: 120, type: "breath", detail: "Slow nasal breathing, scan down the body, notice what loosened up.", videoUrl: "" },
+    { id: uid(), name: "Slow Breathing — Six Breaths a Minute", seconds: 150, type: "breath", detail: "Five seconds in through the nose, five seconds out through the mouth. No holding your breath at either end. Do this first, before you stretch anything, while your heart rate is still up — this is the part that genuinely shifts you out of training mode, and holding your breath here works against that.", videoUrl: "" },
+    { id: uid(), name: "Couch Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Rear knee down, hips squared forward, glute of the back leg engaged. The hip flexor and quad take a beating from squatting and from playing guard.", videoUrl: "" },
+    { id: uid(), name: "90/90 Hip Switch Flow", seconds: 60, type: "stretch", detail: "Flow slowly side to side, feeling both hips through internal and external rotation. Internal rotation is the range most grapplers lose first and miss the most.", videoUrl: "" },
+    { id: uid(), name: "Figure-4 / Pigeon Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Sit into the hip, keep the spine tall, breathe out into the stretch rather than forcing it down.", videoUrl: "" },
+    { id: uid(), name: "Deep Squat Hold", seconds: 60, type: "stretch", detail: "Heels down if possible, hands inside the knees gently pressing them out. Ankles, hips and lower back in one position — and the position you want to be comfortable in on the mat.", videoUrl: "" },
+    { id: uid(), name: "Straddle Hamstring and Adductor Hold", seconds: 90, type: "stretch", detail: "Long hold. Hinge from the hips and relax a little deeper on each exhale. Adductor strain is one of the most common injuries in grappling, so this range is worth keeping.", videoUrl: "" },
+    { id: uid(), name: "Open Book Thoracic Rotation (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, slow controlled rotation, follow the top hand with your eyes. Rotation you don't have in the mid-back gets taken from the lower back instead.", videoUrl: "" },
+    { id: uid(), name: "Overhead Lat and Shoulder Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, hand on the rack or a bar, side-bend away to lengthen the lat.", videoUrl: "" },
+    { id: uid(), name: "Wrist Flexor and Extensor Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side. Palm down and fingers back for the flexors, then palm up and fingers down for the extensors. Gripping a gi, hanging, and heavy carries all load the forearms hard, and almost nobody gives them anything back.", videoUrl: "" },
+    { id: uid(), name: "Neck Mobility Flow", seconds: 60, type: "stretch", detail: "Slow flexion, extension, and side to side — no forcing, stay pain-free the whole way. If anything pinches or refers down an arm, stop there.", videoUrl: "" },
+    { id: uid(), name: "Closing Body Scan", seconds: 60, type: "breath", detail: "Keep the same five-in, five-out rhythm and run your attention from head to feet. Note anything that felt tight or off today — that's information worth bringing to your next check-in.", videoUrl: "" },
   ];
 }
 
@@ -2926,7 +2939,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         )}
       </div>
 
-      <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — breathwork plus full-body stretch flow`}>
+      <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
         <button className="btn-ghost wide" onClick={onStartMobility}>Start recovery session</button>
       </Card>
@@ -3497,7 +3510,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
 
       {/* Cool-Down Mobility */}
       <div className="log-exercise">
-        <SectionHeader title="Cool-Down Mobility" subtitle="Breathwork plus full-body stretch flow" complete={!!complete.cooldown} onToggleComplete={() => toggleComplete("cooldown")} expanded={!!expanded.cooldown} onToggleExpand={() => toggleExpand("cooldown")} />
+        <SectionHeader title="Cool-Down Mobility" subtitle="Slow breathing first, then range-of-motion work" complete={!!complete.cooldown} onToggleComplete={() => toggleComplete("cooldown")} expanded={!!expanded.cooldown} onToggleExpand={() => toggleExpand("cooldown")} />
         {expanded.cooldown && (
           <div style={{ marginTop: 10 }}>
             <p className="muted" style={{ marginBottom: 10 }}>Best done right after training, or later if you're pressed for time — mark it complete once you've done it.</p>
