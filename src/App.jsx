@@ -1704,6 +1704,31 @@ const TABS = [
   { id: "prs", label: "Records", icon: Trophy },
 ];
 
+// A render error used to unmount the whole app and leave a blank screen, which
+// is a miserable thing to happen to someone mid-session. This catches it and
+// offers a way out without losing anything already saved.
+class AppErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { try { console.error("Strength Matrix error:", error); } catch {} }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="app-shell" data-theme="dark">
+        <div className="pad" style={{ paddingTop: 60 }}>
+          <Card title="Something went wrong">
+            <p className="muted" style={{ marginBottom: 14 }}>
+              The app hit an unexpected error and stopped. Everything you'd already saved is safe — your logs, records and check-ins live on the server, not in this screen. Reloading almost always fixes it.
+            </p>
+            <button className="btn-primary wide" onClick={() => window.location.reload()}>Reload the app</button>
+          </Card>
+        </div>
+        <GlobalStyle />
+      </div>
+    );
+  }
+}
+
 function MainApp({ userId, onSignOut }) {
   const isCoach = !!COACH_USER_ID && userId === COACH_USER_ID;
   const [clients, setClients] = useState([]);
@@ -1808,7 +1833,7 @@ function MainApp({ userId, onSignOut }) {
     })();
   }, [activeId, userId]);
 
-  const persistClient = useCallback(async (updated) => { setClientState(updated); await setClient(userId, updated.id, updated); }, [userId]);
+  const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
 
   useEffect(() => { if (client && !client.hasSeenTutorial) setShowTutorial(true); }, [client?.id]); // eslint-disable-line
   const changeTheme = async (t) => { setTheme(t); await setSettings(userId, { theme: t }); };
@@ -1903,7 +1928,7 @@ function MainApp({ userId, onSignOut }) {
           onUpdateProgram={(newProgram) => persistClient({ ...client, program: newProgram })}
           onSave={async (session) => {
             const updated = { ...client, logs: [...client.logs, session], sessionsCompleted: (client.sessionsCompleted || 0) + 1 };
-            await persistClient(updated);
+            return persistClient(updated);
           }}
           onRecordPR={async (entry) => {
             const newRecord = { id: uid(), date: todayStr(), ...entry };
@@ -2857,6 +2882,14 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const daysInactive = useMemo(() => daysSinceLastActivity(client), [client]);
   const nudgeMessage = hasEverTrained ? reengagementMessage(daysInactive) : null;
 
+  // These must stay above the completion branch below: hook order and count
+  // have to be identical on every render of this component.
+  const pos = positionAtIndex(client.program, viewIndex);
+  const isCurrent = viewIndex === (client.sessionsCompleted || 0);
+  const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
+  const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises]);
+  const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
+
   if (actualComplete) {
     return (
       <div className="pad">
@@ -2874,12 +2907,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </div>
     );
   }
-
-  const pos = positionAtIndex(client.program, viewIndex);
-  const isCurrent = viewIndex === (client.sessionsCompleted || 0);
-  const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
-  const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises]);
-  const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
 
   return (
     <div className="pad">
@@ -3277,6 +3304,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   const [notes, setNotes] = useState("");
   const [rpe, setRpe] = useState(7);
   const [finished, setFinished] = useState(false);
+  const [savingSession, setSavingSession] = useState(false);
   const [summary, setSummary] = useState(null);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [prHint, setPrHint] = useState(null);
@@ -3391,7 +3419,8 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     onUpdateProgram(newProgram);
   };
 
-  const finishWorkout = () => {
+  const finishWorkout = async () => {
+    if (savingSession) return;
     let totalVolume = 0; const prNameSet = new Set(); const allExercises = [];
     resolvedSections.forEach((sec) => {
       entriesBySection[sec.id].forEach((en) => {
@@ -3417,9 +3446,15 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     const priorTotal = client.logs.reduce((s, l) => s + (l.totalVolume || 0), 0);
     const newTotal = priorTotal + Math.round(totalVolume);
     const newMilestones = LIFT_MILESTONES.filter((m) => m.weight > priorTotal && m.weight <= newTotal);
+    // Only claim the session is saved once the write has actually landed. If it
+    // failed, stay on the logging screen with every set still on screen — kvSet
+    // has already shown a toast with a retry.
+    setSavingSession(true);
+    const result = await onSave(session);
+    setSavingSession(false);
+    if (result && result.ok === false) return;
     setSummary({ totalVolume: session.totalVolume, prNames: Array.from(prNameSet), avgRPE: rpe, isFinalSession, newMilestones });
     setFinished(true);
-    onSave(session);
   };
 
   if (finished && summary) {
@@ -3624,7 +3659,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                           ) : (
                             <span aria-hidden="true" />
                           )}
-                          <input type="text" inputMode="numeric" placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
+                          <input type="text" inputMode="numeric" aria-label={`${exerciseUnitLabel(displayName, en.target.reps)} completed`} placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
                           <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} readOnly aria-label="Effort for this set, already set for you" />
                           <button className={`set-pr ${setFlagged ? "flagged" : ""}`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); setTimeout(() => setPrHint(null), 3000); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
                         </div>
@@ -3652,7 +3687,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
 
       <div className="log-exercise"><div className="log-exercise-head"><div className="log-exercise-name">Session Rate of Perceived Exertion</div></div><SliderRow label="Overall difficulty" value={rpe} max={10} onChange={setRpe} /></div>
       <div className="log-exercise"><div className="log-exercise-head"><div className="log-exercise-name">Notes</div></div><textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it felt, anything to flag…" /></div>
-      <button className="btn-primary wide" style={{ margin: "16px 0 40px" }} onClick={finishWorkout}>Finish & save day</button>
+      <button className="btn-primary wide" style={{ margin: "16px 0 40px" }} onClick={finishWorkout} disabled={savingSession}>{savingSession ? "Saving…" : "Finish & save day"}</button>
     </ModalShell>
   );
 }
@@ -4693,12 +4728,12 @@ function GlobalStyle() {
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
       .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00a88f; --accent-text:#ffffff; --cta:#00a88f; --cta2:#00a88f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --neon-gold:#c9b400; }
+      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --neon-gold:#c9b400; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
       * { box-sizing: border-box; }
-      .scroll-area { flex: 1; overflow-y: auto; padding-bottom: 90px; }
+      .scroll-area { flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
       .pad { padding: 16px; }
       .brand-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 26px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 4px; line-height: 1.05; }
       .logo-block { position: relative; overflow: hidden; padding: 34px 18px; margin-bottom: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); }
@@ -4731,7 +4766,7 @@ function GlobalStyle() {
       .milestone-name { font-weight: 600; font-size: 13.5px; }
       .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
       .icon-btn.small { width: 34px; height: 34px; }
-      .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; }
+      .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .nav-btn { flex: 1; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 10px; font-size: 12px; cursor: pointer; position: relative; }
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
@@ -5190,5 +5225,9 @@ export default function AppGate() {
   if (session === undefined) return null;
   if (recovery) return <ResetPasswordScreen onDone={() => setRecovery(false)} />;
   if (!session) return <AuthScreen />;
-  return <MainApp userId={session.user.id} onSignOut={() => supabase.auth.signOut()} />;
+  return (
+    <AppErrorBoundary>
+      <MainApp userId={session.user.id} onSignOut={() => supabase.auth.signOut()} />
+    </AppErrorBoundary>
+  );
 }
