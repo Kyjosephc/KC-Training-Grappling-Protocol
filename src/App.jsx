@@ -4152,6 +4152,26 @@ function LabeledInput({ label, value, onChange, type = "text", step, inputMode, 
 
 /* ============================== HISTORY TAB ============================== */
 
+function summarizeSets(sets, exerciseName) {
+  const unit = exerciseUnit(exerciseName);
+  const label = (n) => (unit === "seconds" ? "sec" : unit === "minutes" ? "min" : unit === "meters" ? "m" : String(n).trim() === "1" ? "rep" : "reps");
+  const weighted = needsWeight(exerciseName);
+  const tokens = (sets || []).map((s) => {
+    const reps = String(s.reps === undefined || s.reps === null ? "" : s.reps).trim() || "0";
+    const w = Number(s.weight) || 0;
+    const head = weighted && w > 0 ? `${w} lb × ${reps} ${label(reps)}` : `${reps} ${label(reps)}`;
+    const hasEffort = s.rir !== "" && s.rir !== undefined && s.rir !== null;
+    return head + (hasEffort ? ` @ effort ${rpeFromRir(s.rir)}` : "");
+  });
+  const groups = [];
+  tokens.forEach((t) => {
+    const last = groups[groups.length - 1];
+    if (last && last.text === t) last.count += 1;
+    else groups.push({ text: t, count: 1 });
+  });
+  return groups.map((g) => (g.count > 1 ? `${g.count} sets of ${g.text}` : g.text)).join(",  ");
+}
+
 function EditableLogBody({ log, client, onPersist }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -4213,7 +4233,7 @@ function EditableLogBody({ log, client, onPersist }) {
       {log.exercises.map((e) => (
         <div key={e.exerciseId} className="history-ex">
           <div className="history-ex-name">{e.name}</div>
-          <div className="muted" style={{ fontSize: 13 }}>{e.sets.map((s) => `${s.weight || 0} pounds × ${s.reps || 0} reps${s.rir !== "" ? `, Rate of Perceived Exertion ${rpeFromRir(s.rir)}` : ""}`).join("  —  ")}</div>
+          <div className="muted" style={{ fontSize: 13 }}>{summarizeSets(e.sets, e.name)}</div>
         </div>
       ))}
       {log.notes && <div className="history-notes">"{log.notes}"</div>}
@@ -4228,6 +4248,7 @@ function HistoryTab({ client, onPersist }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState(null);
   const [visibleCount, setVisibleCount] = useState(20);
+  const [search, setSearch] = useState("");
   const logs = [...client.logs].reverse();
   const mobilityLogs = [...(client.mobilityLogs || [])].reverse();
 
@@ -4250,6 +4271,14 @@ function HistoryTab({ client, onPersist }) {
     (client.mobilityLogs || []).forEach((m) => { (map[m.date] = map[m.date] || []).push(m); });
     return map;
   }, [client.mobilityLogs]);
+
+  // Match on exercise name so someone can find every session they squatted in
+  // without scrolling a year of cards.
+  const shownLogs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return logs;
+    return logs.filter((l) => (l.exercises || []).some((e) => (e.name || "").toLowerCase().includes(q)));
+  }, [logs, search]);
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -4329,9 +4358,28 @@ function HistoryTab({ client, onPersist }) {
       )}
 
       <div className="program-title" style={{ fontSize: 18, marginTop: 24, marginBottom: 8 }}>Full History</div>
-      {logs.length === 0 ? <EmptyState icon={HistoryIcon} text="Nothing logged yet — head to the Today tab and finish your first session. It'll show up here the moment you do." /> : (
+      {logs.length > 0 && (
+        <input
+          className="edit-input"
+          style={{ width: "100%", marginBottom: 10 }}
+          type="search"
+          inputMode="search"
+          placeholder="Search by exercise — try 'squat'"
+          aria-label="Search your history by exercise name"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setVisibleCount(20); }}
+        />
+      )}
+      {logs.length === 0 ? <EmptyState icon={HistoryIcon} text="Nothing logged yet — head to the Today tab and finish your first session. It'll show up here the moment you do." /> : shownLogs.length === 0 ? (
+        <EmptyState icon={HistoryIcon} text={`No sessions match "${search}". Try a shorter word — "squat" rather than "box squat".`} />
+      ) : (
         <>
-          {logs.slice(0, visibleCount).map((log) => (
+          {search.trim() && (
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>
+              {shownLogs.length} of {logs.length} session{logs.length === 1 ? "" : "s"} include an exercise matching "{search.trim()}".
+            </p>
+          )}
+          {shownLogs.slice(0, visibleCount).map((log) => (
             <div key={log.id} className="history-card">
               <button className="history-head" onClick={() => setOpenId(openId === log.id ? null : log.id)}>
                 <div><div className="history-date">{fmtDate(log.date)}</div><div className="muted">Week {log.weekNumber} — Day {log.dayLabel}</div></div>
@@ -4345,9 +4393,9 @@ function HistoryTab({ client, onPersist }) {
               )}
             </div>
           ))}
-          {logs.length > visibleCount && (
+          {shownLogs.length > visibleCount && (
             <button className="btn-ghost wide" onClick={() => setVisibleCount((c) => c + 20)}>
-              Load 20 More ({logs.length - visibleCount} remaining)
+              Load 20 More ({shownLogs.length - visibleCount} remaining)
             </button>
           )}
         </>
