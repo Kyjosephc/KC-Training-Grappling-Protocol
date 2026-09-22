@@ -31,6 +31,7 @@ const PROMO_CODES = { INFINITI: 5 };
 
 const CLIENT_LIST_KEY = "sc-app:client-list";
 const SETTINGS_KEY = "sc-app:settings";
+const REVIEWED_SIGNUPS_KEY = "sc-app:reviewed-signups";
 const clientKey = (id) => `sc-app:client:${id}`;
 
 /* ============================== SYNC STATUS / ERROR TOASTS ============================== */
@@ -1721,6 +1722,23 @@ function MainApp({ userId, onSignOut }) {
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [theme, setTheme] = useState("dark");
+  const [newSignupCount, setNewSignupCount] = useState(0);
+
+  // Anyone who registers their own account is auto-linked to the coach at
+  // sign-up. Any link the coach hasn't marked reviewed is a new athlete still
+  // waiting on a paid-or-grandfathered decision.
+  const refreshNewSignups = useCallback(async () => {
+    if (!isCoach || !supabase || !userId) { setNewSignupCount(0); return; }
+    try {
+      const { data: links } = await supabase.from("client_links").select("client_user_id").eq("coach_user_id", userId);
+      const reviewed = (await kvGet(userId, REVIEWED_SIGNUPS_KEY)) || [];
+      setNewSignupCount((links || []).filter((l) => !reviewed.includes(l.client_user_id)).length);
+    } catch {
+      setNewSignupCount(0);
+    }
+  }, [isCoach, userId]);
+
+  useEffect(() => { refreshNewSignups(); }, [refreshNewSignups]);
 
   useEffect(() => {
     (async () => {
@@ -1847,7 +1865,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} isCoach={isCoach} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
+      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -1868,7 +1886,7 @@ function MainApp({ userId, onSignOut }) {
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
       {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
-      {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onClose={() => setShowCoachDashboard(false)} />}
+      {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
@@ -2052,7 +2070,7 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ client, isCoach, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
+function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
       <div>
@@ -2069,7 +2087,13 @@ function TopBar({ client, isCoach, onOpenClients, onOpenSettings, onOpenCalculat
       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
-          {isCoach && <button className="icon-btn" onClick={onOpenCoachDashboard} aria-label="Coach Dashboard"><LayoutDashboard size={20} /></button>}
+          {isCoach && (
+            <button className="icon-btn icon-btn-badged" onClick={onOpenCoachDashboard}
+              aria-label={newSignupCount > 0 ? `Coach Dashboard — ${newSignupCount} new sign-up${newSignupCount === 1 ? "" : "s"} to review` : "Coach Dashboard"}>
+              <LayoutDashboard size={20} />
+              {newSignupCount > 0 && <span className="icon-badge">{newSignupCount > 9 ? "9+" : newSignupCount}</span>}
+            </button>
+          )}
           <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
           <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
         </div>
@@ -2092,6 +2116,7 @@ const TUTORIAL_PAGES = [
   { title: "One-Rep Max Calculator", body: "Tap the calculator icon next to the help button at the top of the screen any time. Enter a weight you lifted, how many reps you got with it, and your reps in reserve, and it estimates your true one-rep max and shows you exact weights for every percentage of it — handy for planning a lift without doing the math yourself." },
   { title: "Deload Week", body: "Every fourth week, the program automatically gets lighter on purpose — lower volume, no true max attempts. It's built-in recovery, not a step backward, and it happens whether you ask for it or not." },
   { title: "Daily Readiness Check-In", body: "A few quick questions each day about sleep, soreness, and energy. Based on your answers, the app automatically adjusts that day's workout — trimming volume or dropping entire sections when you actually need it." },
+  { title: "Put It On Your Home Screen", body: "Do this once and the app sits on your home screen with its own icon, opening full screen with no browser bar — the same as any app you'd download. On iPhone, open this page in Safari, tap the Share button at the bottom, scroll down and tap Add to Home Screen. On Android, tap the three dots at the top right of Chrome and tap Add to Home screen. Step-by-step instructions for every phone are in Settings under Put This App On Your Home Screen." },
 ];
 
 const TERMS_SECTIONS = [
@@ -2329,6 +2354,58 @@ function processProfilePictureFile(file) {
     reader.readAsDataURL(file);
   });
 }
+// Clients are far more likely to actually train if the app is one tap away on
+// the home screen rather than a bookmark they have to go looking for. The app
+// already ships a web manifest and icons, so once added it opens full screen
+// with no browser chrome, exactly like a downloaded app.
+function InstallGuide() {
+  const step = (n, text) => (
+    <div key={n} style={{ display: "flex", gap: 10, marginBottom: 6 }}>
+      <span style={{ color: "var(--accent)", fontWeight: 800, flexShrink: 0 }}>{n}</span>
+      <span>{text}</span>
+    </div>
+  );
+  return (
+    <>
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Put This App On Your Home Screen</div>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Takes about fifteen seconds and you only do it once. Afterwards the app has its own icon on your home screen and opens full screen with no browser bar — the same as any app you would download from a store. Nothing to install, and it takes no real space on your phone.
+      </p>
+
+      <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 10 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>iPhone and iPad</div>
+        {step(1, <>Open this page in <strong>Safari</strong>. This part matters — adding it from Chrome on an iPhone does not work the same way.</>)}
+        {step(2, <>Tap the <strong>Share</strong> button at the bottom of the screen — the square with an arrow pointing up out of it.</>)}
+        {step(3, <>Scroll down the list of options and tap <strong>Add to Home Screen</strong>.</>)}
+        {step(4, <>Tap <strong>Add</strong> in the top right corner. The icon appears on your home screen.</>)}
+      </div>
+
+      <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 10 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Google Pixel and most Android phones (Chrome)</div>
+        {step(1, <>Open this page in <strong>Chrome</strong>.</>)}
+        {step(2, <>Tap the <strong>three dots</strong> in the top right corner.</>)}
+        {step(3, <>Tap <strong>Add to Home screen</strong>. On some phones this says <strong>Install app</strong> instead — either one is correct.</>)}
+        {step(4, <>Tap <strong>Install</strong> or <strong>Add</strong> to confirm.</>)}
+      </div>
+
+      <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 10 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Samsung phones (Samsung Internet)</div>
+        {step(1, <>Open this page in <strong>Samsung Internet</strong>.</>)}
+        {step(2, <>Tap the <strong>three lines</strong> at the bottom right corner.</>)}
+        {step(3, <>Tap <strong>Add page to</strong>, then choose <strong>Home screen</strong>.</>)}
+        {step(4, <>Tap <strong>Add</strong> to confirm.</>)}
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+          Samsung phones usually have both Chrome and Samsung Internet installed. Either browser works — use whichever you normally browse with, and follow that section.
+        </div>
+      </div>
+
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Signed in already? Staying signed in is the whole point — once it is on your home screen you open it straight to today's session without logging in again.
+      </p>
+    </>
+  );
+}
+
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
@@ -2504,6 +2581,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </button>
       {client?.veteranMode && <div className="adjust-box" style={{ marginTop: 8, borderColor: "var(--green)" }}>Veteran Deload is on — your next deload week will be deeper than standard.</div>}
 
+      <InstallGuide />
+
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Export Your Data</div>
       <p className="muted" style={{ marginBottom: 10 }}>Download every workout, bodyweight entry, readiness check-in, and Personal Record you've ever logged as a single file — a personal backup that's yours to keep, independent of this app.</p>
       <button className="btn-ghost wide" onClick={() => {
@@ -2571,9 +2650,10 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
 /* ============================== COACH DASHBOARD ============================== */
 
-function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose }) {
+function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsReviewed, onClose }) {
   const [records, setRecords] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [reviewed, setReviewed] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2599,10 +2679,21 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
           }
         } catch {}
       }
-      if (!cancelled) setRecords([...ownList, ...linkedList]);
+      const rev = (await kvGet(userId, REVIEWED_SIGNUPS_KEY)) || [];
+      if (!cancelled) { setRecords([...ownList, ...linkedList]); setReviewed(rev); }
     })();
     return () => { cancelled = true; };
   }, [clients, userId]);
+
+  // Marking a sign-up reviewed is what clears it off the badge. Deciding on
+  // payment counts as reviewing them, so that happens automatically below.
+  const markReviewed = async (ownerId) => {
+    if (!ownerId || ownerId === userId) return;
+    const next = Array.from(new Set([...(reviewed || []), ownerId]));
+    setReviewed(next);
+    await kvSet(userId, REVIEWED_SIGNUPS_KEY, next);
+    if (onSignupsReviewed) onSignupsReviewed();
+  };
 
   const togglePaid = async (id, full, ownerId) => {
     if (!full) return;
@@ -2614,10 +2705,16 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
       await setClient(ownerId, id, updated);
     }
     setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId ? { ...r, full: updated } : r)));
+    await markReviewed(ownerId);
     setBusyId(null);
   };
 
   const paidCount = records ? records.filter((r) => r.full?.paid).length : 0;
+  // Only self-registered athletes are sign-ups; profiles the coach made
+  // themselves were never waiting on a decision.
+  const newSignups = (records && reviewed)
+    ? records.filter((r) => r.ownerId !== userId && !reviewed.includes(r.ownerId))
+    : [];
 
   return (
     <ModalShell onClose={onClose} title="Coach Dashboard">
@@ -2627,6 +2724,40 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onClose })
         <EmptyState text="No athletes yet — add one from the Athletes/Clients screen." />
       ) : (
         <>
+          {newSignups.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div className="log-exercise-name" style={{ marginBottom: 6 }}>
+                New — needs review ({newSignups.length})
+              </div>
+              <p className="muted" style={{ marginBottom: 10 }}>
+                {newSignups.length === 1 ? "This athlete has" : "These athletes have"} signed up since you last checked. Marking someone paid grandfathers them in for good — they never see a payment prompt again. Either choice clears them off this list.
+              </p>
+              {newSignups.map((r) => (
+                <div key={`${r.ownerId}-${r.id || "pending"}`} className="signup-review-card">
+                  <div style={{ fontWeight: 700, marginBottom: 2 }}>{r.name}</div>
+                  <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                    {r.full
+                      ? `Signed up — currently marked ${r.full.paid ? "paid" : "unpaid"}`
+                      : "Signed up but hasn't finished setting up their profile yet"}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {r.full && !r.full.paid && (
+                      <button className="btn-primary" style={{ flex: "1 1 160px", padding: "8px 12px", fontSize: 13 }}
+                        disabled={busyId === r.id}
+                        onClick={() => togglePaid(r.id, r.full, r.ownerId)}>
+                        {busyId === r.id ? "Saving…" : "Mark paid — grandfather in"}
+                      </button>
+                    )}
+                    <button className="btn-ghost" style={{ flex: "1 1 160px", marginTop: 0, justifyContent: "center" }}
+                      onClick={() => markReviewed(r.ownerId)}>
+                      {r.full && r.full.paid ? "Got it" : "Leave unpaid for now"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid and grandfathered in for good.</p>
           {records.map((r) => {
             const full = r.full;
@@ -4559,7 +4690,7 @@ function ModalShell({ title, children, onClose, fullscreen, headerRight, headerL
 function GlobalStyle() {
   return (
     <style>{`
-      .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative;
+      .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
       .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --neon-gold:#f5e000; }
       .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00a88f; --accent-text:#ffffff; --cta:#00a88f; --cta2:#00a88f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --neon-gold:#c9b400; }
@@ -4577,7 +4708,7 @@ function GlobalStyle() {
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.active { border-color: var(--accent); }
       .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-      .topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+      .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
       .topbar-avatar-btn { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto; flex-shrink: 0; }
       .topbar-avatar-img { width: 100%; height: 100%; object-fit: cover; }
       .topbar-avatar-fallback { font-size: 16px; font-weight: 700; color: var(--text-dim); }
@@ -4586,7 +4717,7 @@ function GlobalStyle() {
       .settings-avatar-preview span { font-size: 24px; font-weight: 700; color: var(--text-dim); }
       .topbar-brand { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; color: var(--text); line-height: 1.1; max-width: 220px; }
       .topbar-name-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
-      .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); }
+      .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); display: block; max-width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
       .dash-stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
       .dash-stat.wide { grid-column: 1 / -1; }
@@ -4611,7 +4742,7 @@ function GlobalStyle() {
       .hero-nav-btn:disabled { opacity: 0.35; }
       .hero-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
       .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
-      .hero-select { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
+      .hero-select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
       .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
       .hero-quote { font-size: 13px; color: var(--accent); font-style: italic; line-height: 1.55; padding: 0; margin-bottom: 4px; }
@@ -4635,6 +4766,9 @@ function GlobalStyle() {
       .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text-dim); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
+      .icon-btn-badged { position: relative; overflow: visible; }
+      .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
+      .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
       .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .pill-paid { background: var(--green); }
       .pill-unpaid { background: var(--amber); }
