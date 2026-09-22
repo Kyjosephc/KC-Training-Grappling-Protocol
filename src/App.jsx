@@ -527,6 +527,14 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
 /* ============================== SEED PROGRAM: CONJUGATE BRAZILIAN JIU-JITSU / WRESTLING ============================== */
 
 const VIDEO_LIBRARY = {
+  "bench press": "https://www.youtube.com/shorts/hWbUlkb5Ms4",
+  "split stance trap bar deadlift": "https://www.youtube.com/shorts/7mB2Ct6WRTU",
+  "weighted neck bridge": "https://www.youtube.com/shorts/_M6zOSJrZNo",
+  "dumbbell glute bridge floor press": "https://www.youtube.com/shorts/UABeQA4iIGM",
+  "single leg glute bridge dumbbell floor press": "https://www.youtube.com/shorts/7ABRskqokUE",
+  "single leg glute bridge": "https://www.youtube.com/shorts/ZC9NpfMU5AI",
+  "bent over single arm dumbbell row": "https://www.youtube.com/shorts/rO4Q7nW0ygo",
+  "pallof press": "https://www.youtube.com/shorts/5aZ0IhJS8O8",
   "world's greatest stretch": "https://www.youtube.com/watch?v=-CiWQ2IvY34",
   "leg swings": "https://www.youtube.com/shorts/wF10oYsLUw0",
   "hip circles": "https://www.youtube.com/shorts/P8P1E_IosqA",
