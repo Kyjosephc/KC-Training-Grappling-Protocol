@@ -1625,7 +1625,7 @@ function classifyReadiness(r) {
 const READINESS_COPY = {
   GREEN: { detail: "Complete today's session as written.", color: "var(--green)" },
   YELLOW: { detail: "Session automatically adjusted: one extra rep in reserve on strength and power, durability and arm/core work trimmed.", color: "var(--amber)" },
-  RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--accent)" },
+  RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--red)" },
 };
 
 /* ============================== APP SHELL ============================== */
@@ -2838,7 +2838,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           <div className="section-preview-list">
             {adjustment.sections.filter((sec) => sec.exercises.length > 0).map((sec) => (
               <div key={sec.id}>
-                <div className="section-subheading" style={{ margin: "10px 0 4px" }}>{SECTION_LABELS[sec.type] || sec.name}{sec.skipped ? " (skipped today)" : ""}</div>
+                <div className="section-subheading" style={{ margin: "10px 0 4px" }}>{sec.name || SECTION_LABELS[sec.type]}{sec.skipped ? " (skipped today)" : ""}</div>
                 {sec.exercises.map((e, i) => (
                   <div key={e.id || i} className="section-preview-ex-row">{e.name}</div>
                 ))}
@@ -3058,6 +3058,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   const perWeek = client.program.sessionsPerWeek || 3;
   const weekNumber = Math.min(Math.ceil(((client.sessionsCompleted || 0) + 1) / perWeek), Math.max(...client.program.phases.map((p) => p.weekEnd)));
   const readinessToday = client.readiness[todayStr()];
+  const [exCollapseOverride, setExCollapseOverride] = useState({});
+  const toggleExerciseOpen = (exerciseId, currentlyOpen) =>
+    setExCollapseOverride((prev) => ({ ...prev, [exerciseId]: !currentlyOpen }));
 
   const rawResolvedSections = useMemo(() => resolveDaySections(day, weekNumber, client.program, phase, false, resolveOptsFor(client)), [day, weekNumber, client.program, phase, client.blockNumber, client.excludedExercises]);
   const { sections: resolvedSections, adjustedNote } = useMemo(() => adjustSectionsForReadiness(rawResolvedSections, readinessToday), [rawResolvedSections, readinessToday]);
@@ -3289,6 +3292,10 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       {day.intent && <div className="intent-box" style={{ marginBottom: 12 }}>{day.intent}</div>}
       {adjustedNote && <div className="adjust-box" style={{ marginBottom: 12 }}>{adjustedNote}</div>}
 
+      <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
+        <strong>Effort</strong> is your Rate of Perceived Exertion — how hard a set felt, out of 10. Where it's greyed out it's already set for you, so there's nothing to fill in.
+      </div>
+
       {/* Warm-Up */}
       <div className="log-exercise">
         <SectionHeader title={`Warm-Up (${warmupCheckedCount} of ${totalWarmupItems})`} complete={!!complete.warmup} onToggleComplete={() => toggleComplete("warmup")} expanded={!!expanded.warmup} onToggleExpand={() => toggleExpand("warmup")} />
@@ -3320,6 +3327,10 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
             const inferredPoolKey = en.target.rotatingPool || (sec.type === "strength" && exIdx === 0 ? (day.label === "1" ? "meLowerPool" : day.label === "2" ? "meUpperPool" : null) : null);
             const poolOptions = inferredPoolKey ? (client.program.conjugate?.[inferredPoolKey] || []) : [];
             const displayName = en.name || poolOptions[0]?.name || "Exercise unavailable";
+            const filledSetCount = en.sets.filter((s) => (needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "")).length;
+            const allSetsFilled = en.sets.length > 0 && filledSetCount === en.sets.length;
+            const exOpen = exCollapseOverride[en.exerciseId] !== undefined ? exCollapseOverride[en.exerciseId] : !allSetsFilled;
+            const collapsedSummary = exOpen ? "" : loggedSummaryFor(en, displayName);
             return (
               <div className="section-ex-block" key={en.exerciseId}>
                 <div className="log-exercise-target-wrap">
@@ -3340,9 +3351,12 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                         {displayName}
                         {inferredPoolKey && <span className="recommended-tag">Recommended</span>}
                         <button className="icon-btn-sm" onClick={() => { setEditingName(en.exerciseId); setNameDraft(displayName); }} title="Rename this exercise" aria-label="Rename this exercise"><Pencil size={13} /></button>
+                        <button className="icon-btn-sm" onClick={() => toggleExerciseOpen(en.exerciseId, exOpen)} aria-expanded={exOpen} title={exOpen ? "Collapse this exercise" : "Expand this exercise"} aria-label={exOpen ? "Collapse this exercise" : "Expand this exercise"}><ChevronRight size={14} className={exOpen ? "chev-open" : ""} /></button>
                       </div>
                     )}
                   </div>
+                  {collapsedSummary && <div className="last-logged" style={{ marginTop: 2 }}>{collapsedSummary}</div>}
+                  {exOpen && (<>
                   <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
                   {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
@@ -3358,7 +3372,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   )}
                   {poolOptions.length > 0 && (
                     <div className="sub-row">
-                      <div className="muted" style={{ fontSize: 12, width: "100%" }}>Bothered by this one? Tap another exercise to swap it in:</div>
+                      <div className="muted" style={{ fontSize: 13, width: "100%" }}>Bothered by this one? Tap another exercise to swap it in:</div>
                       <div className="sub-pill-row">
                         {poolOptions.map((p) => (
                           <button key={p.name} className={`sub-pill ${p.name === displayName ? "active" : ""}`} onClick={() => substituteExercise(sec.id, exIdx, p.name)}>{p.name}</button>
@@ -3366,22 +3380,48 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                       </div>
                     </div>
                   )}
+                  </>)}
                 </div>
-                <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Rate of Perceived Exertion (fixed)</span><span>Personal Record</span></div>
+                {exOpen && (<>
+                <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Effort</span><span>Record</span></div>
                 {en.target.perSetTargets && (
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
+                  <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
                 {(() => {
                   const isMainLift = sec.type === "strength" || sec.type === "power";
-                  const priorBestForPct = isMainLift ? lastAllTimeBest(client, displayName) : null;
+                  const loggedSessions = isMainLift ? sessionsLoggedFor(client, displayName) : 0;
+                  // Hold the suggestion back until a second session corroborates it.
+                  const priorBestForPct = loggedSessions >= 2 ? lastAllTimeBest(client, displayName) : null;
+                  const pctForSet = (i) => {
+                    if (i < 0 || i >= en.sets.length) return null;
+                    const ps = en.target.perSetTargets ? en.target.perSetTargets[i] : null;
+                    return ps?.pct1rm ?? en.target.pct1rmFlat ?? null;
+                  };
                   return en.sets.map((s, setIdx) => {
                     const perSet = en.target.perSetTargets ? en.target.perSetTargets[setIdx] : null;
-                    const effectivePct = perSet?.pct1rm ?? en.target.pct1rmFlat;
+                    const effectivePct = pctForSet(setIdx);
                     const setFlagged = !!manualPRs[`${en.exerciseId}:${setIdx}`];
                     const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
                     const targetWeight = effectivePct && priorBestForPct ? Math.round((priorBestForPct.e1rm * effectivePct) / 100) : null;
+                    // Consecutive sets at the same percentage share one note above
+                    // them, rather than repeating an identical line under each.
+                    const startsRun = !!effectivePct && (setIdx === 0 || pctForSet(setIdx - 1) !== effectivePct);
+                    let runEnd = setIdx;
+                    while (runEnd + 1 < en.sets.length && pctForSet(runEnd + 1) === effectivePct) runEnd++;
                     return (
                       <React.Fragment key={setIdx}>
+                        {startsRun && (
+                          <div className="pct-1rm-row">
+                            {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}: {effectivePct}% of your One-Rep Max
+                            {targetWeight
+                              ? ` \u2014 try about ${targetWeight} lb, based on your heaviest logged set so far`
+                              : loggedSessions === 0
+                                ? " \u2014 once you log this exercise, future sessions will suggest a weight"
+                                : loggedSessions === 1
+                                  ? " \u2014 log this once more and future sessions will suggest a weight"
+                                  : ""}
+                          </div>
+                        )}
                         <div className="set-grid-row">
                           <span className="set-num">{setIdx + 1}{perSet?.note ? <span className="set-note">{perSet.note}</span> : null}</span>
                           {needsWeight(displayName) ? (
@@ -3389,24 +3429,15 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                           ) : (
                             <span aria-hidden="true" />
                           )}
-                          <input type="text" inputMode="text" placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
-                          <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} disabled aria-label="Rate of Perceived Exertion, calculated from reps in reserve" />
+                          <input type="text" inputMode="numeric" placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
+                          <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} readOnly aria-label="Effort for this set, already set for you" />
                           <button className={`set-pr ${setFlagged ? "flagged" : ""}`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); setTimeout(() => setPrHint(null), 3000); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
                         </div>
-                        {effectivePct && (
-                          <div className="pct-1rm-row">
-                            Set {setIdx + 1}: {effectivePct}% of your One-Rep Max
-                            {targetWeight
-                              ? ` — try about ${targetWeight} lb`
-                              : setIdx === 0
-                                ? " — once you log this exercise once, future sessions will suggest an exact weight"
-                                : ""}
-                          </div>
-                        )}
                       </React.Fragment>
                     );
                   });
                 })()}
+                </>)}
               </div>
             );
           })}
@@ -3429,6 +3460,34 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       <button className="btn-primary wide" style={{ margin: "16px 0 40px" }} onClick={finishWorkout}>Finish & save day</button>
     </ModalShell>
   );
+}
+// The one-line recap a finished exercise collapses down to, so the exercise
+// being worked on stays on screen instead of being pushed below completed ones.
+function loggedSummaryFor(entry, name) {
+  const sets = entry.sets || [];
+  const weighted = needsWeight(name);
+  const filled = sets.filter((s) => (weighted ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== ""));
+  if (!filled.length) return "";
+  const count = `${filled.length} of ${sets.length} sets logged`;
+  if (weighted) {
+    const best = bestSetOf(sets);
+    return best ? `${count} \u2014 heaviest ${best.weight} lb \u00d7 ${best.reps}` : count;
+  }
+  const unit = exerciseUnit(name, entry.target ? entry.target.reps : "");
+  return `${count} \u2014 ${filled.map((s) => String(s.reps).trim()).join(", ")} ${unit}`;
+}
+// How many separate sessions have a usable logged set for this exercise.
+// A percentage-based weight suggestion is only as good as the history behind
+// it, and a single light feeling-it-out set produces suggestions that look
+// broken ("try about 14 lb" on a squat) and then persist for weeks, since the
+// estimate is taken from the heaviest set ever logged.
+function sessionsLoggedFor(client, exerciseName) {
+  let sessions = 0;
+  for (const log of client.logs || []) {
+    const en = log.exercises.find((e) => e.name === exerciseName);
+    if (en && bestSetOf(en.sets)) sessions++;
+  }
+  return sessions;
 }
 function lastAllTimeBest(client, exerciseName) {
   let best = null;
@@ -3591,7 +3650,7 @@ function ScheduleTab({ client }) {
                       {resolvedSections.map((sec) => (
                         sec.exercises.length > 0 && (
                           <div key={sec.id} style={{ marginBottom: 6 }}>
-                            <div className="section-subheading" style={{ margin: "4px 0 2px" }}>{SECTION_LABELS[sec.type] || sec.name}</div>
+                            <div className="section-subheading" style={{ margin: "4px 0 2px" }}>{sec.name || SECTION_LABELS[sec.type]}</div>
                             {sec.exercises.map((e, i) => {
                               const fallbackPoolKey = i === 0 && (sec.type === "strength" || sec.type === "power") ? (day.label === "1" ? "meLowerPool" : day.label === "2" ? "meUpperPool" : null) : null;
                               const displayName = e.name || (fallbackPoolKey ? client.program.conjugate?.[fallbackPoolKey]?.[0]?.name : "") || "Exercise";
@@ -3877,7 +3936,7 @@ function EditableLogBody({ log, client, onPersist }) {
         {draft.map((e, exIdx) => (
           <div key={e.exerciseId} className="edit-ex-card">
             <div className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</div>
-            <div className="set-grid-header"><span>Set</span><span>{needsWeight(e.name) ? "Weight" : ""}</span><span>{exerciseUnitLabel(e.name)}</span><span>Rate of Perceived Exertion</span></div>
+            <div className="set-grid-header"><span>Set</span><span>{needsWeight(e.name) ? "Weight" : ""}</span><span>{exerciseUnitLabel(e.name)}</span><span>Effort</span></div>
             {e.sets.map((s, setIdx) => (
               <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
                 <span className="set-num">{setIdx + 1}</span>
@@ -4438,8 +4497,8 @@ function GlobalStyle() {
     <style>{`
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative;
         background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00a88f; --accent-text:#ffffff; --cta:#00a88f; --cta2:#00a88f; --green:#3f7d4a; --amber:#b9840f; --neon-gold:#c9b400; }
+      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00a88f; --accent-text:#ffffff; --cta:#00a88f; --cta2:#00a88f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --neon-gold:#c9b400; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -4462,7 +4521,7 @@ function GlobalStyle() {
       .settings-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
       .settings-avatar-preview span { font-size: 24px; font-weight: 700; color: var(--text-dim); }
       .topbar-brand { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; color: var(--text); line-height: 1.1; max-width: 220px; }
-      .topbar-name-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
+      .topbar-name-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
       .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); }
       .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
       .dash-stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
@@ -4490,10 +4549,10 @@ function GlobalStyle() {
       .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
       .hero-select { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
       .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
-      .hero-duration { font-size: 12.5px; color: var(--text-dim); margin-bottom: 14px; }
+      .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
       .hero-quote { font-size: 13px; color: var(--accent); font-style: italic; line-height: 1.55; padding: 0; margin-bottom: 4px; }
       .hero-quote b { font-style: italic; font-weight: 700; }
-      .hero-quote-attr { font-size: 12px; color: var(--text-dim); margin-bottom: 18px; }
+      .hero-quote-attr { font-size: 13px; color: var(--text-dim); margin-bottom: 18px; }
       .mood-row-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
@@ -4518,7 +4577,7 @@ function GlobalStyle() {
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
-      .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 12.5px; cursor: pointer; padding: 0; }
       .day-nav-row { display: flex; align-items: center; gap: 8px; }
       .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
@@ -4531,7 +4590,7 @@ function GlobalStyle() {
       .jump-day-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
       .jump-day-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .jump-day-btn.is-today:not(.active) { border-color: var(--accent); color: var(--accent); }
-      .day-intent-preview { font-size: 12.5px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; }
+      .day-intent-preview { font-size: 13px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; }
       .section-preview-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
       .preview-toggle { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 8px; }
       .section-preview-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
@@ -4577,17 +4636,17 @@ function GlobalStyle() {
       .section-ex-block { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
-      .rest-note-static { font-size: 12px; color: #4a9eff; margin-top: 6px; font-weight: 600; }
+      .rest-note-static { font-size: 13px; color: #4a9eff; margin-top: 6px; font-weight: 600; }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
       .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 6px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
-      .log-exercise-cue { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; font-style: normal; line-height: 1.5; padding-top: 6px; border-top: 1px dashed var(--border); }
+      .log-exercise-cue { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-style: normal; line-height: 1.5; padding-top: 6px; border-top: 1px dashed var(--border); }
       .ex-name-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .recommended-tag { font-size: 12px; color: var(--green); border: 1px solid var(--green); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
-      .last-logged { font-size: 12px; color: var(--accent); margin-top: 8px; font-weight: 600; }
+      .last-logged { font-size: 13px; color: var(--accent); margin-top: 8px; font-weight: 600; }
       .superset-tag { font-size: 12px; font-weight: 800; color: var(--bg); background: var(--accent); border-radius: 5px; padding: 1px 6px; margin-right: 6px; letter-spacing: 0.03em; }
       .quality-tag { color: var(--accent); background: none; border: 1.5px solid var(--accent); }
-      .pct-1rm-row { font-size: 12px; color: var(--accent); margin: -3px 0 8px 2px; font-style: italic; }
+      .pct-1rm-row { font-size: 13px; color: var(--accent); margin: 4px 0 5px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
       .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
@@ -4615,7 +4674,7 @@ function GlobalStyle() {
       .set-num { font-size: 13px; color: var(--text-dim); }
       .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 4px; font-size: 15px; font-weight: 700; width: 100%; text-align: center; }
       .set-grid-row input:focus { border-color: var(--accent); outline: none; }
-      .set-grid-row input:disabled { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
+      .set-grid-row input:disabled, .set-grid-row input[readonly] { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
       .set-done { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .set-done.done { background: var(--green); color: #fff; border-color: var(--green); }
       .notes-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px; font-size: 14px; font-family: inherit; resize: vertical; }
@@ -4640,7 +4699,7 @@ function GlobalStyle() {
       .day-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
       .day-badge { background: var(--accent); color: var(--accent-text); font-weight: 800; font-size: 12px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
       .day-name { font-weight: 600; font-size: 14px; flex: 1; }
-      .program-ex-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12.5px; border-top: 1px solid var(--border); gap: 10px; }
+      .program-ex-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-top: 1px solid var(--border); gap: 10px; }
       .program-ex-row:first-of-type { border-top: none; }
       .edit-ex-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
       .edit-ex-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
@@ -4676,7 +4735,7 @@ function GlobalStyle() {
       .pr-history-row-v2:last-child { border-bottom: none; }
       .pr-history-weight { font-weight: 700; font-size: 14px; }
       .pr-history-x { color: var(--text-dim); font-weight: 400; }
-      .pr-history-date { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-dim); }
+      .pr-history-date { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-dim); }
       .pr-chart-wrap { background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; padding: 10px 14px 14px; margin-top: -1px; }
       .pr-card-name { font-weight: 700; font-size: 14.5px; }
       .pr-history { background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; padding: 8px 14px; margin-top: -1px; }
@@ -4699,7 +4758,7 @@ function GlobalStyle() {
       .schedule-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
       .schedule-row:last-of-type { border-bottom: none; }
       .schedule-day { width: 76px; flex-shrink: 0; font-weight: 700; font-size: 12.5px; padding-top: 1px; }
-      .schedule-detail { font-size: 12.5px; color: var(--text); line-height: 1.5; }
+      .schedule-detail { font-size: 13px; color: var(--text); line-height: 1.5; }
       .schedule-detail.off { color: var(--text-dim); font-style: italic; }
       .schedule-editor { margin-bottom: 4px; }
       .schedule-edit-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
