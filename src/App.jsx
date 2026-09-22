@@ -409,6 +409,7 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     const chosen = pool[idx];
     return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
+      rir: chosen.rir !== undefined ? chosen.rir : e.rir,
       poolLabel: poolLabelFor(e.rotatingPool) };
   }
   if (e.deWave) {
@@ -847,9 +848,9 @@ const hipPool = [
   { name: "Hip Adduction Machine", notes: "Direct, loaded adductor strength through a full range of motion — a machine-based complement to the Copenhagen Plank for groin and guard-retention durability", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/BmMmt-c9aNM" },
 ];
 const conditioningIntervalPool = [
-  { name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "45 to 60 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct." },
-  { name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "5 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", cues: "90 percent maximum EFFORT here means output — how hard you're actually pushing the bike or the pace — not 90 percent of your max heart rate. Your heart rate will climb on its own as a result of the effort, but don't pace off a heart rate number; pace off how hard you're genuinely working. Each round should be close to all you can sustain for its full length without falling apart before the end — if you're finishing rounds feeling fresh, push harder next time. Take the full recovery between rounds, easy movement or complete rest, so you can bring real effort to the next round instead of just surviving it." },
-  { name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
+  { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "45 to 60 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct." },
+  { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "5 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", cues: "90 percent maximum EFFORT here means output — how hard you're actually pushing the bike or the pace — not 90 percent of your max heart rate. Your heart rate will climb on its own as a result of the effort, but don't pace off a heart rate number; pace off how hard you're genuinely working. Each round should be close to all you can sustain for its full length without falling apart before the end — if you're finishing rounds feeling fresh, push harder next time. Take the full recovery between rounds, easy movement or complete rest, so you can bring real effort to the next round instead of just surviving it." },
+  { rir: 3, name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
 ];
 
 function meLowerDeloadBlock() {
@@ -899,7 +900,7 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
             ex({ name: "Multi-Planar Lunge Matrix", sets: 1, reps: "6 per direction", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Easy full-body movement quality work, no explosive intent this week", quality: "Movement Quality" , videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-            ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 0, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
+            ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 7, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
           ]},
         ]},
     ],
@@ -982,7 +983,7 @@ const conjugateProgram = {
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block", quality: "Conditioning" }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system gets trained across the block", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1046,7 +1047,7 @@ const conjugateProgram = {
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system actually gets trained across the block instead of the same stimulus every week", quality: "Conditioning" }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system actually gets trained across the block instead of the same stimulus every week", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1096,7 +1097,7 @@ const conjugateProgram = {
               ex({ name: "Heavy Dumbbell Swing", sets: 3, reps: "5", load: "heavy dumbbell", rir: 0, rest: "2 minutes", purpose: "Hip power expression", quality: "Power" , videoUrl: "https://www.youtube.com/watch?v=QEMGYrebtxE" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: "Assault Bike or Treadmill — Aerobic Maintenance", sets: 1, reps: "8 to 10 minutes", load: "easy to moderate, heart rate under about 140 beats per minute", rir: 0, rest: "none", purpose: "Maintain aerobic qualities without adding fatigue this close to peak weeks", quality: "Conditioning",
+              ex({ name: "Assault Bike or Treadmill — Aerobic Maintenance", sets: 1, reps: "8 to 10 minutes", load: "easy to moderate, heart rate under about 140 beats per minute", rir: 6, rest: "none", purpose: "Maintain aerobic qualities without adding fatigue this close to peak weeks", quality: "Conditioning",
                 cues: "This is deliberately shorter and easier than the base-phase version — the goal now is just to hold onto what you've already built, not add more. Stay well under 140 beats per minute the whole time; if you can check it, this should feel closer to a warm-up than real training. No rest, continuous movement for the full 8 to 10 minutes." }),
             ]},
           ]},
@@ -1125,7 +1126,7 @@ const conjugateProgram = {
           intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered.",
           sections: [
             { id: uid(), type: "conditioning", name: "Aerobic Base — Deload", exercises: [
-              ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Jamieson Zone 1)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 120 to 150 beats per minute — easy, conversational pace", rir: 0, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
+              ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Jamieson Zone 1)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 120 to 150 beats per minute — easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1199,6 +1200,9 @@ function buildProgramCContent() {
           ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Briefcase Carry", { sets: 3, reps: "30 seconds each side", rpe: 9 }),
           ssSingle(4, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 8 }, "Core"),
         ]},
+        { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+          ex({ name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", sets: 1, reps: "25 to 30 minutes, continuous, easy pace", load: "heart rate held at 120 to 150 beats per minute — conversational the whole way", rir: 7, rest: "none", purpose: "Builds the aerobic base everything else sits on top of — how fast you recover between rounds, between scrambles, and between sets. This block is where that foundation gets laid, so the harder conditioning in later blocks has something to build on.", cues: "This has to feel genuinely easy or it isn't doing its job. You should be able to hold a full conversation the entire time. If you're breathing hard, you've drifted out of the zone that actually builds this quality and into one that just costs you recovery for tomorrow's mat time. It's meant to feel almost boring — that's correct.", quality: "Conditioning" }),
+        ]},
       ]},
     ]
   );
@@ -1231,6 +1235,9 @@ function buildProgramCContent() {
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
+        ]},
+        { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+          ex({ name: "Assault Bike or Treadmill — Repeated-Effort Tempo", sets: 1, reps: "10 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", load: "hard but controlled — well past comfortable, short of an all-out sprint", rir: 3, rest: "none", purpose: "Jamieson's extensive tempo method — repeat-effort capacity, which is the same quality this block's strength-endurance work is building in the weight room. It trains the ability to fire off another hard scramble, shot or transition without a full rest first, which is exactly what a real match asks for round after round.", cues: "Your breathing should climb during each 15-second effort and only partly settle during the 45 seconds of recovery. That incomplete recovery is the whole point — it's the same pattern as the gap between exchanges in a live round. If you feel fully recovered before the next effort starts, you aren't pushing hard enough on the work.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1269,6 +1276,9 @@ function buildProgramCContent() {
           ssSingle(4, "Single Arm Kettlebell Hold", { sets: 3, reps: "20 second holds", rpe: 8 }, "Yielding Strength"),
           ssSingle(5, "High Plank Kettlebell Pull-Through", { sets: 3, reps: "8 each side", rpe: 8 }, "Contralateral Stability"),
         ]},
+        { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+          ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "3 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", load: "90 percent of maximum effort — how hard you're pushing, not a heart rate number", rir: 1, rest: "none", purpose: "The concurrent aerobic work this block is named for. Jamieson's aerobic power protocol raises the ceiling on the aerobic system, and the work-to-rest pattern mirrors a real exchange on the mat rather than one long grind.", cues: "Deliberately only three rounds. This block already carries the heaviest session of the program and you're doing speed and power work on top of your mat time — three honest rounds is a real stimulus without turning this into a second workout. Each round should be close to all you can hold for its full length. Take the whole recovery between rounds so you can bring genuine effort to the next one instead of just surviving it.", quality: "Conditioning" }),
+        ]},
       ]},
     ]
   );
@@ -1297,6 +1307,9 @@ function buildProgramCContent() {
           ...ssPair(1, weekNum === 4 ? "Single Leg Romanian Deadlift" : "Split Stance Romanian Deadlift", { sets: 3, reps: "6", tempo: "2/0/1", rpe: 6 }, "Valslide Hamstring Curls", { sets: 3, reps: "6", rpe: 6 }),
           ssSingle(2, weekNum === 4 ? "Weighted Push-Ups" : "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 6 }, "Strength"),
           ssSingle(3, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 5 }, "Core"),
+        ]},
+        { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
+          ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement on a deload week actively helps you recover rather than costing you anything — it moves blood without adding fatigue, and keeps the aerobic habit unbroken through the down week.", cues: "Easy the whole way. If it feels like training, it's too hard for this week.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1417,7 +1430,7 @@ function twoDayDeloadPhase(weekNum, afterPhaseName) {
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperDeloadBlock() ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-            ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 0, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
+            ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 7, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
           ]},
         ]},
     ],
@@ -1461,7 +1474,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "maximum time", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-            ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 0, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard 4x4 VO2max intervals, and sustained-effort work capacity training — so every energy system gets trained across the block even with just two sessions a week", quality: "Conditioning" }),
+            ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "see reps for the exact protocol", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system gets trained across the block even with just two sessions a week", quality: "Conditioning" }),
           ]},
         ]},
     ],
