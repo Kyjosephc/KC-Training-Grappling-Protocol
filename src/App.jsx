@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
   Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2
+  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1737,6 +1737,7 @@ function MainApp({ userId, onSignOut }) {
   const [tab, setTab] = useState("today");
   const [showClients, setShowClients] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
@@ -1890,7 +1891,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
+      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -1912,6 +1913,7 @@ function MainApp({ userId, onSignOut }) {
       )}
       {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
+      {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
@@ -2095,7 +2097,39 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
+function PaymentModal({ onClose }) {
+  const [qrOk, setQrOk] = useState(true);
+  const hasAnything = coachVenmo || coachCashApp || coachPaymentLink || qrOk;
+  return (
+    <ModalShell onClose={onClose} title="Payment">
+      {hasAnything ? (
+        <Card title="Pay your coach">
+          <div style={{ textAlign: "center" }}>
+            {qrOk && (
+              coachPaymentLink ? (
+                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
+                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
+                </a>
+              ) : (
+                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
+              )
+            )}
+            {coachVenmo && <div style={{ fontSize: 14.5, marginBottom: 6 }}>Venmo: <strong>{coachVenmo}</strong></div>}
+            {coachCashApp && <div style={{ fontSize: 14.5, marginBottom: coachPaymentLink ? 12 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
+          </div>
+        </Card>
+      ) : (
+        <EmptyState text="No payment details are set up yet — ask your coach how they'd like to be paid." />
+      )}
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Payment is handled directly between you and your coach through Venmo or Cash App. This app never sees, processes or stores a card or bank account number.
+      </p>
+    </ModalShell>
+  );
+}
+
+function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
       <div>
@@ -2124,6 +2158,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
         </div>
         <div style={{ width: 1, background: "var(--border)", margin: "6px 2px" }} />
         <div style={{ display: "flex", gap: 6 }}>
+          <button className="icon-btn" onClick={onOpenPayment} aria-label="Payment information"><DollarSign size={20} /></button>
           <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings"><SettingsIcon size={20} /></button>
           <button className="icon-btn" onClick={onOpenClients} aria-label="Switch client"><Users size={20} /></button>
         </div>
@@ -2865,7 +2900,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showJumpPicker, setShowJumpPicker] = useState(false);
   const [showMentalLibrary, setShowMentalLibrary] = useState(false);
-  const [coachQrOk, setCoachQrOk] = useState(true);
   const todaysMentalTip = useMemo(() => mentalTipForDate(todayStr()), []);
   useEffect(() => { setViewIndex(client.sessionsCompleted || 0); }, [client.sessionsCompleted, client.id]);
 
@@ -2940,25 +2974,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <p className="muted" style={{ marginBottom: 10 }}>— {todaysMentalTip.author}</p>
         <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Quotes</button>
       </Card>
-
-      {(coachVenmo || coachCashApp || coachQrOk) && (
-        <Card title="Payment">
-          <div style={{ textAlign: "center" }}>
-            {coachQrOk && (
-              coachPaymentLink ? (
-                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
-                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 160, height: 160, objectFit: "contain", margin: "0 auto 10px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setCoachQrOk(false)} />
-                </a>
-              ) : (
-                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 160, height: 160, objectFit: "contain", margin: "0 auto 10px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setCoachQrOk(false)} />
-              )
-            )}
-            {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
-            {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-            {coachPaymentLink && <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
-          </div>
-        </Card>
-      )}
 
       <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color, color: READINESS_COPY[readinessToday.color].textColor }}>{readinessToday.color}</span> : null}>
         {readinessToday ? (
