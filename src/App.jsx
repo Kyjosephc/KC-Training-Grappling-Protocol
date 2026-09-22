@@ -527,6 +527,14 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
 /* ============================== SEED PROGRAM: CONJUGATE BRAZILIAN JIU-JITSU / WRESTLING ============================== */
 
 const VIDEO_LIBRARY = {
+  "barbell romanian deadlift": "https://www.youtube.com/shorts/5rIqP63yWFg",
+  "incline bench press": "https://www.youtube.com/watch?v=lJ2o89kcnxY",
+  "incline close grip bench press": "https://www.youtube.com/shorts/0_Xy7U9YZ7A",
+  "toes to bar": "https://www.youtube.com/watch?v=dupHeq21Jm8",
+  "briefcase carry": "https://www.youtube.com/shorts/iTjwbts8Djw",
+  "moderate farmer carry": "https://www.youtube.com/watch?v=8OtwXwrJizk",
+  "banded face pulls": "https://www.youtube.com/watch?v=hbo-nSIEmXo",
+  "rice grips": "https://www.youtube.com/shorts/VLI3fRk__bc",
   "bench press": "https://www.youtube.com/shorts/hWbUlkb5Ms4",
   "split stance trap bar deadlift": "https://www.youtube.com/shorts/7mB2Ct6WRTU",
   "weighted neck bridge": "https://www.youtube.com/shorts/_M6zOSJrZNo",
