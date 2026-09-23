@@ -4803,8 +4803,8 @@ function GlobalStyle() {
     <style>{`
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --neon-gold:#c9b400; }
+      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#c9b400; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -4836,7 +4836,7 @@ function GlobalStyle() {
       .dash-stat-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
       .progress-bar-track { width: 100%; height: 10px; border-radius: 999px; background: var(--border); overflow: hidden; }
       .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
-      .milestone-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; opacity: 0.6; }
+      .milestone-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
       .milestone-row.achieved { opacity: 1; border-color: var(--green); }
       .milestone-emoji { font-size: 26px; flex-shrink: 0; }
       .milestone-name { font-weight: 600; font-size: 13.5px; }
@@ -4849,7 +4849,7 @@ function GlobalStyle() {
       .stat-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
       .hero-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
+      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
       .hero-nav-btn:disabled { opacity: 0.35; }
       .hero-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
       .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -4863,7 +4863,7 @@ function GlobalStyle() {
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
       .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-      .hero-full-checkin { display: block; text-align: center; font-size: 12px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 14px; background: none; border: none; cursor: pointer; width: 100%; }
+      .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
       .hero-start-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
       .hero-secondary-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
@@ -4887,16 +4887,16 @@ function GlobalStyle() {
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
-      .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 12.5px; cursor: pointer; padding: 0; }
+      .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
       .day-nav-row { display: flex; align-items: center; gap: 8px; }
-      .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
+      .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
       .day-nav-btn:disabled { opacity: 0.3; cursor: default; }
       .jump-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; max-height: 240px; overflow-y: auto; }
       .jump-week-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--border); }
       .jump-week-row:last-child { border-bottom: none; }
       .jump-week-label { font-size: 12px; color: var(--text-dim); }
       .jump-day-row { display: flex; gap: 6px; }
-      .jump-day-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
+      .jump-day-btn { width: 36px; height: 36px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
       .jump-day-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .jump-day-btn.is-today:not(.active) { border-color: var(--accent); color: var(--accent); }
       .day-intent-preview { font-size: 13px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; }
@@ -4945,9 +4945,9 @@ function GlobalStyle() {
       .section-ex-block { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
-      .rest-note-static { font-size: 13px; color: #4a9eff; margin-top: 6px; font-weight: 600; }
+      .rest-note-static { font-size: 13px; color: var(--info); margin-top: 6px; font-weight: 600; }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
-      .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 6px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 10px; margin: -4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
       .log-exercise-cue { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-style: normal; line-height: 1.5; padding-top: 6px; border-top: 1px dashed var(--border); }
       .ex-name-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -4958,7 +4958,7 @@ function GlobalStyle() {
       .pct-1rm-row { font-size: 13px; color: var(--accent); margin: 4px 0 5px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
-      .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
+      .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .link-edit-btn { background: none; border: none; color: var(--text-dim); font-size: 12px; text-decoration: underline; cursor: pointer; }
       .add-link-btn { background: none; border: 1px dashed var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; padding: 3px 10px; cursor: pointer; margin-top: 8px; }
       .video-edit-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
@@ -4985,6 +4985,7 @@ function GlobalStyle() {
       .set-num { font-size: 13px; color: var(--text-dim); }
       .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 4px; font-size: 15px; font-weight: 700; width: 100%; text-align: center; }
       .set-grid-row input:focus { border-color: var(--accent); outline: none; }
+      .set-grid-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .set-grid-row input:disabled, .set-grid-row input[readonly] { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
       .set-done { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .set-done.done { background: var(--green); color: #fff; border-color: var(--green); }
@@ -5086,9 +5087,9 @@ function GlobalStyle() {
       .cal-cell.today { border-color: var(--accent); border-width: 2px; }
       .cal-cell.selected { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
       .cal-dot-row { display: flex; gap: 3px; }
-      .cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+      .cal-dot { width: 6px; height: 6px; border-radius: 50%; }
       .cal-dot.workout { background: var(--green); }
-      .cal-dot.mobility { background: var(--amber); }
+      .cal-dot.mobility { background: var(--amber); border-radius: 1px; }
       .cal-cell.selected .cal-dot.workout, .cal-cell.selected .cal-dot.mobility { background: #ffffff; }
 
       /* ---- Accessibility: visible keyboard focus + respecting reduced motion ---- */
