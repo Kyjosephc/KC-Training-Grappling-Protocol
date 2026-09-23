@@ -47,3 +47,54 @@ create policy "Signed-in users can update roster snapshots"
 create policy "Signed-in users can delete roster snapshots"
   on roster_snapshots for delete
   using (auth.role() = 'authenticated');
+
+-- ---------------------------------------------------------------------------
+-- client_links
+--
+-- Maps each self-signed-up athlete to their coach. Created by hand on the live
+-- project before this file caught up; it is written here so a rebuild from
+-- scratch produces the same database. Without it the coach dashboard is empty
+-- and the Week 2 payment gate can never be lifted.
+-- ---------------------------------------------------------------------------
+create table if not exists client_links (
+  client_user_id uuid primary key references auth.users on delete cascade,
+  coach_user_id  uuid not null references auth.users on delete cascade,
+  client_email   text,
+  created_at     timestamptz not null default now()
+);
+
+alter table client_links enable row level security;
+
+-- An athlete may register themselves against their coach, and read that row.
+create policy "Athletes create their own link"
+  on client_links for insert
+  with check (auth.uid() = client_user_id);
+
+create policy "Athlete or coach can read the link"
+  on client_links for select
+  using (auth.uid() = client_user_id or auth.uid() = coach_user_id);
+
+-- The coach needs to read and update an athlete's row to see their training and
+-- to mark them paid. Scoped through client_links so it only ever reaches their
+-- own athletes, never every user of the project.
+create policy "Coach reads their athletes' data"
+  on kv_store for select
+  using (
+    auth.uid() = user_id
+    or exists (
+      select 1 from client_links
+      where client_links.client_user_id = kv_store.user_id
+        and client_links.coach_user_id = auth.uid()
+    )
+  );
+
+create policy "Coach updates their athletes' data"
+  on kv_store for update
+  using (
+    auth.uid() = user_id
+    or exists (
+      select 1 from client_links
+      where client_links.client_user_id = kv_store.user_id
+        and client_links.coach_user_id = auth.uid()
+    )
+  );

@@ -97,14 +97,20 @@ async function kvGet(userId, key) {
   }
   return outcome.result ? outcome.result.value : null;
 }
+// The newest value written for each key, so a Retry tapped minutes later sends
+// current data rather than the snapshot that originally failed.
+const latestWrites = new Map();
 async function kvSet(userId, key, value) {
   if (!supabase || !userId) return { ok: false };
+  latestWrites.set(`${userId}:${key}`, value);
   const outcome = await withRetry(async () => {
     const { error } = await supabase.from("kv_store").upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
     if (error) throw error;
   });
   if (outcome.ok) { markSynced(); return { ok: true }; }
-  emitToast({ kind: "error", message: "Couldn't save your last change — check your connection.", retryLabel: "Retry", onRetry: () => kvSet(userId, key, value) });
+  // Re-read the latest value at retry time. Retrying the stale snapshot could
+  // overwrite work the athlete did after the failure while the toast sat there.
+  emitToast({ kind: "error", message: "Couldn't save your last change — check your connection.", retryLabel: "Retry", onRetry: () => kvSet(userId, key, latestWrites.get(`${userId}:${key}`) ?? value) });
   return { ok: false };
 }
 async function kvDelete(userId, key) {
@@ -132,11 +138,11 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 // Local calendar date, not UTC — new Date().toISOString() rolls over to the next
 // day for anyone west of UTC once it's evening locally (all of the US, for example),
 // which silently mis-logs workouts/bodyweight/check-ins to tomorrow's date.
-const todayStr = () => {
-  const d = new Date();
+const toLocalDateStr = (d) => {
   const offsetMs = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
 };
+const todayStr = () => toLocalDateStr(new Date());
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 function daysSinceLastActivity(client) {
@@ -372,7 +378,7 @@ function weeklyVolumeSeries(client) {
     const diffToMonday = (day === 0 ? -6 : 1) - day;
     const monday = new Date(d);
     monday.setDate(d.getDate() + diffToMonday);
-    const key = monday.toISOString().slice(0, 10);
+    const key = toLocalDateStr(monday);
     map[key] = (map[key] || 0) + (log.totalVolume || 0);
   });
   return Object.keys(map).sort().map((k) => ({ date: fmtDate(k), volume: map[k] }));
@@ -1678,6 +1684,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     promoDiscount: promoDiscount || 0,
     excludedExercises: [],
     injuryNotes: injuryNotes ? injuryNotes.trim() : "",
+    maxSessionsReached: 0,
   };
 }
 
@@ -1842,6 +1849,9 @@ function MainApp({ userId, onSignOut }) {
         if (c.hasSeenTutorial === undefined) c.hasSeenTutorial = false;
         if (!c.excludedExercises) c.excludedExercises = [];
         if (c.injuryNotes === undefined) c.injuryNotes = "";
+    if (c.maxSessionsReached === undefined) c.maxSessionsReached = c.sessionsCompleted || 0;
+    if (!c.logs) c.logs = [];
+    if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
@@ -1982,7 +1992,16 @@ function MainApp({ userId, onSignOut }) {
           onStartMobility={() => setShowMobility(true)}
           onUpdateProgram={(newProgram) => persistClient({ ...client, program: newProgram })}
           onSave={async (session) => {
-            const updated = { ...client, logs: [...client.logs, session], sessionsCompleted: (client.sessionsCompleted || 0) + 1 };
+            // Local state updates before the write lands, so a save that failed
+            // and is then retried arrives here with a session already in logs.
+            // Match on id so the retry re-sends rather than logging it twice.
+            if (client.logs.some((l) => l.id === session.id)) {
+              const merged = { ...client, logs: client.logs.map((l) => (l.id === session.id ? session : l)) };
+              return persistClient(merged);
+            }
+            const nextCompleted = (client.sessionsCompleted || 0) + 1;
+            const updated = { ...client, logs: [...client.logs, session], sessionsCompleted: nextCompleted,
+              maxSessionsReached: Math.max(client.maxSessionsReached || 0, nextCompleted) };
             return persistClient(updated);
           }}
           onRecordPR={async (entry) => {
@@ -2234,10 +2253,10 @@ const TUTORIAL_PAGES = [
 
 const TERMS_SECTIONS = [
   { heading: "What this app is", body: "Strength Matrix is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
-  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, and anything you choose to type into the injury notes box. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
-  { heading: "Payment", body: "Any payment (such as the Week 2 continuation fee) is handled directly between you and your coach through Venmo or Cash App. This app does not process, transmit, or store card or bank account numbers." },
-  { heading: "Not medical advice", body: "This program is coaching, not medical care. It can't account for an injury, a medical condition, or anything else your coach doesn't know about, so tell your coach about anything relevant and check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you feel, but it can't see you." },
-  { heading: "Your data, your call", body: "You can ask your coach at any time to export or permanently delete your data from this app." },
+  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
+  { heading: "Payment", body: "The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one. Payment goes directly to your coach; this app does not process, transmit, or store card or bank account numbers, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable — but if something is wrong, tell your coach and he will sort it out with you. There is nothing to cancel: if you stop training, nothing further is charged, and everything you have logged stays in your account." },
+  { heading: "Not medical advice", body: "This program is coaching, not medical care. It can't account for an injury, a medical condition, or anything else your coach doesn't know about, so tell your coach about anything relevant and check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you feel, but it can't see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train and you accept that risk as your own." },
+  { heading: "Your data, your call", body: "You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, ask your coach and it will be done." },
   { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
 ];
 
@@ -2337,16 +2356,32 @@ function ClientDashboard({ client, onClose }) {
   const completionPct = Math.min(100, Math.round(((client.sessionsCompleted || 0) / totalSessions) * 100));
   const totalWorkouts = client.logs.length;
 
+  // Consecutive training WEEKS, not days. Every program here is two or three
+  // sessions a week with rest days between, so a consecutive-day streak was
+  // structurally impossible and sat at 1 forever — including for someone who
+  // last trained in January.
+  const mondayOf = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay();
+    d.setDate(d.getDate() + ((day === 0 ? -6 : 1) - day));
+    return toLocalDateStr(d);
+  };
   const logDates = Array.from(new Set(client.logs.map((l) => l.date))).sort().reverse();
   let streak = 0;
   if (logDates.length) {
-    streak = 1;
-    let cursor = new Date(logDates[0] + "T00:00:00");
-    for (let i = 1; i < logDates.length; i++) {
-      const prevDay = new Date(cursor);
-      prevDay.setDate(prevDay.getDate() - 1);
-      const prevDayStr = prevDay.toISOString().slice(0, 10);
-      if (logDates[i] === prevDayStr) { streak++; cursor = prevDay; } else break;
+    const weeks = Array.from(new Set(logDates.map(mondayOf))).sort().reverse();
+    const thisWeek = mondayOf(todayStr());
+    const lastWeekDate = new Date(thisWeek + "T00:00:00");
+    lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+    const lastWeek = toLocalDateStr(lastWeekDate);
+    // A streak stays alive through the current week until it's actually missed.
+    if (weeks[0] === thisWeek || weeks[0] === lastWeek) {
+      streak = 1;
+      let cursor = new Date(weeks[0] + "T00:00:00");
+      for (let i = 1; i < weeks.length; i++) {
+        cursor.setDate(cursor.getDate() - 7);
+        if (weeks[i] === toLocalDateStr(cursor)) streak++; else break;
+      }
     }
   }
 
@@ -2363,7 +2398,7 @@ function ClientDashboard({ client, onClose }) {
         <DashStat label="Block" value={`${client.blockNumber || 1}`} />
         <DashStat label="Total Workouts Completed" value={`${totalWorkouts}`} />
         <DashStat label="Workout Completion" value={`${completionPct} percent`} />
-        <DashStat label="Training Streak" value={`${streak} day${streak === 1 ? "" : "s"}`} />
+        <DashStat label="Training Streak" value={streak === 0 ? "—" : `${streak} week${streak === 1 ? "" : "s"}`} />
         <DashStat label="Last Workout" value={lastLog ? `${fmtDate(lastLog.date)} — Day ${lastLog.dayLabel}` : "None yet"} wide />
       </div>
       <div className="card">
@@ -2654,7 +2689,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Your athlete's program is saved the moment their profile is created, so improvements made to the program afterward don't automatically reach an existing profile. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
+        Your program was saved when you set up your profile, so improvements your coach makes afterward don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
       </p>
       {refreshed ? (
         <div className="adjust-box" style={{ borderColor: "var(--green)" }}>Your program has been updated to the latest version.</div>
@@ -2735,6 +2770,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </label>
       </div>
 
+      {isCoach && (<>
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Start Over From the Welcome Screen</div>
       <p className="muted" style={{ marginBottom: 10 }}>
         Use this to preview the exact first-time experience a new client sees when they open this app — the welcome screen where they enter their name, bodyweight, and height. This permanently deletes every athlete profile, workout, check-in, and Personal Record currently saved here, so only use it for testing before you send this app to your clients — each of them gets their own fresh welcome screen automatically the first time they open it themselves.
@@ -2750,6 +2786,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           </div>
         </div>
       )}
+      </>)}
 
       {onSignOut && (
         <>
@@ -3088,7 +3125,14 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
             Previewing Week {pos.weekNumber}, Day {pos.day.label} — this is not today's actual session.
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               <button className="link-btn" onClick={() => setViewIndex(client.sessionsCompleted || 0)}>Jump back to today</button>
-              <button className="link-btn" onClick={async () => { await onPersist({ ...client, sessionsCompleted: viewIndex }); setShowJumpPicker(false); }}>Skip ahead — make this my current day</button>
+              <button className="link-btn" onClick={async () => {
+                const goingBack = viewIndex < (client.sessionsCompleted || 0);
+                // Moving the cursor backwards rewinds progress and, because the
+                // payment gate reads the current week, silently reopens it.
+                if (goingBack && !window.confirm("This moves you back to this day. Sessions you've already finished stay in your history, but your progress marker goes back to here. Continue?")) return;
+                await onPersist({ ...client, sessionsCompleted: viewIndex, maxSessionsReached: Math.max(client.maxSessionsReached || 0, client.sessionsCompleted || 0) });
+                setShowJumpPicker(false);
+              }}>{viewIndex < (client.sessionsCompleted || 0) ? "Go back to this day" : "Skip ahead — make this my current day"}</button>
             </div>
           </div>
         )}
@@ -3137,7 +3181,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           </div>
         )}
         {isCurrent ? (
-          pos.weekNumber >= 2 && !client.paid ? (
+          Math.floor(Math.max(client.sessionsCompleted || 0, client.maxSessionsReached || 0) / (client.program.sessionsPerWeek || 3)) + 1 >= 2 && !client.paid ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach will confirm it on their end — this screen updates automatically once they do, no need to do anything else here.`}</p>
@@ -3258,15 +3302,17 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   const [v, setV] = useState(existing || { sleep: 3, energy: 3, soreness: 3, bjjHard: false });
   const [weight, setWeight] = useState(existingWeight || "");
   const fields = [
-    { key: "sleep", label: "Sleep quality", max: 5 },
-    { key: "energy", label: "Energy", max: 5 },
-    { key: "soreness", label: "Muscle soreness", max: 5 },
+    // Soreness counts against readiness while the other two count for it, so
+    // an unlabelled slider set to 5 means opposite things on different rows.
+    { key: "sleep", label: "Sleep quality", hint: "0 = terrible, 5 = great", max: 5 },
+    { key: "energy", label: "Energy", hint: "0 = flat, 5 = fresh", max: 5 },
+    { key: "soreness", label: "Muscle soreness", hint: "0 = none, 5 = very sore", max: 5 },
   ];
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
       <button className="btn-primary wide" style={{ marginBottom: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
       <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (pounds)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
-      {fields.map((f) => <SliderRow key={f.key} label={f.label} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
+      {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
       <label className="bjj-toggle">
         <input type="checkbox" checked={!!v.bjjHard} onChange={(e) => setV({ ...v, bjjHard: e.target.checked })} />
         <span>Hard Brazilian Jiu-Jitsu training recently?</span>
@@ -3275,8 +3321,8 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
     </ModalShell>
   );
 }
-function SliderRow({ label, value, max, onChange }) {
-  return <div className="slider-row"><div className="slider-label"><span>{label}</span><span className="slider-value">{value}</span></div><input type="range" min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} /></div>;
+function SliderRow({ label, hint, value, max, onChange }) {
+  return <div className="slider-row"><div className="slider-label"><span>{label}{hint ? <span className="slider-hint"> {hint}</span> : null}</span><span className="slider-value">{value}</span></div><input type="range" min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} /></div>;
 }
 
 /* ============================== SHARED SESSION UI ============================== */
@@ -3342,6 +3388,42 @@ function ProgressBadge({ percent }) {
   );
 }
 
+/* ============================== IN-PROGRESS SESSION DRAFTS ============================== */
+// A session runs 60 to 90 minutes and only reaches the server when the athlete
+// taps Finish. Without a local draft, a refresh, a crash, or iOS evicting the
+// app from memory between sets loses the whole thing — and the first-set banner
+// promises the opposite. Drafts live in this browser only and never sync; they
+// exist purely so an interrupted session can be picked back up.
+const DRAFT_PREFIX = "sc-app:draft:";
+function readDraft(key) {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function writeDraft(key, value) {
+  try { window.localStorage.setItem(DRAFT_PREFIX + key, JSON.stringify(value)); } catch { /* private mode, blocked storage, or quota — the session still works */ }
+}
+function clearDraft(key) {
+  try { window.localStorage.removeItem(DRAFT_PREFIX + key); } catch { /* nothing to clean up */ }
+}
+// Only the athlete's own typing is restored, matched by exercise id. The
+// prescription itself always comes from the program, so a draft can never
+// resurrect an old target after the program is updated.
+function mergeDraftEntries(fresh, draftEntries) {
+  if (!draftEntries) return fresh;
+  const out = {};
+  Object.keys(fresh).forEach((secId) => {
+    const saved = Array.isArray(draftEntries[secId]) ? draftEntries[secId] : [];
+    out[secId] = fresh[secId].map((en) => {
+      const d = saved.find((x) => x && x.exerciseId === en.exerciseId);
+      if (!d || !Array.isArray(d.sets)) return en;
+      return { ...en, sets: en.sets.map((s, i) => (d.sets[i] ? { ...s, ...d.sets[i] } : s)) };
+    });
+  });
+  return out;
+}
+
 /* ============================== FULL-DAY SESSION SCREEN ============================== */
 
 function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobility, onUpdateProgram, onRestartProgram, onRecordPR, onRemovePR }) {
@@ -3367,13 +3449,20 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     return map;
   }, [resolvedSections]);
 
-  const [warmupChecked, setWarmupChecked] = useState({});
+  const draftKey = `${client.id}:${phaseId}:${dayId}:${todayStr()}`;
+  const restored = useMemo(() => readDraft(draftKey), [draftKey]);
+
+  const [warmupChecked, setWarmupChecked] = useState(() => (restored && restored.warmupChecked) || {});
   const [expanded, setExpanded] = useState({ warmup: true });
-  const [complete, setComplete] = useState({});
-  const [manualPRs, setManualPRs] = useState({});
-  const [entriesBySection, setEntriesBySection] = useState(buildFreshEntries);
-  const [notes, setNotes] = useState("");
-  const [rpe, setRpe] = useState(7);
+  const [complete, setComplete] = useState(() => (restored && restored.complete) || {});
+  const [manualPRs, setManualPRs] = useState(() => (restored && restored.manualPRs) || {});
+  const [entriesBySection, setEntriesBySection] = useState(() => mergeDraftEntries(buildFreshEntries(), restored && restored.entries));
+  const [notes, setNotes] = useState(() => (restored && restored.notes) || "");
+  const [rpe, setRpe] = useState(() => (restored && typeof restored.rpe === "number" ? restored.rpe : 7));
+  const [restoredNotice, setRestoredNotice] = useState(!!restored);
+  // One id per open session, so tapping Finish again after a failed save
+  // updates that session rather than appending a second copy of it.
+  const sessionIdRef = useRef((restored && restored.sessionId) || uid());
   const [finished, setFinished] = useState(false);
   const [savingSession, setSavingSession] = useState(false);
   const [summary, setSummary] = useState(null);
@@ -3383,7 +3472,30 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   const [editingName, setEditingName] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
 
+  // Debounced so typing stays smooth; 400ms is well inside the gap between sets.
+  useEffect(() => {
+    if (finished) return undefined;
+    const t = setTimeout(() => {
+      const entries = {};
+      let hasAnything = false;
+      Object.keys(entriesBySection).forEach((secId) => {
+        entries[secId] = (entriesBySection[secId] || []).map((en) => ({
+          exerciseId: en.exerciseId,
+          sets: (en.sets || []).map((s) => {
+            if (String(s.weight || "").trim() || s.done) hasAnything = true;
+            return { weight: s.weight, reps: s.reps, rir: s.rir, done: s.done };
+          }),
+        }));
+      });
+      if (!hasAnything && !notes.trim() && !Object.keys(warmupChecked).length) return;
+      writeDraft(draftKey, { v: 1, savedAt: Date.now(), sessionId: sessionIdRef.current, entries, warmupChecked, complete, manualPRs, notes, rpe });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [entriesBySection, warmupChecked, complete, manualPRs, notes, rpe, finished, draftKey]);
+
   const resetAllInputs = () => {
+    clearDraft(draftKey);
+    setRestoredNotice(false);
     setWarmupChecked({});
     setComplete({});
     setManualPRs({});
@@ -3506,7 +3618,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     const prEntries = Object.values(manualPRs);
     prEntries.forEach((p) => prNameSet.add(p.exerciseName));
     const session = {
-      id: uid(), date: todayStr(), phaseId, dayId, dayLabel: day.label, weekNumber,
+      id: sessionIdRef.current, date: todayStr(), phaseId, dayId, dayLabel: day.label, weekNumber,
       exercises: allExercises, totalVolume: Math.round(totalVolume), avgRPE: rpe,
       readinessColor: client.readiness[todayStr()]?.color || null,
       warmupCompleted: totalWarmupItems > 0 && warmupCheckedCount === totalWarmupItems,
@@ -3524,6 +3636,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     const result = await onSave(session);
     setSavingSession(false);
     if (result && result.ok === false) return;
+    clearDraft(draftKey);
     setSummary({ totalVolume: session.totalVolume, prNames: Array.from(prNameSet), avgRPE: rpe, isFinalSession, newMilestones });
     setFinished(true);
   };
@@ -3567,6 +3680,12 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
     <ModalShell onClose={onClose} dismissOnEscape={false} title={`Day ${day.label} — ${mainLift}`}
       headerLeftExtra={<button className="icon-btn" onClick={() => setConfirmingReset(true)} title="Clear every input for this session" aria-label="Clear every input for this session"><RotateCcw size={16} /></button>}
       headerRight={<ProgressBadge percent={percent} />} fullscreen>
+      {restoredNotice && !finished && (
+        <div className="adjust-box" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ flex: 1 }}>Picked up where you left off — everything you'd already entered for this session is back. Finish and save it when you're done.</span>
+          <button className="btn-ghost" style={{ marginTop: 0, padding: "6px 10px", fontSize: 12.5 }} onClick={() => setRestoredNotice(false)}>Got it</button>
+        </div>
+      )}
       {confirmingReset && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
           Clear every set, checkbox, and note you've entered for this session and start over? This can't be undone.
@@ -3586,7 +3705,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       {showFirstSetHelp && (
         <div className="rest-banner" style={{ background: "var(--green)", color: "#101010" }}>
           <Info size={16} />
-          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. That's saved automatically as you type it — no extra step needed. Reps in Reserve is already filled in for you — you don't need to touch it. Only tap the trophy if it's a genuine Personal Record.</span>
+          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. Your entries are kept on this phone as you go, so you won't lose them if the app closes mid-session — tap Finish &amp; Save Day at the end to send the session to your account. Effort is already filled in for you — you don't need to touch it. Only tap the trophy if it's a genuine Personal Record.</span>
           <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
         </div>
       )}
@@ -3882,7 +4001,7 @@ function MobilitySession({ client, onClose, onSave, onUpdateProgram }) {
             <div className="log-exercise-head"><div className="log-exercise-name">Session Notes</div></div>
             <textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did mobility feel? Anything tight, anything to flag…" />
           </div>
-          <button className="btn-primary wide" onClick={() => { onSave({ id: uid(), date: todayStr(), totalSeconds, notes }); onClose(); }}>Save & finish</button>
+          <button className="btn-primary wide" onClick={async () => { const r = await onSave({ id: uid(), date: todayStr(), totalSeconds, notes }); if (r && r.ok === false) return; onClose(); }}>Save & finish</button>
         </div>
       </ModalShell>
     );
@@ -4496,7 +4615,7 @@ function BJJNotesTab({ client, onPersist }) {
 
   return (
     <div className="pad">
-      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. Nothing here is ever shared with your coach unless you show them directly.</p>
+      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. These notes are for you — your coach's dashboard doesn't display them.</p>
 
       {!adding && <button className="btn-primary wide" onClick={startAdd}>+ Add Today's Notes</button>}
 
@@ -4972,6 +5091,7 @@ function GlobalStyle() {
       .slider-row { margin-bottom: 14px; }
       .slider-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 6px; }
       .slider-value { color: var(--accent); font-weight: 700; }
+      .slider-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       .bw-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; }
       .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 14px; text-align: right; }
@@ -5174,6 +5294,20 @@ function GlobalStyle() {
 
 /* ============================== AUTH SCREEN ============================== */
 
+// Supabase's own strings ("Invalid login credentials", "User already
+// registered") read as broken software on a sign-in screen. Module scope
+// because both the sign-in screen and the password-reset screen need it.
+function friendlyAuthError(m) {
+  const s = String(m || "").toLowerCase();
+  if (s.includes("invalid login")) return "That email and password don't match an account. Check both, or use Forgot password.";
+  if (s.includes("already registered") || s.includes("already been registered")) return "There's already an account with that email. Sign in instead, or use Forgot password.";
+  if (s.includes("rate limit") || s.includes("too many")) return "Too many tries just now. Wait a minute and try again.";
+  if (s.includes("not confirmed") || s.includes("confirm")) return "Check your email for the confirmation link, then come back and sign in.";
+  if (s.includes("password")) return "Your password needs to be at least 6 characters.";
+  if (s.includes("email")) return "That doesn't look like a valid email address.";
+  return "Something went wrong. Please try again in a moment.";
+}
+
 function AuthScreen() {
   const [theme, setTheme] = useState("dark");
   const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
@@ -5186,7 +5320,7 @@ function AuthScreen() {
   const [promoCode, setPromoCode] = useState("");
   const promoDiscount = PROMO_CODES[promoCode.trim().toUpperCase()] || 0;
   const duePrice = PROGRAM_PRICE - promoDiscount;
-  const hasPaymentInfo = coachVenmo || coachCashApp;
+  const hasPaymentInfo = coachVenmo || coachCashApp || coachPaymentLink;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -5194,7 +5328,7 @@ function AuthScreen() {
     try {
       if (mode === "signup") {
         const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { promoCode: promoCode.trim().toUpperCase() } } });
-        if (err) setError(err.message);
+        if (err) setError(friendlyAuthError(err.message));
         else {
           const newUserId = signUpData?.user?.id;
           if (newUserId && COACH_USER_ID && newUserId !== COACH_USER_ID) {
@@ -5204,15 +5338,15 @@ function AuthScreen() {
               await supabase.from("client_links").insert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email });
             } catch {}
           }
-          setInfo("Account created! Setting up your program...");
+          setInfo("Account created. If we ask you to confirm your email, open the link we just sent you and then come back and sign in. Otherwise you'll be taken straight to your program.");
         }
       } else if (mode === "forgot") {
         const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
-        if (err) setError(err.message);
+        if (err) setError(friendlyAuthError(err.message));
         else setInfo("Check your email for a link to reset your password.");
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (err) setError(err.message);
+        if (err) setError(friendlyAuthError(err.message));
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -5234,8 +5368,8 @@ function AuthScreen() {
         {mode === "signup" && hasPaymentInfo && (
           <div className="card" style={{ marginBottom: 18, textAlign: "center" }}>
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
-            <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>{`First Week Free / $${duePrice} Fee At The Start Of Week 2 For Unlimited Access`}</p>
-            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment needed today — your first week is on the house. You'll be prompted here again once Week 2 starts.</p>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>{`Your First Week Of Sessions Free / One-Time $${duePrice} Fee After That For Unlimited Access`}</p>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment today — your first week of sessions is on the house. Once you've finished them, you'll be asked for the fee here before the next session unlocks. It's a one-time fee, not a subscription: you're never charged again, on this block or any future one.</p>
             <label className="labeled-input" style={{ marginBottom: 10, textAlign: "left" }}>
               <span>Promo Code (optional)</span>
               <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="Enter code" style={{ textTransform: "uppercase" }} />
@@ -5296,7 +5430,7 @@ function ResetPasswordScreen({ onDone }) {
     setError(""); setBusy(true);
     try {
       const { error: err } = await supabase.auth.updateUser({ password });
-      if (err) setError(err.message);
+      if (err) setError(friendlyAuthError(err.message));
       else onDone();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -5329,10 +5463,11 @@ function ConfigMissingScreen() {
       <div className="pad" style={{ paddingTop: 60, maxWidth: 460, margin: "0 auto" }}>
         <div className="program-title" style={{ fontSize: 20, marginBottom: 10 }}>Setup Needed</div>
         <p className="muted">
-          This app needs a Supabase project connected before anyone can create an account. Add
-          VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as environment variables in your Vercel
-          project settings, then redeploy.
+          This app isn't available right now — that's a setup problem on our end, not anything you
+          did. Message your coach and he'll get it sorted.
         </p>
+        {/* For the coach: add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as environment
+            variables in the Vercel project settings, then redeploy. */}
       </div>
       <GlobalStyle />
     </div>
@@ -5345,7 +5480,7 @@ export default function AppGate() {
 
   useEffect(() => {
     if (!supabase) { setSession(null); return; }
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth.getSession().then(({ data }) => setSession(data.session)).catch(() => setSession(null));
     const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === "PASSWORD_RECOVERY") setRecovery(true);
       setSession(newSession);
@@ -5354,7 +5489,7 @@ export default function AppGate() {
   }, []);
 
   if (!supabase) return <ConfigMissingScreen />;
-  if (session === undefined) return null;
+  if (session === undefined) return <div className="app-shell" data-theme="dark"><LoadingState /><GlobalStyle /></div>;
   if (recovery) return <ResetPasswordScreen onDone={() => setRecovery(false)} />;
   if (!session) return <AuthScreen />;
   return (
