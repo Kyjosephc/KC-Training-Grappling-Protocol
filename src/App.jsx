@@ -2212,12 +2212,30 @@ function PaymentModal({ onClose }) {
   );
 }
 
+// A plain barbell glyph — a generic strength symbol drawn from scratch, so the
+// header reads as a brand mark without borrowing anyone else's.
+function BrandMark({ size = 34 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 34 34" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="32" height="32" rx="9" stroke="var(--accent)" strokeOpacity="0.32" strokeWidth="1.5" />
+      <rect x="6" y="14" width="3.4" height="6" rx="1.2" fill="var(--accent)" opacity="0.65" />
+      <rect x="10.6" y="10.5" width="4" height="13" rx="1.6" fill="var(--accent)" />
+      <rect x="15.6" y="15.6" width="2.8" height="2.8" fill="var(--accent)" />
+      <rect x="19.4" y="10.5" width="4" height="13" rx="1.6" fill="var(--accent)" />
+      <rect x="24.6" y="14" width="3.4" height="6" rx="1.2" fill="var(--accent)" opacity="0.65" />
+    </svg>
+  );
+}
+
 function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
-      <div>
-        <div className="topbar-brand">Strength Matrix</div>
-        <button className="topbar-name-sub topbar-name-btn" onClick={onOpenDashboard}>{client.name} — view progress</button>
+      <div className="brand-block">
+        <BrandMark />
+        <div className="brand-stack">
+          <div className="brand-word">Strength</div>
+          <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
+        </div>
       </div>
       <button className="topbar-avatar-btn" onClick={onOpenSettings} aria-label="Edit profile picture">
         {client.profilePicture ? (
@@ -2226,7 +2244,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
           <span className="topbar-avatar-fallback">{(client.name || "?").trim().charAt(0).toUpperCase()}</span>
         )}
       </button>
-      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+      <div className="topbar-icons">
         <div style={{ display: "flex", gap: 6 }}>
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
           {isCoach && (
@@ -3201,6 +3219,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
 
   return (
     <div className="pad">
+      <button className="quote-hero" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
+        <p className="quote-hero-text">{todaysMentalTip.quote}</p>
+        <span className="quote-hero-attr"><span className="quote-hero-dash" />{todaysMentalTip.author}</span>
+      </button>
+
       {isCurrent && nudgeMessage && (
         <div className="nudge-card">
           <div className="nudge-card-title">Welcome back</div>
@@ -3224,12 +3247,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           <p className="muted" style={{ marginBottom: 10 }}>You've hit every milestone there is. Incredible.</p>
         )}
         <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
-      </Card>
-
-      <Card title="Daily Motivation" subtitle="A new one every day">
-        <p className="log-exercise-name" style={{ fontSize: 15, fontStyle: "italic", fontWeight: 500, lineHeight: 1.5, marginBottom: 6 }}>"{todaysMentalTip.quote}"</p>
-        <p className="muted" style={{ marginBottom: 10 }}>— {todaysMentalTip.author}</p>
-        <button className="btn-ghost wide" onClick={() => setShowMentalLibrary(true)}>Browse All Quotes</button>
       </Card>
 
       <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color, color: READINESS_COPY[readinessToday.color].textColor }}>{readinessToday.color}</span> : null}>
@@ -3275,9 +3292,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
 
         <div className="hero-title">{mainLift}</div>
         <div className="hero-duration">{pos.day.name} · Estimated {30 + (pos.day.sections?.length || 0) * 5} minutes</div>
-
-        <div className="hero-quote">"{todaysMentalTip.quote}"</div>
-        <div className="hero-quote-attr">— {todaysMentalTip.author}</div>
 
         {isCurrent && (
           readinessToday ? (
@@ -5207,13 +5221,28 @@ function GlobalStyle() {
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.active { border-color: var(--accent); }
       .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
-      .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+      .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand avatar" "icons icons"; align-items: center; gap: 12px 10px; padding: 16px 16px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+      .topbar > .brand-block { grid-area: brand; }
+      .topbar > .topbar-avatar-btn { grid-area: avatar; }
+      .topbar-icons { grid-area: icons; display: flex; gap: 6px; justify-content: flex-start; align-items: center; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+      .topbar-icons::-webkit-scrollbar { display: none; }
       .topbar-avatar-btn { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto; flex-shrink: 0; }
       .topbar-avatar-img { width: 100%; height: 100%; object-fit: cover; }
       .topbar-avatar-fallback { font-size: 16px; font-weight: 700; color: var(--text-dim); }
       .settings-avatar-preview { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .settings-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
       .settings-avatar-preview span { font-size: 24px; font-weight: 700; color: var(--text-dim); }
+      .quote-hero { display: block; width: 100%; text-align: left; background: none; border: none; padding: 2px 0 0; margin-bottom: 18px; cursor: pointer; }
+      .quote-hero-text { font-size: 19px; font-weight: 700; line-height: 1.38; color: var(--text); margin: 0 0 9px; }
+      .quote-hero-attr { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+      .quote-hero-dash { width: 18px; height: 1px; background: var(--text-dim); flex-shrink: 0; }
+      /* ---- Title block: emblem + wordmark + ruled subtitle ---- */
+      .brand-block { display: flex; align-items: center; gap: 11px; min-width: 0; }
+      .brand-stack { min-width: 0; }
+      .brand-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 21px; letter-spacing: 0.17em; line-height: 1; color: var(--text); }
+      .brand-rule { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+      .brand-rule-line { height: 1px; background: var(--accent); opacity: 0.45; flex: 1; min-width: 8px; }
+      .brand-sub { font-family: 'Oswald', sans-serif; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.34em; color: var(--accent); white-space: nowrap; }
       .topbar-brand { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; color: var(--text); line-height: 1.1; max-width: 220px; }
       .topbar-name-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
       .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); display: block; max-width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
