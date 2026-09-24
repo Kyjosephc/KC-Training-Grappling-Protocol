@@ -1819,10 +1819,6 @@ function MainApp({ userId, onSignOut }) {
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  // Anyone whose profile predates the waiver has waiver === null. They get asked
-  // every time they open the app until they accept, because a record with holes
-  // in it is not a record.
-  const [showWaiver, setShowWaiver] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
@@ -1921,8 +1917,6 @@ function MainApp({ userId, onSignOut }) {
   const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
 
   useEffect(() => { if (client && !client.hasSeenTutorial) setShowTutorial(true); }, [client?.id]); // eslint-disable-line
-  // The tutorial goes first for a brand-new athlete, so this waits for it to be done.
-  useEffect(() => { if (client && !client.waiver && client.hasSeenTutorial) setShowWaiver(true); }, [client?.id, client?.waiver, client?.hasSeenTutorial]); // eslint-disable-line
   const changeTheme = async (t) => { setTheme(t); await setSettings(userId, { theme: t }); };
 
   const completeOnboarding = async (profile) => {
@@ -1975,6 +1969,38 @@ function MainApp({ userId, onSignOut }) {
   if (clients.length === 0) return <div className="app-shell" data-theme={theme}><OnboardingScreen onSubmit={completeOnboarding} /><ToastHost /><GlobalStyle /></div>;
   if (!client) return <div className="app-shell" data-theme={theme}><LoadingState /><ToastHost /><GlobalStyle /></div>;
 
+  // Athletes whose profile predates the waiver reach this and go no further.
+  // There is no way past it except signing, and no way around it except signing
+  // out — the whole point is that nobody trains on an unsigned account.
+  //
+  // The coach is exempt, and has to be. He switches between the client records
+  // he keeps on their behalf, and gating those would both trap him behind a
+  // record he can't leave and ask him to sign in someone else's name. Athletes
+  // who signed up themselves own their own account and are gated normally.
+  if (!isCoach && !client.waiver) {
+    return (
+      <div className="app-shell" data-theme={theme}>
+        <WaiverModal
+          dismissible={false}
+          defaultName={client.name && client.name !== "Athlete" ? client.name : [client.firstName, client.lastName].filter(Boolean).join(" ")}
+          onAccept={async ({ signature }) => {
+            await persistClient({ ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "" } });
+          }}
+          onClose={undefined}
+          intro={(
+            <div className="intent-box" style={{ marginBottom: 14 }}>
+              Your program is waiting. Before you train again, read this and sign it — it is a one-time thing and it does not change anything about your training.
+            </div>
+          )}
+          footer={(
+            <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={onSignOut}>Sign out instead</button>
+          )} />
+        <ToastHost />
+        <GlobalStyle />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
@@ -2001,17 +2027,6 @@ function MainApp({ userId, onSignOut }) {
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
-      {showWaiver && (
-        <WaiverModal
-          accepted={client?.waiver || null}
-          onClose={() => setShowWaiver(false)}
-          onAccept={async () => {
-            setShowWaiver(false);
-            if (client && !client.waiver) {
-              await persistClient({ ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION } });
-            }
-          }} />
-      )}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -2162,7 +2177,7 @@ function OnboardingScreen({ onSubmit }) {
       </p>
       {waiver ? (
         <div className="intent-box" style={{ marginBottom: 10 }}>
-          Waiver accepted {fmtDateTime(waiver.at)}.{" "}
+          Signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
           <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
         </div>
       ) : (
@@ -2182,7 +2197,8 @@ function OnboardingScreen({ onSubmit }) {
         <WaiverModal
           onClose={() => setShowWaiver(false)}
           accepted={waiver}
-          onAccept={() => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION }); setShowWaiver(false); }}
+          defaultName={`${firstName.trim()} ${lastName.trim()}`.trim()}
+          onAccept={({ signature }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: `${firstName.trim()} ${lastName.trim()}`.trim() }); setShowWaiver(false); }}
         />
       )}
     </div>
@@ -2304,14 +2320,48 @@ const WAIVER_SECTIONS = [
     body: "To the fullest extent the law allows, you release your coach from any claim, demand, or cause of action for injury, illness, disability, death, or property loss arising out of your use of this app or your participation in the training it prescribes, including claims based on ordinary negligence. You agree not to bring such a claim, and you accept responsibility for your own losses. This release does not cover gross negligence, recklessness, or intentional misconduct, and it does not waive any right that cannot lawfully be waived." },
   { heading: "If part of this does not hold",
     body: "If a court finds any part of this agreement unenforceable, the rest of it stays in force. This agreement is governed by the laws of the State of Washington and binds your heirs and anyone acting on your behalf." },
-  { heading: "Confirming it",
-    body: "By ticking the box and continuing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are giving up substantial legal rights by accepting it. The date and time you accept, and the version of this wording, are recorded against your profile." },
+  { heading: "Signing it",
+    body: "Typing your full legal name in the signature field below is your signature on this agreement, and you intend it to have the same effect as signing it by hand. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your signature, the date and time you sign, and the version of this wording are recorded against your profile, and your coach keeps a copy of that record." },
 ];
 
-function WaiverModal({ onClose, onAccept, accepted }) {
-  const [ticked, setTicked] = useState(false);
+// The signature block. Typing your own name into it is the act of signing — so it
+// is rendered in a hand it would be signed in, over a rule, with the date beside
+// it, the way it would look on paper.
+function SignatureBlock({ value, onChange, dated }) {
   return (
-    <ModalShell onClose={onClose} title={WAIVER_TITLE}>
+    <div className="sig-block">
+      <label className="sig-label" htmlFor="waiver-signature">Sign your full legal name</label>
+      <input
+        id="waiver-signature"
+        className="sig-input"
+        type="text"
+        autoComplete="name"
+        spellCheck={false}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Your full name"
+        aria-describedby="waiver-signature-help" />
+      <div className="sig-rule" />
+      <div className="sig-foot">
+        <span id="waiver-signature-help">Electronic signature</span>
+        <span>{dated}</span>
+      </div>
+    </div>
+  );
+}
+
+function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissible = true, intro = null, footer = null }) {
+  const [ticked, setTicked] = useState(false);
+  const [signature, setSignature] = useState(defaultName);
+  const signedName = signature.trim();
+  // Two words, or one long enough to be a name. Enough to stop an empty stroke
+  // or a stray keypress counting as a signature, without turning away anyone
+  // whose legal name is short or spelled a way we did not anticipate.
+  const signatureOk = signedName.length >= 3 && /[a-z]/i.test(signedName);
+  const today = new Date().toLocaleDateString(undefined, { dateStyle: "long" });
+  return (
+    <ModalShell onClose={onClose} title={WAIVER_TITLE} dismissOnEscape={dismissible} hideClose={!dismissible}>
+      {intro}
       <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Version {WAIVER_VERSION}</p>
       {WAIVER_SECTIONS.map((s) => (
         <div key={s.heading} style={{ marginBottom: 16 }}>
@@ -2320,8 +2370,17 @@ function WaiverModal({ onClose, onAccept, accepted }) {
         </div>
       ))}
       {accepted && accepted.at ? (
-        <div className="intent-box" style={{ marginTop: 6 }}>
-          Accepted on {fmtDateTime(accepted.at)}{accepted.version && accepted.version !== WAIVER_VERSION ? ` (version ${accepted.version})` : ""}.
+        <div className="sig-block signed">
+          <div className="sig-label">Signed</div>
+          <div className="sig-signed">{accepted.signature || accepted.name || "Signed electronically"}</div>
+          <div className="sig-rule" />
+          <div className="sig-foot">
+            <span>Electronic signature</span>
+            <span>{fmtDateTime(accepted.at)}</span>
+          </div>
+          {accepted.version && accepted.version !== WAIVER_VERSION && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>Signed against version {accepted.version}.</p>
+          )}
         </div>
       ) : onAccept ? (
         <>
@@ -2329,9 +2388,15 @@ function WaiverModal({ onClose, onAccept, accepted }) {
             <input type="checkbox" checked={ticked} onChange={() => setTicked((v) => !v)} />
             <span>I am 18 or older. I have read and understood this agreement, I accept the risks, and I agree to the release above.</span>
           </label>
-          <button className="btn-primary wide" style={{ marginTop: 12 }} disabled={!ticked} onClick={onAccept}>
-            Agree and continue
+          <SignatureBlock value={signature} onChange={setSignature} dated={today} />
+          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk}
+            onClick={() => onAccept({ signature: signedName })}>
+            Sign and continue
           </button>
+          {!signatureOk && ticked && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>Type your full name above to sign.</p>
+          )}
+          {footer}
         </>
       ) : null}
     </ModalShell>
@@ -2934,7 +2999,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
       {client?.waiver?.at && (
         <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-          You accepted this on {fmtDateTime(client.waiver.at)}.
+          Signed {client.waiver.signature ? `as ${client.waiver.signature} ` : ""}on {fmtDateTime(client.waiver.at)}.
         </p>
       )}
       {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
@@ -3072,9 +3137,13 @@ function downloadWaiverRecord(records) {
     .sort((a, b) => (a.full.waiver.at < b.full.waiver.at ? -1 : 1))
     .forEach((r) => {
       lines.push(r.name);
-      lines.push("  Accepted:  " + new Date(r.full.waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
+      lines.push("  Signed:    " + (r.full.waiver.signature || "(no signature on file)"));
+      lines.push("  Dated:     " + new Date(r.full.waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
       lines.push("  Timestamp: " + r.full.waiver.at);
       lines.push("  Version:   " + (r.full.waiver.version || "unversioned"));
+      if (r.full.waiver.signature && r.full.waiver.name && r.full.waiver.signature.trim().toLowerCase() !== r.full.waiver.name.trim().toLowerCase()) {
+        lines.push("  Note:      signed as \"" + r.full.waiver.signature + "\" against the profile name \"" + r.full.waiver.name + "\"");
+      }
       lines.push("");
     });
   if (unsigned.length) {
@@ -3093,7 +3162,9 @@ function downloadWaiverRecord(records) {
     lines.push(s.body);
     lines.push("");
   });
-  lines.push("An athlete's stored version above identifies the wording they accepted.");
+  lines.push("Each signature above was typed by the athlete into the signature field of");
+  lines.push("this agreement, on the date and time recorded beside it, from their own");
+  lines.push("account. An athlete's stored version identifies the wording they signed.");
   lines.push("Where that differs from the version printed here, the stored version governs.");
 
   const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
@@ -3240,7 +3311,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                 </div>
                 {full?.waiver?.at && (
                   <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                    Waiver accepted {fmtDateTime(full.waiver.at)} · version {full.waiver.version || "unversioned"}
+                    Signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)} · version {full.waiver.version || "unversioned"}
                   </div>
                 )}
                 {full?.injuryNotes && (
@@ -5321,8 +5392,9 @@ function EmptyState({ text, icon, actionLabel, onAction }) {
     </div>
   );
 }
-function ModalShell({ title, children, onClose, fullscreen, headerRight, headerLeftExtra, dismissOnEscape = true }) {
+function ModalShell({ title, children, onClose, fullscreen, headerRight, headerLeftExtra, dismissOnEscape = true, hideClose = false }) {
   const closeRef = useRef(null);
+  const headRef = useRef(null);
   useEffect(() => {
     if (!dismissOnEscape || !onClose) return undefined;
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
@@ -5331,16 +5403,16 @@ function ModalShell({ title, children, onClose, fullscreen, headerRight, headerL
   }, [dismissOnEscape, onClose]);
   // Move focus into the dialog so a keyboard or screen-reader user isn't left
   // behind on the page underneath it.
-  useEffect(() => { if (closeRef.current) closeRef.current.focus(); }, []);
+  useEffect(() => { (closeRef.current || headRef.current)?.focus(); }, []);
   return (
     <div className={`modal-overlay ${fullscreen ? "fullscreen" : ""}`}>
       <div className="modal-box" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : undefined}>
         <div className="modal-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: hideClose ? 42 : undefined }}>
+            {!hideClose && <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>}
             {headerLeftExtra}
           </div>
-          <div className="modal-title">{title}</div>
+          <div className="modal-title" ref={headRef} tabIndex={-1}>{title}</div>
           <div style={{ minWidth: 42, display: "flex", justifyContent: "flex-end" }}>{headerRight}</div>
         </div>
         <div className="modal-content">{children}</div>
@@ -5494,6 +5566,15 @@ function GlobalStyle() {
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       .bw-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; }
       .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 14px; text-align: right; }
+      .sig-block { margin-top: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; }
+      .sig-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }
+      .sig-input { width: 100%; box-sizing: border-box; background: transparent; border: none; outline: none; color: var(--text); font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; padding: 0 2px 6px; min-height: 48px; }
+      .sig-input::placeholder { color: var(--text-dim); opacity: 0.45; }
+      .sig-input:focus-visible { outline: none; }
+      .sig-block:focus-within .sig-rule { background: var(--accent); }
+      .sig-signed { font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; color: var(--text); padding: 0 2px 6px; min-height: 48px; word-break: break-word; }
+      .sig-rule { height: 1px; background: var(--border); margin-bottom: 8px; transition: background 0.15s ease; }
+      .sig-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-dim); }
       .bjj-toggle { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 16px; cursor: pointer; }
       .bjj-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
       .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
