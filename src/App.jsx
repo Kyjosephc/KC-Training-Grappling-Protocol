@@ -2045,14 +2045,22 @@ function MainApp({ userId, onSignOut }) {
 
 /* ============================== ONBOARDING ============================== */
 
-function GrapplingMark({ opacity = 0.14 }) {
+// Two uses: a faint wash behind a card, or the emblem itself. As an emblem it
+// takes the brand colours and sits inline; the fixed blue only made sense when
+// it was too faint to read as anything.
+function GrapplingMark({ opacity = 0.14, variant = "wash" }) {
+  const emblem = variant === "emblem";
+  const toriFill = emblem ? "var(--accent)" : "#2f6fb3";
+  const ukeFill = emblem ? "var(--text)" : "#e7e7ea";
   return (
-    <svg viewBox="0 0 300 220" className="sisyphus-mark" style={{ opacity }} preserveAspectRatio="xMidYMid slice">
+    <svg viewBox="0 0 300 220" className={emblem ? "grapple-emblem" : "sisyphus-mark"}
+      style={emblem ? undefined : { opacity }} role="img" aria-label="Two grapplers mid-throw"
+      preserveAspectRatio={emblem ? "xMidYMid meet" : "xMidYMid slice"}>
       {/* ground shadow */}
       <ellipse cx="135" cy="206" rx="75" ry="9" fill="currentColor" opacity="0.25" />
 
       {/* ===== TORI — the thrower, bent forward driving the throw ===== */}
-      <g fill="#2f6fb3">
+      <g fill={toriFill}>
         {/* both legs, fused at a wide driving base */}
         <path d="M100,145 L145,140 L158,176 L140,206 L120,206 L127,178 L109,178 L96,206 L76,206 L87,176 Z" />
         {/* torso and head, rounded back, leaning into the throw */}
@@ -2063,7 +2071,7 @@ function GrapplingMark({ opacity = 0.14 }) {
       </g>
 
       {/* ===== UKE — being thrown, arched overhead with legs kicked up ===== */}
-      <g fill="#e7e7ea">
+      <g fill={ukeFill}>
         {/* arched body, draped over tori's back and hip */}
         <path d="M130,156 Q151,130 176,109 Q206,87 226,59 Q233,49 226,39 Q211,41 196,57 Q171,81 146,104 Q128,121 122,144 Q124,151 130,156 Z" />
         {/* head, low near tori's hip as the body rotates over */}
@@ -2109,11 +2117,7 @@ function OnboardingScreen({ onSubmit }) {
   return (
     <div className="pad" style={{ paddingTop: 40, maxWidth: 420, margin: "0 auto" }}>
       <div className="logo-block">
-        {logoImageOk ? (
-          <img src="/kc-logo.png" alt="" className="logo-image" onError={() => setLogoImageOk(false)} />
-        ) : (
-          <GrapplingMark opacity={0.14} />
-        )}
+        {logoImageOk && <img src="/kc-logo.png" alt="" className="logo-image" onError={() => setLogoImageOk(false)} />}
         <BrandLockup />
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
@@ -2219,7 +2223,7 @@ function PaymentModal({ onClose }) {
 function BrandLockup() {
   return (
     <div className="brand-lockup">
-      <BrandMark size={44} />
+      <GrapplingMark variant="emblem" />
       <div className="brand-lockup-word">Strength</div>
       <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
     </div>
@@ -5245,7 +5249,8 @@ function GlobalStyle() {
       .pad { padding: 16px; }
       .brand-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 26px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 4px; line-height: 1.05; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
-      .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+      .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+      .grapple-emblem { width: 132px; height: 97px; display: block; }
       .brand-lockup-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 30px; letter-spacing: 0.2em; line-height: 1; color: var(--text); text-indent: 0.2em; }
       .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
       .logo-block .brand-title { font-size: 32px; margin-bottom: 0; }
@@ -5684,7 +5689,6 @@ function AuthScreen() {
     <div className="app-shell" data-theme={theme}>
       <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
         <div className="logo-block">
-          <GrapplingMark opacity={0.14} />
           <BrandLockup />
         </div>
         <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>{mode === "signup" ? "Create Your Account" : mode === "forgot" ? "Reset Your Password" : "Sign In"}</div>
