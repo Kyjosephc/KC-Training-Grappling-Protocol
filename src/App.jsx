@@ -1769,6 +1769,94 @@ const READINESS_COPY = {
   RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--red)", textColor: "#ffffff" },
 };
 
+/* ============================== OURA RING (optional) ============================== */
+// Entirely opt-in. If the coach has not set the Oura environment variables on
+// the server, /api/oura/data answers { configured: false } and nothing about the
+// ring is ever shown — no dead buttons, no settings section explaining a feature
+// that does not exist here.
+//
+// The browser never touches an Oura token. It asks its own server for already
+// fetched numbers, carrying the athlete's Supabase session so the server knows
+// whose ring to read.
+
+async function ouraAuthHeader() {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : null;
+}
+
+async function ouraFetch(path, options = {}) {
+  const headers = await ouraAuthHeader();
+  if (!headers) return null;
+  const res = await fetch(`/api/oura/${path}`, {
+    ...options,
+    headers: { ...headers, ...(options.headers || {}) },
+  });
+  // A deployment without the serverless functions returns the index page for an
+  // unknown path, which is HTML, not JSON. Treat that as "not available" rather
+  // than letting a parse error surface as a crash.
+  const type = res.headers.get("content-type") || "";
+  if (!type.includes("application/json")) return null;
+  return res.json();
+}
+
+// Oura scores everything out of 100; the check-in this app already had runs 0 to 5.
+const ouraTo5 = (score) => (score == null ? null : Math.max(0, Math.min(5, Math.round(Number(score) / 20))));
+
+function useOura() {
+  const [state, setState] = useState({ loading: true, configured: false, connected: false, days: [], today: null, reason: null });
+
+  const load = useCallback(async () => {
+    const json = await ouraFetch("data");
+    if (!json) { setState({ loading: false, configured: false, connected: false, days: [], today: null, reason: null }); return; }
+    setState({ loading: false, configured: json.configured !== false, connected: !!json.connected, days: json.days || [], today: json.today || null, reason: json.reason || null });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const connect = useCallback(async () => {
+    const json = await ouraFetch("start", { method: "POST" });
+    if (json && json.url) { window.location.href = json.url; return true; }
+    emitToast({ kind: "error", text: json && json.error === "not_configured"
+      ? "The Oura connection isn't switched on for this app yet."
+      : "Couldn't start the Oura connection. Try again in a minute.", autoDismissMs: 6000 });
+    return false;
+  }, []);
+
+  const disconnect = useCallback(async () => {
+    await ouraFetch("disconnect", { method: "POST" });
+    emitToast({ kind: "info", text: "Oura disconnected. Your ring and its data are untouched.", autoDismissMs: 5000 });
+    await load();
+  }, [load]);
+
+  return { ...state, reload: load, connect, disconnect };
+}
+
+// The app is returned to with ?oura=<result> after a trip to Oura's consent
+// screen. Say what happened, then clean the address bar so a refresh does not
+// repeat the message.
+function useOuraReturn(onConnected) {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("oura");
+    if (!result) return;
+    const MESSAGES = {
+      connected: { kind: "success", text: "Oura connected. Your sleep and readiness will fill in each morning." },
+      cancelled: { kind: "info", text: "Oura connection cancelled. Nothing changed." },
+      expired: { kind: "error", text: "That Oura link timed out. Start the connection again." },
+      not_configured: { kind: "error", text: "The Oura connection isn't switched on for this app yet." },
+      failed: { kind: "error", text: "Oura couldn't complete the connection. Try again." },
+    };
+    const msg = MESSAGES[result] || MESSAGES.failed;
+    emitToast({ ...msg, autoDismissMs: 7000 });
+    params.delete("oura");
+    const rest = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    if (result === "connected" && onConnected) onConnected();
+  }, []); // eslint-disable-line
+}
+
 /* ============================== APP SHELL ============================== */
 
 const TABS = [
@@ -1820,6 +1908,8 @@ function MainApp({ userId, onSignOut }) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const oura = useOura();
+  useOuraReturn(() => { setShowSettings(false); oura.reload(); });
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -2006,7 +2096,7 @@ function MainApp({ userId, onSignOut }) {
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
-          <TodayTab client={client} onPersist={persistClient}
+          <TodayTab client={client} oura={oura} onPersist={persistClient}
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
             onStartMobility={() => setShowMobility(true)} />
         )}
@@ -2023,7 +2113,7 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showSettings && <SettingsModal client={client} isCoach={isCoach} oura={oura} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -2863,7 +2953,67 @@ function InstallGuide() {
   );
 }
 
-function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
+// Shown only where the connection is actually available. An athlete whose coach
+// has not set this up sees nothing at all, rather than a button that fails.
+function OuraSettingsSection({ oura }) {
+  const [busy, setBusy] = useState(false);
+  const [confirmingOff, setConfirmingOff] = useState(false);
+  if (!oura || oura.loading || !oura.configured) return null;
+
+  const connectedSince = oura.today?.day ? fmtDate(oura.today.day) : null;
+
+  return (
+    <>
+      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Oura Ring</div>
+      {oura.connected ? (
+        <>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Connected. Your sleep and readiness scores fill in your daily check-in each morning, so the session adjusts itself before you get to the gym. You can still change any of it by hand.
+            {connectedSince ? ` Last reading: ${connectedSince}.` : ""}
+          </p>
+          {oura.reason === "rate_limited" && (
+            <div className="adjust-box">Oura is busy right now. Your numbers will catch up on their own.</div>
+          )}
+          {oura.reason === "oura_unavailable" && (
+            <div className="adjust-box">Couldn't reach Oura just now. Your training is unaffected.</div>
+          )}
+          {confirmingOff ? (
+            <div className="intent-box">
+              <p style={{ margin: "0 0 10px" }}>Disconnect Oura? Your ring and everything in your Oura account stay exactly as they are — this app just stops reading them.</p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-ghost" style={{ marginTop: 0 }} disabled={busy}
+                  onClick={async () => { setBusy(true); await oura.disconnect(); setBusy(false); setConfirmingOff(false); }}>
+                  {busy ? "Disconnecting…" : "Yes, disconnect"}
+                </button>
+                <button className="btn-ghost" style={{ marginTop: 0 }} onClick={() => setConfirmingOff(false)}>Keep it</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn-ghost wide" onClick={() => setConfirmingOff(true)}>Disconnect Oura</button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Optional. Link your Oura account and the app reads your sleep and readiness scores each morning instead of asking you to guess at them. It reads those daily scores and nothing else, it never posts anything to Oura, and you can disconnect here whenever you like.
+          </p>
+          {oura.reason === "reconnect_needed" && (
+            <div className="adjust-box">Oura signed this app out. Connect again to pick back up.</div>
+          )}
+          <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Needs an active Oura membership — the ring on its own won't return data.
+          </p>
+          <button className="btn-ghost wide" disabled={busy}
+            onClick={async () => { setBusy(true); const went = await oura.connect(); if (!went) setBusy(false); }}>
+            {busy ? "Opening Oura…" : "Connect Oura Ring"}
+          </button>
+        </>
+      )}
+    </>
+  );
+}
+
+function SettingsModal({ client, isCoach, oura, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
@@ -2992,6 +3142,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           )}
         </>
       )}
+
+      <OuraSettingsSection oura={oura} />
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
@@ -3372,7 +3524,7 @@ function lastWeekBest(client, exerciseName, currentWeekNumber) {
   return best;
 }
 
-function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
+function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
   const totalSessions = totalSessionsIn(client.program);
   const actualComplete = (client.sessionsCompleted || 0) >= totalSessions;
   const [viewIndex, setViewIndex] = useState(client.sessionsCompleted || 0);
@@ -3385,6 +3537,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const today = todayStr();
   const readinessToday = client.readiness[today];
   const [showReadiness, setShowReadiness] = useState(false);
+  // Only today's reading counts. A ring that last synced on Tuesday should not
+  // quietly fill in Friday's check-in.
+  const ouraToday = oura?.connected && oura.today?.day === today ? oura.today : null;
+  const ouraSuggestion = useMemo(() => {
+    if (!ouraToday) return null;
+    const sleep = ouraTo5(ouraToday.sleep);
+    const energy = ouraTo5(ouraToday.readiness);
+    if (sleep == null && energy == null) return null;
+    return { sleep, energy };
+  }, [ouraToday]);
   const recentPR = useMemo(() => findRecentPR(client), [client]);
   const { total: totalLifted, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const nextMilestoneIdx = LIFT_MILESTONES.findIndex((m, idx) => achievedDates[idx] === undefined);
@@ -3465,6 +3627,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
+      {ouraToday && (
+        <WearableStrip
+          source="Oura Ring"
+          dateLabel={fmtDate(ouraToday.day)}
+          metrics={[
+            { label: "Readiness", value: ouraToday.readiness != null ? `${ouraToday.readiness}` : "—" },
+            { label: "Sleep", value: ouraToday.sleep != null ? `${ouraToday.sleep}` : "—" },
+            { label: "Activity", value: ouraToday.activity != null ? `${ouraToday.activity}` : "—" },
+          ]} />
+      )}
       <WearableStrip
         source={"Today's check-in"}
         dateLabel={fmtDate(todayStr())}
@@ -3619,10 +3791,10 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </Card>
 
       {showReadiness && (
-        <ReadinessModal existing={readinessToday} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
+        <ReadinessModal existing={readinessToday} suggestion={ouraSuggestion} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
           onSave={async ({ weight, ...entry }) => {
             const color = classifyReadiness(entry);
-            const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: weight ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
+            const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today, ...(ouraToday ? { oura: { readiness: ouraToday.readiness ?? null, sleep: ouraToday.sleep ?? null } } : {}) } }, bodyweightLog: weight ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
             await onPersist(updated);
             setShowReadiness(false);
           }} />
@@ -3697,8 +3869,15 @@ function AccomplishmentsPage({ client, onClose }) {
 
 /* ============================== READINESS MODAL ============================== */
 
-function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
-  const [v, setV] = useState(existing || { sleep: 3, energy: 3, soreness: 3, bjjHard: false });
+function ReadinessModal({ existing, existingWeight, suggestion, onClose, onSave }) {
+  // A ring fills in the two rows it can actually measure, and only when the
+  // athlete hasn't already answered for today — a saved check-in is their word
+  // on how they feel and is never overwritten by a score.
+  const prefilled = !existing && suggestion
+    ? { sleep: suggestion.sleep ?? 3, energy: suggestion.energy ?? 3, soreness: 3, bjjHard: false }
+    : null;
+  const [v, setV] = useState(existing || prefilled || { sleep: 3, energy: 3, soreness: 3, bjjHard: false });
+  const [usedRing, setUsedRing] = useState(!!prefilled);
   const [weight, setWeight] = useState(existingWeight || "");
   const fields = [
     // Soreness counts against readiness while the other two count for it, so
@@ -3710,6 +3889,17 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
       <button className="btn-primary wide" style={{ marginBottom: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
+      {usedRing && (
+        <div className="intent-box">
+          <p style={{ margin: "0 0 8px" }}>
+            Sleep and energy came from your Oura ring this morning. Soreness is still yours to set — a ring can't feel that. Move any slider that doesn't match how you actually feel; what you save is what the session uses.
+          </p>
+          <button type="button" className="link-btn" style={{ padding: 0 }}
+            onClick={() => { setV({ sleep: 3, energy: 3, soreness: 3, bjjHard: false }); setUsedRing(false); }}>
+            Clear it and answer myself
+          </button>
+        </div>
+      )}
       <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (pounds)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
       {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
       <label className="bjj-toggle">

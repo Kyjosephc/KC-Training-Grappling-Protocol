@@ -1,3 +1,11 @@
 node_modules
 dist
 .DS_Store
+
+# Never commit real credentials. .env.example is the template and is safe to
+# commit; .env holds the actual keys, including the Supabase service role key,
+# which grants full access to the database.
+.env
+.env.*
+!.env.example
+.vercel

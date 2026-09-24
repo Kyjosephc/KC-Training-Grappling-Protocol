@@ -98,3 +98,39 @@ create policy "Coach updates their athletes' data"
         and client_links.coach_user_id = auth.uid()
     )
   );
+
+-- ============================================================================
+-- OURA RING CONNECTION
+-- ============================================================================
+-- Optional: an athlete can link their Oura account so the app reads their sleep
+-- and readiness scores instead of asking them to guess at the numbers.
+--
+-- Both tables below are written ONLY by the serverless functions in api/oura/,
+-- using the service role key. They have row-level security on and deliberately
+-- no policies at all, so the anon key the browser holds can neither read nor
+-- write them. An access token is a password to somebody's health data; it does
+-- not belong anywhere the browser can reach.
+
+create table if not exists oura_connections (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz,
+  scope text,
+  connected_at timestamptz not null default now()
+);
+
+alter table oura_connections enable row level security;
+
+-- Short-lived proof that an in-flight OAuth redirect belongs to this account.
+-- Rows are deleted the moment they are used, and anything older than ten
+-- minutes is rejected on arrival.
+create table if not exists oura_oauth_state (
+  state text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table oura_oauth_state enable row level security;
+
+create index if not exists oura_oauth_state_created_at_idx on oura_oauth_state (created_at);
