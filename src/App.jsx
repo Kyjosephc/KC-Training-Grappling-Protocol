@@ -6,7 +6,7 @@ import {
   Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign
 } from "lucide-react";
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from "recharts";
 
@@ -2350,6 +2350,162 @@ function TutorialModal({ onClose }) {
   );
 }
 
+/* ============================== METRIC VISUALS ============================== */
+// A ring gauge. The track is a dim step of the fill's own hue so the unfilled
+// portion still reads as part of the same scale rather than as empty chrome.
+function MetricRing({ value, max = 100, label, sublabel, color = "var(--accent)", size = 92, display }) {
+  const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+  const stroke = 8;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  return (
+    <div className="ring-wrap">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img"
+        aria-label={`${label}: ${display !== undefined ? display : Math.round(pct * 100) + "%"}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} opacity="0.16" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeLinecap="round" strokeDasharray={`${circ * pct} ${circ}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+        <text x="50%" y="50%" className="ring-value" textAnchor="middle" dominantBaseline="central">
+          {display !== undefined ? display : `${Math.round(pct * 100)}%`}
+        </text>
+      </svg>
+      <div className="ring-label">{label}</div>
+      {sublabel ? <div className="ring-sub">{sublabel}</div> : null}
+    </div>
+  );
+}
+
+// A flat metric tile. The colour rides a bar beside the number, never the text
+// itself — a light hue is illegible as type on this surface.
+function MetricTile({ label, value, sub, color = "var(--accent)" }) {
+  return (
+    <div className="metric-tile">
+      <span className="metric-tile-bar" style={{ background: color }} />
+      <div className="metric-tile-body">
+        <div className="metric-tile-label">{label}</div>
+        <div className="metric-tile-value">{value}</div>
+        {sub ? <div className="metric-tile-sub">{sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+// Wearable-shaped strip. Today it carries the daily check-in; when a ring is
+// connected the same component takes that source's numbers instead, so adding
+// one later is a data swap rather than a layout change.
+function WearableStrip({ source, dateLabel, metrics }) {
+  if (!metrics || !metrics.length) return null;
+  return (
+    <div className="wearable-strip">
+      <div className="wearable-head">
+        <span className="wearable-source">{source}</span>
+        <span className="wearable-date">{dateLabel}</span>
+      </div>
+      <div className="wearable-metrics">
+        {metrics.map((m) => (
+          <div key={m.label} className="wearable-metric">
+            <div className="wearable-metric-label">{m.label}</div>
+            <div className="wearable-metric-value">{m.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// One series, so no legend: the card title says what is plotted. Hairline axis,
+// no gridlines, a 10% wash under a 2px line, and only the last point labelled.
+function TrendArea({ data, dataKey, color = "var(--accent)", height = 170, domain = ["auto", "auto"], valueFormat = (v) => v, unit = "" }) {
+  const gid = `grad-${dataKey}-${String(color).replace(/[^a-z0-9]/gi, "")}`;
+  const last = data.length ? data[data.length - 1] : null;
+  return (
+    <>
+      <div style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 14, bottom: 0, left: -18 }}>
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="date" stroke="var(--border)" tick={{ fill: "var(--text-dim)", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={24} />
+            <YAxis stroke="var(--border)" tick={{ fill: "var(--text-dim)", fontSize: 11 }} tickLine={false} axisLine={false} domain={domain} width={44} />
+            <Tooltip cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
+              contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 13 }}
+              labelStyle={{ color: "var(--text-dim)" }}
+              formatter={(v) => [`${valueFormat(v)}${unit}`, ""]} />
+            <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#${gid})`}
+              dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--card)" }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      {last ? (
+        <div className="chart-endlabel">
+          <span className="chart-endlabel-dot" style={{ background: color }} />
+          Latest: <strong>{valueFormat(last[dataKey])}{unit}</strong> on {last.date}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+// Magnitude over a calendar, so one hue stepping light to dark. Deliberately not
+// the green/amber/red set: those three sit close enough under red-green colour
+// blindness that a grid of them is guesswork.
+function TrainingHeatmap({ logs, weeks = 16 }) {
+  const byDate = {};
+  (logs || []).forEach((l) => { byDate[l.date] = (byDate[l.date] || 0) + (l.totalVolume || 0); });
+  const values = Object.values(byDate).filter((v) => v > 0);
+  const peak = values.length ? Math.max(...values) : 0;
+  const today = new Date(todayStr() + "T00:00:00");
+  const end = new Date(today);
+  end.setDate(end.getDate() + ((7 - ((end.getDay() === 0 ? 7 : end.getDay()))) % 7));
+  const cells = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const col = [];
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(end);
+      day.setDate(day.getDate() - (w * 7) - (6 - d));
+      const key = toLocalDateStr(day);
+      const vol = byDate[key] || 0;
+      const intensity = peak > 0 && vol > 0 ? 0.25 + 0.75 * (vol / peak) : 0;
+      col.push({ key, vol, intensity, future: day > today });
+    }
+    cells.push(col);
+  }
+  const dayNames = ["M", "T", "W", "T", "F", "S", "S"];
+  return (
+    <div className="heatmap">
+      <div className="heatmap-grid">
+        <div className="heatmap-days">
+          {dayNames.map((d, i) => <span key={i} className="heatmap-dayname">{i % 2 === 0 ? d : ""}</span>)}
+        </div>
+        {cells.map((col, ci) => (
+          <div key={ci} className="heatmap-col">
+            {col.map((cell) => (
+              <span key={cell.key}
+                title={cell.vol ? `${cell.key}: ${Math.round(cell.vol).toLocaleString()} lb` : `${cell.key}: rest`}
+                className={`heatmap-cell ${cell.intensity ? "" : "is-rest"}`}
+                style={{ background: cell.intensity ? `color-mix(in srgb, var(--accent) ${Math.round(cell.intensity * 100)}%, var(--card))` : "var(--card)",
+                         opacity: cell.future ? 0.3 : 1 }} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="heatmap-legend">
+        <span>Rest</span>
+        <span className="heatmap-cell is-rest" />
+        {[0.25, 0.5, 0.75, 1].map((t) => (
+          <span key={t} className="heatmap-cell" style={{ background: `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--card))` }} />
+        ))}
+        <span>Heaviest</span>
+      </div>
+    </div>
+  );
+}
+
 function DashStat({ label, value, wide }) {
   return (
     <div className={`dash-stat ${wide ? "wide" : ""}`}>
@@ -3087,6 +3243,20 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       {recentPR && (
         <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
+
+      <WearableStrip
+        source={"Today's check-in"}
+        dateLabel={fmtDate(todayStr())}
+        metrics={readinessToday ? [
+          { label: "Sleep", value: `${readinessToday.sleep}/5` },
+          { label: "Energy", value: `${readinessToday.energy}/5` },
+          { label: "Soreness", value: `${readinessToday.soreness}/5` },
+        ] : [
+          { label: "Sleep", value: "—" },
+          { label: "Energy", value: "—" },
+          { label: "Soreness", value: "—" },
+        ]}
+      />
 
       <div className="hero-card">
         <div className="hero-top-row">
@@ -4724,58 +4894,79 @@ function ProgressTab({ client }) {
   const totalBwEntries = (client.bodyweightLog || []).length;
   const totalReadinessEntries = Object.keys(client.readiness || {}).length;
 
-  if (bwData.length === 0 && readinessData.length === 0) return <div className="pad"><EmptyState text="Log a workout or a daily check-in to see progress charts." /></div>;
+  // Weekly tonnage, so the page leads with training rather than bodyweight.
+  const volumeData = weeklyVolumeSeries(client).slice(-12);
+  const thisWeekVolume = volumeData.length ? volumeData[volumeData.length - 1].volume : 0;
+  const priorWeeks = volumeData.slice(0, -1);
+  const avgVolume = priorWeeks.length ? priorWeeks.reduce((a, b) => a + b.volume, 0) / priorWeeks.length : 0;
+  const volumeVsAvg = avgVolume > 0 ? Math.round((thisWeekVolume / avgVolume) * 100) : null;
+  const latestReadiness = readinessEntries.length ? readinessEntries[readinessEntries.length - 1] : null;
+  const readinessPct = latestReadiness
+    ? Math.round((((Number(latestReadiness.sleep) + Number(latestReadiness.energy)) / 2 - Number(latestReadiness.soreness) + 5) / 10) * 100)
+    : null;
+  const perWeekTarget = client.program.sessionsPerWeek || 3;
+  const sessionsThisWeek = (() => {
+    const mondayOf = (ds) => { const d = new Date(ds + "T00:00:00"); const wd = d.getDay(); d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd)); return toLocalDateStr(d); };
+    const thisWeek = mondayOf(todayStr());
+    return (client.logs || []).filter((l) => mondayOf(l.date) === thisWeek).length;
+  })();
+  const totalSessionsAll = totalSessionsIn(client.program);
+  const blockPct = Math.min(100, Math.round(((client.sessionsCompleted || 0) / totalSessionsAll) * 100));
+  const compact = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+
+  if (bwData.length === 0 && readinessData.length === 0 && volumeData.length === 0) return <div className="pad"><EmptyState text="Log a workout or a daily check-in to see progress charts." /></div>;
 
   return (
     <div className="pad">
+      <div className="ring-row">
+        <MetricRing label="Readiness" value={readinessPct === null ? 0 : readinessPct}
+          display={readinessPct === null ? "—" : `${readinessPct}%`}
+          color={latestReadiness ? READINESS_COPY[latestReadiness.color].color : "var(--text-dim)"}
+          sublabel={latestReadiness ? "Last check-in" : "No check-in yet"} />
+        <MetricRing label="This week" value={sessionsThisWeek} max={perWeekTarget}
+          display={`${sessionsThisWeek}/${perWeekTarget}`} sublabel="Sessions" />
+        <MetricRing label="Block" value={blockPct} display={`${blockPct}%`} sublabel={`${client.sessionsCompleted || 0} of ${totalSessionsAll}`} />
+      </div>
+
+      <div className="metric-row">
+        <MetricTile label="This week" value={`${compact(thisWeekVolume)} lb`} sub="Total tonnage" />
+        <MetricTile label="Vs average" value={volumeVsAvg === null ? "—" : `${volumeVsAvg}%`}
+          sub={volumeVsAvg === null ? "Needs 2 weeks" : volumeVsAvg >= 100 ? "Above your average" : "Below your average"}
+          color={volumeVsAvg === null ? "var(--text-dim)" : volumeVsAvg >= 100 ? "var(--green)" : "var(--amber)"} />
+        <MetricTile label="Sessions" value={String(client.logs.length)} sub="All time" color="var(--info)" />
+        <MetricTile label="Records" value={String((client.prLog || []).length)} sub="Personal bests" color="var(--neon-gold)" />
+      </div>
+
+      {volumeData.length > 0 && (
+        <Card title="Weekly Volume">
+          <TrendArea data={volumeData} dataKey="volume" valueFormat={(v) => Math.round(v).toLocaleString()} unit=" lb" />
+        </Card>
+      )}
+
+      {client.logs.length > 0 && (
+        <Card title="Training Consistency">
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>Each square is a day. The darker it is, the more you lifted.</p>
+          <TrainingHeatmap logs={client.logs} />
+        </Card>
+      )}
       {bwData.length > 0 && (
         <Card title="Bodyweight">
           {totalBwEntries > CHART_WINDOW && <p className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Showing your most recent {CHART_WINDOW} entries of {totalBwEntries} total — export your data in Settings for the full history.</p>}
-          <div style={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={bwData}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
-                <YAxis stroke="var(--text-dim)" fontSize={11} domain={["auto", "auto"]} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
-                <Line type="monotone" dataKey="weight" stroke="var(--text)" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <TrendArea data={bwData} dataKey="weight" color="var(--info)" unit=" lb" />
           <DetailBarToggle label="bodyweight" entries={bwData} dataKey="weight" domain={["auto", "auto"]} />
         </Card>
       )}
 
       {readinessData.length > 0 && (
         <Card title="Readiness">
-          <div style={{ height: 160 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={readinessData}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
-                <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 3]} ticks={[1, 2, 3]} tickFormatter={(v) => ({ 1: "Red", 2: "Yellow", 3: "Green" }[v])} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
-                <Line type="stepAfter" dataKey="score" stroke="var(--green)" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <TrendArea data={readinessData} dataKey="score" color="var(--green)" height={150} domain={[0, 3]} valueFormat={(v) => ({ 1: "Red", 2: "Yellow", 3: "Green" }[v] || v)} />
           <DetailBarToggle label="readiness" entries={readinessData} dataKey="score" domain={[0, 3]} />
         </Card>
       )}
 
       {sorenessData.length > 0 && (
         <Card title="Muscle Soreness">
-          <div style={{ height: 160 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sorenessData}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
-                <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 5]} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
-                <Line type="monotone" dataKey="soreness" stroke="var(--amber)" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <TrendArea data={sorenessData} dataKey="soreness" color="var(--amber)" height={150} domain={[0, 5]} unit=" / 5" />
           <DetailBarToggle label="soreness" entries={sorenessData} dataKey="soreness" domain={[0, 5]} />
         </Card>
       )}
@@ -5289,6 +5480,44 @@ function GlobalStyle() {
       .cal-dot.workout { background: var(--green); }
       .cal-dot.mobility { background: var(--amber); border-radius: 1px; }
       .cal-cell.selected .cal-dot.workout, .cal-cell.selected .cal-dot.mobility { background: #ffffff; }
+
+      /* ---- Metric visuals: rings, tiles, wearable strip, heatmap ---- */
+      .ring-row { display: flex; justify-content: space-around; align-items: flex-start; gap: 6px; margin-bottom: 18px; }
+      .ring-wrap { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 0; }
+      .ring-value { fill: var(--text); font-family: 'Inter', sans-serif; font-size: 21px; font-weight: 700; }
+      .ring-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-top: 8px; text-align: center; }
+      .ring-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; text-align: center; }
+
+      .metric-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+      .metric-row > * { min-width: 0; }
+      .metric-tile { display: flex; align-items: stretch; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 12px 0; overflow: hidden; }
+      .metric-tile-bar { width: 4px; border-radius: 0 3px 3px 0; flex-shrink: 0; }
+      .metric-tile-body { min-width: 0; }
+      .metric-tile-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+      .metric-tile-value { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.15; margin-top: 3px; }
+      .metric-tile-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+      .wearable-strip { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+      .wearable-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; gap: 8px; }
+      .wearable-source { font-size: 13.5px; font-weight: 700; color: var(--text); }
+      .wearable-date { font-size: 12px; color: var(--text-dim); }
+      .wearable-metrics { display: flex; gap: 8px; }
+      .wearable-metric { flex: 1; min-width: 0; }
+      .wearable-metric-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+      .wearable-metric-value { font-size: 20px; font-weight: 800; color: var(--text); margin-top: 2px; }
+
+      .chart-endlabel { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-top: 8px; }
+      .chart-endlabel-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+      .chart-endlabel strong { color: var(--text); font-weight: 700; }
+
+      .heatmap { overflow-x: auto; padding-bottom: 2px; }
+      .heatmap-grid { display: flex; gap: 3px; align-items: flex-start; }
+      .heatmap-days { display: flex; flex-direction: column; gap: 3px; margin-right: 2px; }
+      .heatmap-dayname { font-size: 9px; color: var(--text-dim); height: 12px; line-height: 12px; width: 10px; }
+      .heatmap-col { display: flex; flex-direction: column; gap: 3px; }
+      .heatmap-cell { width: 12px; height: 12px; border-radius: 3px; display: block; flex-shrink: 0; background: var(--card); }
+      .heatmap-cell.is-rest { box-shadow: inset 0 0 0 1px var(--border); }
+      .heatmap-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11.5px; color: var(--text-dim); }
 
       /* ---- Accessibility: visible keyboard focus + respecting reduced motion ---- */
       a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
