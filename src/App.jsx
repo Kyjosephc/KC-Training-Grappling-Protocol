@@ -1999,7 +1999,7 @@ function MainApp({ userId, onSignOut }) {
       {showShare && <ShareModal onClose={() => setShowShare(false)} />}
       {showDashboard && <ClientDashboard client={client} onClose={() => setShowDashboard(false)} />}
       {logging && (
-        <DaySessionScreen client={client} phaseId={logging.phaseId} dayId={logging.dayId} onClose={() => setLogging(null)}
+        <DaySessionScreen client={client} isCoach={isCoach} phaseId={logging.phaseId} dayId={logging.dayId} onClose={() => setLogging(null)}
           onStartMobility={() => setShowMobility(true)}
           onUpdateProgram={(newProgram) => persistClient({ ...client, program: newProgram })}
           onSave={async (session) => {
@@ -2031,7 +2031,7 @@ function MainApp({ userId, onSignOut }) {
           }} />
       )}
       {showMobility && (
-        <MobilitySession client={client} onClose={() => setShowMobility(false)}
+        <MobilitySession client={client} isCoach={isCoach} onClose={() => setShowMobility(false)}
           onUpdateProgram={(newProgram) => persistClient({ ...client, program: newProgram })}
           onSave={async (entry) => {
             const updated = { ...client, mobilityLogs: [...(client.mobilityLogs || []), entry] };
@@ -3548,7 +3548,7 @@ function SectionHeader({ title, subtitle, complete, onToggleComplete, expanded, 
     </div>
   );
 }
-function VideoLinkBlock({ url, onSave, onDelete, label }) {
+function VideoLinkBlock({ url, onSave, onDelete, label, canEdit = false }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(url || "");
   if (editing) {
@@ -3566,8 +3566,8 @@ function VideoLinkBlock({ url, onSave, onDelete, label }) {
       <div className="ex-links-row" onClick={(e) => e.stopPropagation()}>
         {label && <span className="muted" style={{ fontSize: 11, marginRight: 4 }}>{label}</span>}
         <a className="video-link" href={url} target="_blank" rel="noopener noreferrer">Watch video</a>
-        <button className="link-x-btn" onClick={onDelete} title="Remove this link"><X size={12} /></button>
-        <button className="link-edit-btn" onClick={() => { setDraft(url); setEditing(true); }}>Edit</button>
+        {canEdit && <button className="link-x-btn" onClick={onDelete} title="Remove this link"><X size={12} /></button>}
+        {canEdit && <button className="link-edit-btn" onClick={() => { setDraft(url); setEditing(true); }}>Edit</button>}
       </div>
     );
   }
@@ -3633,7 +3633,7 @@ function mergeDraftEntries(fresh, draftEntries) {
 
 /* ============================== FULL-DAY SESSION SCREEN ============================== */
 
-function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobility, onUpdateProgram, onRestartProgram, onRecordPR, onRemovePR }) {
+function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, onStartMobility, onUpdateProgram, onRestartProgram, onRecordPR, onRemovePR }) {
   const phase = client.program.phases.find((p) => p.id === phaseId);
   const day = phase.days.find((d) => d.id === dayId);
   const totalSessions = totalSessionsIn(client.program);
@@ -3660,7 +3660,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
   const restored = useMemo(() => readDraft(draftKey), [draftKey]);
 
   const [warmupChecked, setWarmupChecked] = useState(() => (restored && restored.warmupChecked) || {});
-  const [expanded, setExpanded] = useState({ warmup: true });
+  // Collapsed by default: it is the same list every session, and expanded it
+  // pushed the first working set most of a screen down.
+  const [expanded, setExpanded] = useState({});
   const [complete, setComplete] = useState(() => (restored && restored.complete) || {});
   const [manualPRs, setManualPRs] = useState(() => (restored && restored.manualPRs) || {});
   const [entriesBySection, setEntriesBySection] = useState(() => mergeDraftEntries(buildFreshEntries(), restored && restored.entries));
@@ -3919,9 +3921,11 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
       {day.intent && <div className="intent-box" style={{ marginBottom: 12 }}>{day.intent}</div>}
       {adjustedNote && <div className="adjust-box" style={{ marginBottom: 12 }}>{adjustedNote}</div>}
 
-      <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
-        <strong>Effort</strong> is your Rate of Perceived Exertion — how hard a set felt, out of 10. Where it's greyed out it's already set for you, so there's nothing to fill in.
-      </div>
+      {client.logs.length < 3 && (
+        <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
+          <strong>Effort</strong> is your Rate of Perceived Exertion — how hard a set felt, out of 10. It is filled in for you on every set, so there is nothing to enter.
+        </div>
+      )}
 
       {/* Warm-Up */}
       <div className="log-exercise">
@@ -3935,7 +3939,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                 <div style={{ flex: 1 }}>
                   <div className="warmup-item-name">{item.name}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{item.detail}</div>
-                  <VideoLinkBlock url={item.videoUrl || lookupVideo(item.name)} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")} />
+                  <VideoLinkBlock canEdit={isCoach} url={item.videoUrl || lookupVideo(item.name)} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")} />
                 </div>
               </div>
             ))}
@@ -3959,7 +3963,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
             const exOpen = exCollapseOverride[en.exerciseId] !== undefined ? exCollapseOverride[en.exerciseId] : !allSetsFilled;
             const collapsedSummary = exOpen ? "" : loggedSummaryFor(en, displayName);
             return (
-              <div className="section-ex-block" key={en.exerciseId}>
+              <div className={`section-ex-block${/^\d+A$/.test(en.target.supersetLabel || "") ? " ss-a" : /^\d+B$/.test(en.target.supersetLabel || "") ? " ss-b" : ""}`} key={en.exerciseId}>
                 <div className="log-exercise-target-wrap">
                   <div className="ex-name-row">
                     {editingName === en.exerciseId ? (
@@ -3993,9 +3997,9 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   ) : (
                     last?.best && <div className="last-logged">Last logged: {needsWeight(displayName) ? `${last.best.weight} pounds × ` : ""}{last.best.reps} {exerciseUnit(displayName, en.target.reps)} ({fmtDate(last.date)})</div>
                   )}
-                  <VideoLinkBlock url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
+                  <VideoLinkBlock canEdit={isCoach} url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
                   {en.target.videoUrl2 !== undefined && (
-                    <VideoLinkBlock url={en.target.videoUrl2} onSave={(url) => setVideoForEntry(sec.id, exIdx, url, "videoUrl2")} onDelete={() => setVideoForEntry(sec.id, exIdx, "", "videoUrl2")} label="Demo 2" />
+                    <VideoLinkBlock canEdit={isCoach} url={en.target.videoUrl2} onSave={(url) => setVideoForEntry(sec.id, exIdx, url, "videoUrl2")} onDelete={() => setVideoForEntry(sec.id, exIdx, "", "videoUrl2")} label="Demo 2" />
                   )}
                   {poolOptions.length > 0 && (
                     <div className="sub-row">
@@ -4010,7 +4014,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                   </>)}
                 </div>
                 {exOpen && (<>
-                <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span>Effort</span><span>Record</span></div>
+                <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span /></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
                 )}
@@ -4028,6 +4032,12 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     const perSet = en.target.perSetTargets ? en.target.perSetTargets[setIdx] : null;
                     const effectivePct = pctForSet(setIdx);
                     const setFlagged = !!manualPRs[`${en.exerciseId}:${setIdx}`];
+                    // The trophy only appears once the set actually beats their best
+                    // on this lift. Offering it on every row made it a decision to
+                    // make forty times a session instead of a moment worth marking.
+                    const allTimeBest = lastAllTimeBest(client, displayName);
+                    const thisSetE1rm = est1RM(Number(s.weight) || 0, Number(s.reps) || 0);
+                    const beatsBest = thisSetE1rm > 0 && (!allTimeBest || thisSetE1rm >= allTimeBest.e1rm);
                     const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
                     const targetWeight = effectivePct && priorBestForPct ? Math.round((priorBestForPct.e1rm * effectivePct) / 100) : null;
                     // Consecutive sets at the same percentage share one note above
@@ -4044,6 +4054,13 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                       if (n && !runNotes.includes(n)) runNotes.push(n);
                     }
                     const runNote = runNotes.join(" / ");
+                    const runEfforts = [];
+                    for (let i = setIdx; i <= runEnd; i++) {
+                      const t = en.target.perSetTargets ? en.target.perSetTargets[i] : null;
+                      const r = t && t.rir !== undefined ? t.rir : en.target.rir;
+                      if (r !== undefined && r !== null && r !== "" && !runEfforts.includes(r)) runEfforts.push(r);
+                    }
+                    const runEffort = runEfforts.length === 1 ? rpeFromRir(runEfforts[0]) : null;
                     // The "log this and we'll suggest a weight" line is the same
                     // on every run, so it only earns its place once.
                     const isFirstRun = !en.sets.some((_, i) => i < setIdx && pctForSet(i));
@@ -4051,7 +4068,7 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                       <React.Fragment key={setIdx}>
                         {startsRun && (
                           <div className="pct-1rm-row">
-                            {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max
+                            {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max{runEffort ? ` \u00b7 effort ${runEffort}` : ""}
                             {targetWeight
                               ? ` \u2014 try about ${targetWeight} lb, based on your heaviest logged set so far`
                               : !isFirstRun
@@ -4066,13 +4083,14 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                         <div className="set-grid-row">
                           <span className="set-num">{setIdx + 1}</span>
                           {needsWeight(displayName) ? (
-                            <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
+                            <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder={targetWeight ? String(targetWeight) : "pounds"} aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
                           ) : (
                             <span aria-hidden="true" />
                           )}
                           <input type="text" inputMode="numeric" aria-label={`${exerciseUnitLabel(displayName, en.target.reps)} completed`} placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
-                          <input type="number" value={s.rir !== "" ? rpeFromRir(s.rir) : ""} readOnly aria-label="Effort for this set, already set for you" />
+                          {(beatsBest || setFlagged) ? (
                           <button type="button" className={`set-pr ${setFlagged ? "flagged" : ""}`} aria-pressed={setFlagged} aria-label={`${setFlagged ? "Remove" : "Mark"} set ${setIdx + 1} as a Personal Record`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
+                          ) : <span aria-hidden="true" />}
                         </div>
                       </React.Fragment>
                     );
@@ -4177,7 +4195,7 @@ function exerciseHistorySeries(client, exerciseName) {
 
 /* ============================== MOBILITY / RECOVERY SESSION ============================== */
 
-function MobilitySession({ client, onClose, onSave, onUpdateProgram }) {
+function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) {
   const segments = client.program.mobility && client.program.mobility.length ? client.program.mobility : defaultMobility();
   const [idx, setIdx] = useState(0);
   const [remaining, setRemaining] = useState(segments[0]?.seconds || 0);
@@ -4239,7 +4257,7 @@ function MobilitySession({ client, onClose, onSave, onUpdateProgram }) {
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
         <div className="log-exercise-name" style={{ fontSize: 20, marginTop: 6, marginBottom: 6 }}>{seg.name}</div>
         {seg.detail && <p className="muted" style={{ marginBottom: 10 }}>{seg.detail}</p>}
-        <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
+        <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock canEdit={isCoach} url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
         <div className="mobility-timer">{mins}:{String(secs).padStart(2, "0")}</div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button className="btn-primary" style={{ flex: 1 }} onClick={toggleRunning}>{running ? "Pause" : "Start"}</button>
@@ -5376,6 +5394,11 @@ function GlobalStyle() {
       .log-exercise-head { margin-bottom: 10px; }
       .log-exercise-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
       .section-ex-block { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+      /* A superset is one unit. The pair is joined by a shared accent rail and a
+         single seam, so it reads as "go back and forth between these two". */
+      .section-ex-block.ss-a { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; margin-bottom: 0; border-left: 3px solid var(--accent); }
+      .section-ex-block.ss-b { border-top-left-radius: 0; border-top-right-radius: 0; border-left: 3px solid var(--accent); position: relative; }
+      .section-ex-block.ss-b::before { content: ""; position: absolute; top: 0; left: 14px; right: 14px; height: 1px; background: var(--border); }
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--info); margin-top: 6px; font-weight: 600; }
@@ -5411,13 +5434,16 @@ function GlobalStyle() {
       .warmup-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
       .warmup-item input { margin-top: 3px; accent-color: var(--accent); }
       .warmup-item-name { font-size: 13.5px; }
-      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 26px 1fr 1fr 1fr 44px; gap: 6px; align-items: center; }
+      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 26px 1fr 1fr 40px; gap: 8px; align-items: center; }
       .set-grid-header > *, .set-grid-row > * { min-width: 0; }
       .set-grid-header { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
       .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 4px; font-size: 15px; font-weight: 700; width: 100%; text-align: center; }
       .set-grid-row input:focus { border-color: var(--accent); outline: none; }
+      .set-grid-row input[type="number"]::-webkit-outer-spin-button,
+      .set-grid-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .set-grid-row input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
       .set-grid-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .set-grid-row input:disabled, .set-grid-row input[readonly] { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
       .set-done { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
