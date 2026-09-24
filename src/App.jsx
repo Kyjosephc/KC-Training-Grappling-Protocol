@@ -1756,11 +1756,20 @@ function mentalTipForDate(dateStr) {
 /* ============================== READINESS ============================== */
 
 function classifyReadiness(r) {
-  const pos = (Number(r.sleep) + Number(r.energy)) / 2;
-  const neg = Number(r.soreness);
-  const score = pos - neg;
-  if (score <= -1.5) return "RED";
-  if (score >= 1.5) return "GREEN";
+  // Check-ins saved before this changed carry energy and soreness instead of a
+  // readiness score. They are scored the way they were scored on the day, so a
+  // past session's colour never changes underneath the athlete.
+  if (r.readiness == null && r.soreness != null) {
+    const legacy = (Number(r.sleep) + Number(r.energy || 0)) / 2 - Number(r.soreness);
+    if (legacy <= -1.5) return "RED";
+    if (legacy >= 1.5) return "GREEN";
+    return "YELLOW";
+  }
+  // Both rows now count for the athlete rather than against, so the score is a
+  // straight average on the same 0 to 5 scale the sliders use.
+  const score = (Number(r.sleep) + Number(r.readiness)) / 2;
+  if (score <= 1.5) return "RED";
+  if (score >= 3.5) return "GREEN";
   return "YELLOW";
 }
 const READINESS_COPY = {
@@ -2388,7 +2397,7 @@ const TUTORIAL_PAGES = [
   { title: "Rate of Perceived Exertion", body: "A one-to-ten scale for how hard a set felt, with ten being an all-out maximum. This app calculates it automatically from your reps in reserve, so you never have to think about the two separately." },
   { title: "One-Rep Max Calculator", body: "Tap the calculator icon next to the help button at the top of the screen any time. Enter a weight you lifted, how many reps you got with it, and your reps in reserve, and it estimates your true one-rep max and shows you exact weights for every percentage of it — handy for planning a lift without doing the math yourself." },
   { title: "Deload Week", body: "Every fourth week, the program automatically gets lighter on purpose — lower volume, no true max attempts. It's built-in recovery, not a step backward, and it happens whether you ask for it or not." },
-  { title: "Daily Readiness Check-In", body: "A few quick questions each day about sleep, soreness, and energy. Based on your answers, the app automatically adjusts that day's workout — trimming volume or dropping entire sections when you actually need it." },
+  { title: "Daily Readiness Check-In", body: "Two quick questions each day: how you slept, and how ready you feel to train. Based on your answers, the app automatically adjusts that day's workout — trimming volume or dropping entire sections when you actually need it." },
   { title: "Put It On Your Home Screen", body: "Do this once and the app sits on your home screen with its own icon, opening full screen with no browser bar — the same as any app you'd download. On iPhone, open this page in Safari, tap the Share button at the bottom, scroll down and tap Add to Home Screen. On Android, tap the three dots at the top right of Chrome and tap Add to Home screen. Step-by-step instructions for every phone are in Settings under Put This App On Your Home Screen." },
 ];
 
@@ -3543,9 +3552,9 @@ function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
   const ouraSuggestion = useMemo(() => {
     if (!ouraToday) return null;
     const sleep = ouraTo5(ouraToday.sleep);
-    const energy = ouraTo5(ouraToday.readiness);
-    if (sleep == null && energy == null) return null;
-    return { sleep, energy };
+    const readiness = ouraTo5(ouraToday.readiness);
+    if (sleep == null && readiness == null) return null;
+    return { sleep, readiness };
   }, [ouraToday]);
   const recentPR = useMemo(() => findRecentPR(client), [client]);
   const { total: totalLifted, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
@@ -3619,7 +3628,7 @@ function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
         {readinessToday ? (
           <div><p className="muted" style={{ marginBottom: 10 }}>{READINESS_COPY[readinessToday.color].detail}</p><button className="btn-ghost" onClick={() => setShowReadiness(true)}>Update today's check-in</button></div>
         ) : (
-          <div><p className="muted" style={{ marginBottom: 10 }}>Quick check-in before today's session — sleep, soreness, energy, bodyweight, and whether grappling has been rough lately. The workout adjusts itself based on your answers.</p><button className="btn-primary" onClick={() => setShowReadiness(true)}>Check in</button></div>
+          <div><p className="muted" style={{ marginBottom: 10 }}>Quick check-in before today's session — how you slept, how ready you feel to train, your bodyweight, and whether grappling has been rough lately. The workout adjusts itself based on your answers.</p><button className="btn-primary" onClick={() => setShowReadiness(true)}>Check in</button></div>
         )}
       </Card>
 
@@ -3642,11 +3651,10 @@ function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
         dateLabel={fmtDate(todayStr())}
         metrics={readinessToday ? [
           { label: "Sleep", value: `${readinessToday.sleep}/5` },
-          { label: "Energy", value: `${readinessToday.energy}/5` },
-          { label: "Soreness", value: `${readinessToday.soreness}/5` },
+          { label: "Readiness", value: readinessToday.readiness != null ? `${readinessToday.readiness}/5` : `${readinessToday.energy ?? "—"}/5` },
         ] : [
           { label: "Sleep", value: "—" },
-          { label: "Energy", value: "—" },
+          { label: "Readiness", value: "—" },
           { label: "Soreness", value: "—" },
         ]}
       />
@@ -3679,7 +3687,7 @@ function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
             <>
               <div className="mood-row-label">How do you feel today?</div>
               <div className="mood-row">
-                {[{ key: "fresh", label: "Fresh", entry: { sleep: 5, energy: 5, soreness: 1 } }, { key: "normal", label: "Normal", entry: { sleep: 3, energy: 3, soreness: 3 } }, { key: "beat", label: "Beat up", entry: { sleep: 1, energy: 1, soreness: 5 } }].map((m) => (
+                {[{ key: "fresh", label: "Fresh", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 3, readiness: 3 } }, { key: "beat", label: "Beat up", entry: { sleep: 1, readiness: 1 } }].map((m) => (
                   <button key={m.key} className="mood-pill" onClick={async () => {
                     const color = classifyReadiness(m.entry);
                     await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
@@ -3689,7 +3697,7 @@ function TodayTab({ client, oura, onPersist, onStartLog, onStartMobility }) {
             </>
           )
         )}
-        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>{readinessToday ? "Edit full check-in (bodyweight, sleep, soreness)" : "Or do a full check-in instead"}</button>
+        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>{readinessToday ? "Edit full check-in (bodyweight, sleep, readiness)" : "Or do a full check-in instead"}</button>
 
         {!isCurrent && (
           <div className="adjust-box">
@@ -3874,17 +3882,16 @@ function ReadinessModal({ existing, existingWeight, suggestion, onClose, onSave 
   // athlete hasn't already answered for today — a saved check-in is their word
   // on how they feel and is never overwritten by a score.
   const prefilled = !existing && suggestion
-    ? { sleep: suggestion.sleep ?? 3, energy: suggestion.energy ?? 3, soreness: 3, bjjHard: false }
+    ? { sleep: suggestion.sleep ?? 3, readiness: suggestion.readiness ?? 3, bjjHard: false }
     : null;
-  const [v, setV] = useState(existing || prefilled || { sleep: 3, energy: 3, soreness: 3, bjjHard: false });
+  const [v, setV] = useState(existing || prefilled || { sleep: 3, readiness: 3, bjjHard: false });
   const [usedRing, setUsedRing] = useState(!!prefilled);
   const [weight, setWeight] = useState(existingWeight || "");
   const fields = [
-    // Soreness counts against readiness while the other two count for it, so
-    // an unlabelled slider set to 5 means opposite things on different rows.
+    // Both rows run the same direction — higher is better on each — so a slider
+    // pushed right never means something bad on one row and good on the next.
     { key: "sleep", label: "Sleep quality", hint: "0 = terrible, 5 = great", max: 5 },
-    { key: "energy", label: "Energy", hint: "0 = flat, 5 = fresh", max: 5 },
-    { key: "soreness", label: "Muscle soreness", hint: "0 = none, 5 = very sore", max: 5 },
+    { key: "readiness", label: "How ready do you feel to train?", hint: "0 = flat and beaten up, 5 = fresh and ready to go", max: 5 },
   ];
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
@@ -3892,10 +3899,10 @@ function ReadinessModal({ existing, existingWeight, suggestion, onClose, onSave 
       {usedRing && (
         <div className="intent-box">
           <p style={{ margin: "0 0 8px" }}>
-            Sleep and energy came from your Oura ring this morning. Soreness is still yours to set — a ring can't feel that. Move any slider that doesn't match how you actually feel; what you save is what the session uses.
+            Both of these came from your Oura ring this morning. Move either slider if it doesn't match how you actually feel — what you save is what the session uses, not what the ring said.
           </p>
           <button type="button" className="link-btn" style={{ padding: 0 }}
-            onClick={() => { setV({ sleep: 3, energy: 3, soreness: 3, bjjHard: false }); setUsedRing(false); }}>
+            onClick={() => { setV({ sleep: 3, readiness: 3, bjjHard: false }); setUsedRing(false); }}>
             Clear it and answer myself
           </button>
         </div>
@@ -5316,7 +5323,10 @@ function ProgressTab({ client }) {
   const bwData = (client.bodyweightLog || []).map((b) => ({ date: fmtDate(b.date), weight: b.weight })).slice(-CHART_WINDOW);
   const readinessEntries = Object.values(client.readiness || {}).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-CHART_WINDOW);
   const readinessData = readinessEntries.map((r) => ({ date: fmtDate(r.date), score: r.color === "GREEN" ? 3 : r.color === "YELLOW" ? 2 : 1 }));
-  const sorenessData = readinessEntries.map((r) => ({ date: fmtDate(r.date), soreness: Number(r.soreness) }));
+  // Only entries that actually carry each row, so the old and new shapes each
+  // chart their own history instead of plotting zeros where a row didn't exist.
+  const feltReadyData = readinessEntries.filter((r) => r.readiness != null).map((r) => ({ date: fmtDate(r.date), readiness: Number(r.readiness) }));
+  const sorenessData = readinessEntries.filter((r) => r.readiness == null && r.soreness != null).map((r) => ({ date: fmtDate(r.date), soreness: Number(r.soreness) }));
   const totalBwEntries = (client.bodyweightLog || []).length;
   const totalReadinessEntries = Object.keys(client.readiness || {}).length;
 
@@ -5328,7 +5338,9 @@ function ProgressTab({ client }) {
   const volumeVsAvg = avgVolume > 0 ? Math.round((thisWeekVolume / avgVolume) * 100) : null;
   const latestReadiness = readinessEntries.length ? readinessEntries[readinessEntries.length - 1] : null;
   const readinessPct = latestReadiness
-    ? Math.round((((Number(latestReadiness.sleep) + Number(latestReadiness.energy)) / 2 - Number(latestReadiness.soreness) + 5) / 10) * 100)
+    ? (latestReadiness.readiness != null
+        ? Math.round(((Number(latestReadiness.sleep) + Number(latestReadiness.readiness)) / 2 / 5) * 100)
+        : Math.round((((Number(latestReadiness.sleep) + Number(latestReadiness.energy || 0)) / 2 - Number(latestReadiness.soreness || 0) + 5) / 10) * 100))
     : null;
   const perWeekTarget = client.program.sessionsPerWeek || 3;
   const sessionsThisWeek = (() => {
@@ -5390,8 +5402,15 @@ function ProgressTab({ client }) {
         </Card>
       )}
 
+      {feltReadyData.length > 0 && (
+        <Card title="How Ready You Felt">
+          <TrendArea data={feltReadyData} dataKey="readiness" color="var(--accent)" height={150} domain={[0, 5]} unit=" / 5" />
+          <DetailBarToggle label="readiness" entries={feltReadyData} dataKey="readiness" domain={[0, 5]} />
+        </Card>
+      )}
+
       {sorenessData.length > 0 && (
-        <Card title="Muscle Soreness">
+        <Card title="Muscle Soreness (before Sep 2026)">
           <TrendArea data={sorenessData} dataKey="soreness" color="var(--amber)" height={150} domain={[0, 5]} unit=" / 5" />
           <DetailBarToggle label="soreness" entries={sorenessData} dataKey="soreness" domain={[0, 5]} />
         </Card>
