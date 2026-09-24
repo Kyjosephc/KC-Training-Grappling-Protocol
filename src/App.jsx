@@ -2114,7 +2114,7 @@ function OnboardingScreen({ onSubmit }) {
         ) : (
           <GrapplingMark opacity={0.14} />
         )}
-        <div className="brand-title" style={{ position: "relative" }}>Strength Matrix</div>
+        <BrandLockup />
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
       <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
@@ -2214,6 +2214,18 @@ function PaymentModal({ onClose }) {
 
 // A plain barbell glyph — a generic strength symbol drawn from scratch, so the
 // header reads as a brand mark without borrowing anyone else's.
+// The full lockup, centred, for the sign-in and profile-setup screens. The
+// header uses BrandMark plus its own inline layout because it sits on one line.
+function BrandLockup() {
+  return (
+    <div className="brand-lockup">
+      <BrandMark size={44} />
+      <div className="brand-lockup-word">Strength</div>
+      <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
+    </div>
+  );
+}
+
 function BrandMark({ size = 34 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -5214,7 +5226,10 @@ function GlobalStyle() {
       .scroll-area { flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
       .pad { padding: 16px; }
       .brand-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 26px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 4px; line-height: 1.05; }
-      .logo-block { position: relative; overflow: hidden; padding: 34px 18px; margin-bottom: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); }
+      .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
+      .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+      .brand-lockup-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 30px; letter-spacing: 0.2em; line-height: 1; color: var(--text); text-indent: 0.2em; }
+      .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
       .logo-block .brand-title { font-size: 32px; margin-bottom: 0; }
       .sisyphus-mark { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--accent); pointer-events: none; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
@@ -5323,7 +5338,7 @@ function GlobalStyle() {
       .section-preview-row:last-child { border-bottom: none; }
       .section-preview-ex-row { font-size: 13px; color: var(--text); padding: 3px 0 3px 8px; border-left: 2px solid var(--border); margin-left: 2px; }
       .section-subheading { font-size: 12px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
-      .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 13px 18px; font-weight: 700; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.02em; box-shadow: none; }
+      .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px 18px; font-weight: 800; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
       .btn-primary:disabled { opacity: 0.4; }
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
@@ -5437,8 +5452,10 @@ function GlobalStyle() {
       .edit-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 13.5px; }
       .edit-input:disabled { opacity: 0.6; }
       .wide-input { flex: 1; }
-      .labeled-input { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
-      .labeled-input input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 13.5px; }
+      .labeled-input { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 12px; }
+      .labeled-input input { background: var(--bg); border: 1px solid var(--border); border-radius: 11px; color: var(--text); padding: 13px 12px; font-size: 15px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+      .labeled-input input:focus { border-color: var(--accent); outline: none; }
+      .labeled-input input::placeholder { color: var(--text-dim); opacity: 0.7; }
       .select-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 13.5px; font-family: inherit; }
       .history-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
       .history-head { width: 100%; background: none; border: none; color: var(--text); padding: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
@@ -5642,7 +5659,7 @@ function AuthScreen() {
       <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
         <div className="logo-block">
           <GrapplingMark opacity={0.14} />
-          <div className="brand-title" style={{ position: "relative" }}>Strength Matrix</div>
+          <BrandLockup />
         </div>
         <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>{mode === "signup" ? "Create Your Account" : mode === "forgot" ? "Reset Your Password" : "Sign In"}</div>
         <p className="muted" style={{ marginBottom: 20 }}>
