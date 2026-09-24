@@ -1696,38 +1696,49 @@ const PROGRAM_VARIANT_LABELS = {
 };
 
 const MENTAL_COACHING_LIBRARY = [
-  { quote: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
-  { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
-  { quote: "Do every act of your life as if it were your last.", author: "Marcus Aurelius" },
-  { quote: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
-  { quote: "We suffer more often in imagination than in reality.", author: "Seneca" },
-  { quote: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
-  { quote: "Our greatest glory is not in never falling, but in rising every time we fall.", author: "Oliver Goldsmith" },
-  { quote: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
-  { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
-  { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
-  { quote: "Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.", author: "Theodore Roosevelt" },
-  { quote: "Far and away the best prize that life offers is the chance to work hard at work worth doing.", author: "Theodore Roosevelt" },
-  { quote: "Never give in, never give in, never, never, never, never — in nothing, great or small, large or petty — never give in.", author: "Winston Churchill" },
-  { quote: "Always bear in mind that your own resolution to succeed is more important than any other one thing.", author: "Abraham Lincoln" },
-  { quote: "Nothing in the world can take the place of persistence.", author: "Calvin Coolidge" },
-  { quote: "Energy and persistence conquer all things.", author: "Benjamin Franklin" },
-  { quote: "You must do the thing you think you cannot do.", author: "Eleanor Roosevelt" },
+  // Weighted toward training and combat sport: the athlete reads one of these
+  // standing in the gym deciding whether to load the bar, not at a desk.
+  { quote: "I hated every minute of training, but I said, 'Don't quit. Suffer now and live the rest of your life as a champion.'", author: "Muhammad Ali" },
+  { quote: "The fight is won or lost far away from witnesses — behind the lines, in the gym, and out there on the road, long before I dance under those lights.", author: "Muhammad Ali" },
+  { quote: "Champions aren't made in gyms. Champions are made from something they have deep inside them — a desire, a dream, a vision.", author: "Muhammad Ali" },
+  { quote: "It isn't the mountains ahead to climb that wear you out; it's the pebble in your shoe.", author: "Muhammad Ali" },
+  { quote: "Don't count the days. Make the days count.", author: "Muhammad Ali" },
+  { quote: "Everybody has a plan until they get punched in the mouth.", author: "Mike Tyson" },
+  { quote: "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times.", author: "Bruce Lee" },
+  { quote: "Do not pray for an easy life; pray for the strength to endure a difficult one.", author: "Bruce Lee" },
+  { quote: "Always assume that your opponent is going to be bigger, stronger and faster than you, so that you learn to rely on technique, timing and leverage rather than brute strength.", author: "Helio Gracie" },
+  { quote: "Once you've wrestled, everything else in life is easy.", author: "Dan Gable" },
+  { quote: "Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", author: "Dan Gable" },
+  { quote: "The last three or four reps is what makes the muscle grow. This area of pain divides a champion from someone who is not a champion.", author: "Arnold Schwarzenegger" },
+  { quote: "The Iron never lies to you.", author: "Henry Rollins" },
+  { quote: "Discipline equals freedom.", author: "Jocko Willink" },
+  { quote: "Fatigue makes cowards of us all.", author: "Vince Lombardi" },
   { quote: "It's not whether you get knocked down, it's whether you get up.", author: "Vince Lombardi" },
-  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
-  { quote: "Failure is not fatal, but failure to change might be.", author: "John Wooden" },
-  { quote: "It's what you learn after you know it all that counts.", author: "John Wooden" },
-  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
-  { quote: "Every strike brings me closer to the next home run.", author: "Babe Ruth" },
-  { quote: "Champions keep playing until they get it right.", author: "Billie Jean King" },
+  { quote: "If you train hard, you'll not only be hard, you'll be hard to beat.", author: "Herschel Walker" },
+  { quote: "We must all suffer one of two things: the pain of discipline, or the pain of regret.", author: "Jim Rohn" },
+  { quote: "No one has ever drowned in sweat.", author: "Lou Holtz" },
+  { quote: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
   { quote: "Great things come from hard work and perseverance. No excuses.", author: "Kobe Bryant" },
-  { quote: "Genius is one percent inspiration, ninety-nine percent perspiration.", author: "Thomas Edison" },
-  { quote: "I have not failed. I've just found 10,000 ways that won't work.", author: "Thomas Edison" },
-  { quote: "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.", author: "Stephen King" },
-  { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
+  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
+  { quote: "Champions keep playing until they get it right.", author: "Billie Jean King" },
   { quote: "I really think a champion is defined not by their wins but by how they can recover when they fall.", author: "Serena Williams" },
+  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
+  { quote: "A black belt is a white belt who never quit.", author: "Martial Arts Proverb" },
+  { quote: "The more you sweat in training, the less you bleed in combat.", author: "Military Proverb" },
+  { quote: "Flow with the go.", author: "Rickson Gracie" },
+  { quote: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
+  { quote: "We suffer more often in imagination than in reality.", author: "Seneca" },
+  { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
+  { quote: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { quote: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
+  { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
+  { quote: "You must do the thing you think you cannot do.", author: "Eleanor Roosevelt" },
+  { quote: "Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.", author: "Theodore Roosevelt" },
+  { quote: "Never give in, never give in, never, never, never, never — in nothing, great or small, large or petty — never give in.", author: "Winston Churchill" },
+  { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
+  { quote: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
   { quote: "Fall seven times, stand up eight.", author: "Japanese Proverb" },
-  { quote: "The best time to plant a tree was twenty years ago. The second best time is now.", author: "Chinese Proverb" },
   { quote: "Smooth seas do not make skillful sailors.", author: "African Proverb" },
 ];
 
@@ -3828,22 +3839,36 @@ function DaySessionScreen({ client, phaseId, dayId, onClose, onSave, onStartMobi
                     const startsRun = !!effectivePct && (setIdx === 0 || pctForSet(setIdx - 1) !== effectivePct);
                     let runEnd = setIdx;
                     while (runEnd + 1 < en.sets.length && pctForSet(runEnd + 1) === effectivePct) runEnd++;
+                    // Labels like "Top single" are far wider than the set-number
+                    // column, so they ride on this line instead of overlapping
+                    // the weight box.
+                    const runNotes = [];
+                    for (let i = setIdx; i <= runEnd; i++) {
+                      const n = en.target.perSetTargets ? en.target.perSetTargets[i]?.note : null;
+                      if (n && !runNotes.includes(n)) runNotes.push(n);
+                    }
+                    const runNote = runNotes.join(" / ");
+                    // The "log this and we'll suggest a weight" line is the same
+                    // on every run, so it only earns its place once.
+                    const isFirstRun = !en.sets.some((_, i) => i < setIdx && pctForSet(i));
                     return (
                       <React.Fragment key={setIdx}>
                         {startsRun && (
                           <div className="pct-1rm-row">
-                            {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}: {effectivePct}% of your One-Rep Max
+                            {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max
                             {targetWeight
                               ? ` \u2014 try about ${targetWeight} lb, based on your heaviest logged set so far`
-                              : loggedSessions === 0
-                                ? " \u2014 once you log this exercise, future sessions will suggest a weight"
-                                : loggedSessions === 1
-                                  ? " \u2014 log this once more and future sessions will suggest a weight"
-                                  : ""}
+                              : !isFirstRun
+                                ? ""
+                                : loggedSessions === 0
+                                  ? " \u2014 once you log this exercise, future sessions will suggest a weight"
+                                  : loggedSessions === 1
+                                    ? " \u2014 log this once more and future sessions will suggest a weight"
+                                    : ""}
                           </div>
                         )}
                         <div className="set-grid-row">
-                          <span className="set-num">{setIdx + 1}{perSet?.note ? <span className="set-note">{perSet.note}</span> : null}</span>
+                          <span className="set-num">{setIdx + 1}</span>
                           {needsWeight(displayName) ? (
                             <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
                           ) : (
@@ -5141,7 +5166,6 @@ function GlobalStyle() {
       .sub-pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
       .sub-pill { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 6px 11px; cursor: pointer; }
       .sub-pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
-      .set-note { display: block; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.02em; margin-top: 2px; }
       .section-header { flex: 1; min-width: 0; background: none; border: none; color: var(--text); display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 8px 0; }
       .section-header-row { display: flex; align-items: center; gap: 4px; }
       .section-check { width: 44px; height: 44px; flex-shrink: 0; background: none; border: none; padding: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -5152,7 +5176,8 @@ function GlobalStyle() {
       .warmup-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; }
       .warmup-item input { margin-top: 3px; accent-color: var(--accent); }
       .warmup-item-name { font-size: 13.5px; }
-      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px; gap: 5px; align-items: center; }
+      .set-grid-header, .set-grid-row { display: grid; grid-template-columns: 26px 1fr 1fr 1fr 44px; gap: 6px; align-items: center; }
+      .set-grid-header > *, .set-grid-row > * { min-width: 0; }
       .set-grid-header { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
