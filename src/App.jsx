@@ -144,6 +144,9 @@ const toLocalDateStr = (d) => {
 };
 const todayStr = () => toLocalDateStr(new Date());
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+// Full date and time, for the waiver record — a signature without a timestamp
+// is not much of a record.
+const fmtDateTime = (iso) => { try { return new Date(iso).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }); } catch { return String(iso || ""); } };
 
 function daysSinceLastActivity(client) {
   const dates = [
@@ -1666,7 +1669,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount, weeklySchedule }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount, weeklySchedule, waiver }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1685,6 +1688,8 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     excludedExercises: [],
     injuryNotes: injuryNotes ? injuryNotes.trim() : "",
     maxSessionsReached: 0,
+    // { at: ISO timestamp, version } — the signed record, kept with the athlete
+    waiver: waiver || null,
   };
 }
 
@@ -1814,6 +1819,10 @@ function MainApp({ userId, onSignOut }) {
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  // Anyone whose profile predates the waiver has waiver === null. They get asked
+  // every time they open the app until they accept, because a record with holes
+  // in it is not a record.
+  const [showWaiver, setShowWaiver] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
@@ -1861,6 +1870,7 @@ function MainApp({ userId, onSignOut }) {
         if (!c.excludedExercises) c.excludedExercises = [];
         if (c.injuryNotes === undefined) c.injuryNotes = "";
     if (c.maxSessionsReached === undefined) c.maxSessionsReached = c.sessionsCompleted || 0;
+    if (c.waiver === undefined) c.waiver = null;
     if (!c.logs) c.logs = [];
     if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
@@ -1911,6 +1921,8 @@ function MainApp({ userId, onSignOut }) {
   const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
 
   useEffect(() => { if (client && !client.hasSeenTutorial) setShowTutorial(true); }, [client?.id]); // eslint-disable-line
+  // The tutorial goes first for a brand-new athlete, so this waits for it to be done.
+  useEffect(() => { if (client && !client.waiver && client.hasSeenTutorial) setShowWaiver(true); }, [client?.id, client?.waiver, client?.hasSeenTutorial]); // eslint-disable-line
   const changeTheme = async (t) => { setTheme(t); await setSettings(userId, { theme: t }); };
 
   const completeOnboarding = async (profile) => {
@@ -1989,6 +2001,17 @@ function MainApp({ userId, onSignOut }) {
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showWaiver && (
+        <WaiverModal
+          accepted={client?.waiver || null}
+          onClose={() => setShowWaiver(false)}
+          onAccept={async () => {
+            setShowWaiver(false);
+            if (client && !client.waiver) {
+              await persistClient({ ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION } });
+            }
+          }} />
+      )}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -2045,49 +2068,9 @@ function MainApp({ userId, onSignOut }) {
 
 /* ============================== ONBOARDING ============================== */
 
-// Two uses: a faint wash behind a card, or the emblem itself. As an emblem it
-// takes the brand colours and sits inline; the fixed blue only made sense when
-// it was too faint to read as anything.
-function GrapplingMark({ opacity = 0.14, variant = "wash" }) {
-  const emblem = variant === "emblem";
-  const toriFill = emblem ? "var(--accent)" : "#2f6fb3";
-  const ukeFill = emblem ? "var(--text)" : "#e7e7ea";
-  return (
-    <svg viewBox="0 0 300 220" className={emblem ? "grapple-emblem" : "sisyphus-mark"}
-      style={emblem ? undefined : { opacity }} role="img" aria-label="Two grapplers mid-throw"
-      preserveAspectRatio={emblem ? "xMidYMid meet" : "xMidYMid slice"}>
-      {/* ground shadow */}
-      <ellipse cx="135" cy="206" rx="75" ry="9" fill="currentColor" opacity="0.25" />
-
-      {/* ===== TORI — the thrower, bent forward driving the throw ===== */}
-      <g fill={toriFill}>
-        {/* both legs, fused at a wide driving base */}
-        <path d="M100,145 L145,140 L158,176 L140,206 L120,206 L127,178 L109,178 L96,206 L76,206 L87,176 Z" />
-        {/* torso and head, rounded back, leaning into the throw */}
-        <path d="M105,142 L140,138 Q175,118 178,90 Q179,74 165,67 Q149,76 142,95 Q134,116 117,133 Q108,139 105,142 Z" />
-        <circle cx="168" cy="71" r="15" />
-        {/* gripping arm, reaching up to control uke */}
-        <path d="M155,94 L181,77 L206,61 L193,82 L166,100 Z" />
-      </g>
-
-      {/* ===== UKE — being thrown, arched overhead with legs kicked up ===== */}
-      <g fill={ukeFill}>
-        {/* arched body, draped over tori's back and hip */}
-        <path d="M130,156 Q151,130 176,109 Q206,87 226,59 Q233,49 226,39 Q211,41 196,57 Q171,81 146,104 Q128,121 122,144 Q124,151 130,156 Z" />
-        {/* head, low near tori's hip as the body rotates over */}
-        <circle cx="127" cy="159" r="13" />
-        {/* legs, kicked high into the air */}
-        <path d="M219,54 L246,31 L269,11 L256,31 L229,54 Z" />
-        <path d="M229,59 L256,37 L279,17 L267,37 L241,61 Z" />
-        {/* arm, extended and controlled by tori's grip */}
-        <path d="M176,104 L199,84 L219,67 L207,87 L186,107 Z" />
-      </g>
-
-    </svg>
-  );
-}
-
 function OnboardingScreen({ onSubmit }) {
+  const [showWaiver, setShowWaiver] = useState(false);
+  const [waiver, setWaiver] = useState(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [weight, setWeight] = useState("");
@@ -2172,14 +2155,36 @@ function OnboardingScreen({ onSubmit }) {
       <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</div>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
+      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Before You Start</div>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+        This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
+        assumption of risk and release of liability before a program can be created for you.
+      </p>
+      {waiver ? (
+        <div className="intent-box" style={{ marginBottom: 10 }}>
+          Waiver accepted {fmtDateTime(waiver.at)}.{" "}
+          <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
+        </div>
+      ) : (
+        <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowWaiver(true)}>
+          Read and accept the liability waiver
+        </button>
+      )}
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
         By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
       </p>
-      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture, weeklySchedule: schedule })}>
+      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture, weeklySchedule: schedule, waiver })}>
         Get started
       </button>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showWaiver && (
+        <WaiverModal
+          onClose={() => setShowWaiver(false)}
+          accepted={waiver}
+          onAccept={() => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION }); setShowWaiver(false); }}
+        />
+      )}
     </div>
   );
 }
@@ -2218,28 +2223,14 @@ function PaymentModal({ onClose }) {
 
 // A plain barbell glyph — a generic strength symbol drawn from scratch, so the
 // header reads as a brand mark without borrowing anyone else's.
-// The full lockup, centred, for the sign-in and profile-setup screens. The
-// header uses BrandMark plus its own inline layout because it sits on one line.
+// The wordmark, centred, for the sign-in and profile-setup screens. The header
+// lays the same pieces out inline instead, because it sits on one line.
 function BrandLockup() {
   return (
     <div className="brand-lockup">
-      <GrapplingMark variant="emblem" />
       <div className="brand-lockup-word">Strength</div>
       <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
     </div>
-  );
-}
-
-function BrandMark({ size = 34 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 34 34" fill="none" aria-hidden="true">
-      <rect x="1" y="1" width="32" height="32" rx="9" stroke="var(--accent)" strokeOpacity="0.32" strokeWidth="1.5" />
-      <rect x="6" y="14" width="3.4" height="6" rx="1.2" fill="var(--accent)" opacity="0.65" />
-      <rect x="10.6" y="10.5" width="4" height="13" rx="1.6" fill="var(--accent)" />
-      <rect x="15.6" y="15.6" width="2.8" height="2.8" fill="var(--accent)" />
-      <rect x="19.4" y="10.5" width="4" height="13" rx="1.6" fill="var(--accent)" />
-      <rect x="24.6" y="14" width="3.4" height="6" rx="1.2" fill="var(--accent)" opacity="0.65" />
-    </svg>
   );
 }
 
@@ -2247,7 +2238,6 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
   return (
     <div className="topbar">
       <div className="brand-block">
-        <BrandMark />
         <div className="brand-stack">
           <div className="brand-word">Strength</div>
           <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
@@ -2295,6 +2285,59 @@ const TUTORIAL_PAGES = [
   { title: "Daily Readiness Check-In", body: "A few quick questions each day about sleep, soreness, and energy. Based on your answers, the app automatically adjusts that day's workout — trimming volume or dropping entire sections when you actually need it." },
   { title: "Put It On Your Home Screen", body: "Do this once and the app sits on your home screen with its own icon, opening full screen with no browser bar — the same as any app you'd download. On iPhone, open this page in Safari, tap the Share button at the bottom, scroll down and tap Add to Home Screen. On Android, tap the three dots at the top right of Chrome and tap Add to Home screen. Step-by-step instructions for every phone are in Settings under Put This App On Your Home Screen." },
 ];
+
+/* ============================== LIABILITY WAIVER ============================== */
+// Versioned on purpose: the stored record says which wording someone agreed to,
+// so editing the text later cannot quietly rewrite what past clients signed.
+const WAIVER_VERSION = "2026-09-24";
+const WAIVER_TITLE = "Assumption of Risk and Release of Liability";
+const WAIVER_SECTIONS = [
+  { heading: "What you are agreeing to",
+    body: "Read this before you set up your profile. It is a legal agreement between you and your coach. If you do not agree to it, do not use this app." },
+  { heading: "Strength training carries real risk",
+    body: "This program prescribes heavy resistance training, including near-maximal single-rep lifts, jumping and landing, maximal sprinting, loaded carries, neck training, and conditioning work. Activities like these carry a risk of injury that cannot be designed away. That includes muscle strains, joint and ligament damage, broken bones, concussion and other head or spinal injury, heart attack or stroke, permanent disability, and death. You may also be training for a contact sport, which carries its own separate risks that this agreement does not cover." },
+  { heading: "You are choosing to take that risk",
+    body: "You are taking part voluntarily. You confirm that you are medically able to train, that you have had any condition or injury checked by a physician if there is any doubt, and that you will stop immediately and seek medical attention if anything hurts, feels wrong, or does not settle. You understand and knowingly accept all risks of taking part, both the ones described above and the ones that cannot be foreseen." },
+  { heading: "You are training on your own, unsupervised",
+    body: "This app gives you a written program. It cannot see you, it cannot watch your technique, and it knows nothing about you that you have not typed into it. It is not a substitute for in-person coaching, and it is not medical, physiotherapy, or diagnostic advice. You are responsible for your own equipment, your own training environment, how much weight you choose to use, and whether a given session is right for you on the day." },
+  { heading: "Release",
+    body: "To the fullest extent the law allows, you release your coach from any claim, demand, or cause of action for injury, illness, disability, death, or property loss arising out of your use of this app or your participation in the training it prescribes, including claims based on ordinary negligence. You agree not to bring such a claim, and you accept responsibility for your own losses. This release does not cover gross negligence, recklessness, or intentional misconduct, and it does not waive any right that cannot lawfully be waived." },
+  { heading: "If part of this does not hold",
+    body: "If a court finds any part of this agreement unenforceable, the rest of it stays in force. This agreement is governed by the laws of the State of Washington and binds your heirs and anyone acting on your behalf." },
+  { heading: "Confirming it",
+    body: "By ticking the box and continuing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are giving up substantial legal rights by accepting it. The date and time you accept, and the version of this wording, are recorded against your profile." },
+];
+
+function WaiverModal({ onClose, onAccept, accepted }) {
+  const [ticked, setTicked] = useState(false);
+  return (
+    <ModalShell onClose={onClose} title={WAIVER_TITLE}>
+      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Version {WAIVER_VERSION}</p>
+      {WAIVER_SECTIONS.map((s) => (
+        <div key={s.heading} style={{ marginBottom: 16 }}>
+          <div className="log-exercise-name" style={{ marginBottom: 5 }}>{s.heading}</div>
+          <p className="muted" style={{ marginBottom: 0, lineHeight: 1.55 }}>{s.body}</p>
+        </div>
+      ))}
+      {accepted && accepted.at ? (
+        <div className="intent-box" style={{ marginTop: 6 }}>
+          Accepted on {fmtDateTime(accepted.at)}{accepted.version && accepted.version !== WAIVER_VERSION ? ` (version ${accepted.version})` : ""}.
+        </div>
+      ) : onAccept ? (
+        <>
+          <label className="bjj-toggle" style={{ marginTop: 6, alignItems: "flex-start" }}>
+            <input type="checkbox" checked={ticked} onChange={() => setTicked((v) => !v)} />
+            <span>I am 18 or older. I have read and understood this agreement, I accept the risks, and I agree to the release above.</span>
+          </label>
+          <button className="btn-primary wide" style={{ marginTop: 12 }} disabled={!ticked} onClick={onAccept}>
+            Agree and continue
+          </button>
+        </>
+      ) : null}
+    </ModalShell>
+  );
+}
+
 
 const TERMS_SECTIONS = [
   { heading: "What this app is", body: "Strength Matrix is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
@@ -2757,6 +2800,7 @@ function InstallGuide() {
 
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
+  const [showWaiverCopy, setShowWaiverCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [schedule, setSchedule] = useState(client?.weeklySchedule || defaultWeeklySchedule());
@@ -2887,6 +2931,13 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
       <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
+      <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
+      {client?.waiver?.at && (
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          You accepted this on {fmtDateTime(client.waiver.at)}.
+        </p>
+      )}
+      {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -3001,6 +3052,61 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
 /* ============================== COACH DASHBOARD ============================== */
 
+// The record Kyle keeps: who signed, exactly when, and which wording. Generated
+// from the stored acceptances rather than typed up, so it cannot drift from what
+// the athletes actually agreed to.
+function downloadWaiverRecord(records) {
+  const generated = new Date();
+  const signed = records.filter((r) => r.full && r.full.waiver && r.full.waiver.at);
+  const unsigned = records.filter((r) => !(r.full && r.full.waiver && r.full.waiver.at));
+  const lines = [];
+  lines.push("STRENGTH MATRIX — LIABILITY WAIVER RECORD");
+  lines.push("Generated " + generated.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
+  lines.push("");
+  lines.push("Athletes who have accepted: " + signed.length + " of " + records.length);
+  lines.push("");
+  lines.push("ACCEPTED");
+  lines.push("-".repeat(60));
+  if (!signed.length) lines.push("(none yet)");
+  signed
+    .sort((a, b) => (a.full.waiver.at < b.full.waiver.at ? -1 : 1))
+    .forEach((r) => {
+      lines.push(r.name);
+      lines.push("  Accepted:  " + new Date(r.full.waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
+      lines.push("  Timestamp: " + r.full.waiver.at);
+      lines.push("  Version:   " + (r.full.waiver.version || "unversioned"));
+      lines.push("");
+    });
+  if (unsigned.length) {
+    lines.push("NOT YET ACCEPTED");
+    lines.push("-".repeat(60));
+    unsigned.forEach((r) => lines.push(r.name + (r.pending ? "  (signed up, profile not set up)" : "")));
+    lines.push("");
+  }
+  lines.push("");
+  lines.push("WORDING IN FORCE AT GENERATION — VERSION " + WAIVER_VERSION);
+  lines.push("=".repeat(60));
+  lines.push(WAIVER_TITLE);
+  lines.push("");
+  WAIVER_SECTIONS.forEach((s) => {
+    lines.push(s.heading.toUpperCase());
+    lines.push(s.body);
+    lines.push("");
+  });
+  lines.push("An athlete's stored version above identifies the wording they accepted.");
+  lines.push("Where that differs from the version printed here, the stored version governs.");
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "waiver-record-" + toLocalDateStr(generated) + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsReviewed, onClose }) {
   const [records, setRecords] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -3109,6 +3215,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
             </div>
           )}
 
+          <button className="btn-ghost wide" style={{ marginBottom: 14 }} onClick={() => downloadWaiverRecord(records)}>
+            <Download size={14} /> Download waiver record ({records.filter((r) => r.full?.waiver?.at).length} signed)
+          </button>
           <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid and grandfathered in for good.</p>
           {records.map((r) => {
             const full = r.full;
@@ -3124,8 +3233,16 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     <div className="card-title" style={{ marginBottom: 2 }}>{r.name}{r.ownerId !== userId && <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}> · self sign-up</span>}</div>
                     <div className="muted" style={{ fontSize: 12.5 }}>{r.pending ? "Signed up — hasn't started their program yet" : full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
                   </div>
-                  <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+                    <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>
+                    <span className={`pill ${full?.waiver?.at ? "pill-paid" : "pill-alert"}`}>{full?.waiver?.at ? "Waiver signed" : "No waiver"}</span>
+                  </div>
                 </div>
+                {full?.waiver?.at && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                    Waiver accepted {fmtDateTime(full.waiver.at)} · version {full.waiver.version || "unversioned"}
+                  </div>
+                )}
                 {full?.injuryNotes && (
                   <div className="adjust-box" style={{ marginTop: 10 }}>Working around: {full.injuryNotes}</div>
                 )}
@@ -5250,11 +5367,9 @@ function GlobalStyle() {
       .brand-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 26px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 4px; line-height: 1.05; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
       .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
-      .grapple-emblem { width: 132px; height: 97px; display: block; }
       .brand-lockup-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 30px; letter-spacing: 0.2em; line-height: 1; color: var(--text); text-indent: 0.2em; }
       .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
       .logo-block .brand-title { font-size: 32px; margin-bottom: 0; }
-      .sisyphus-mark { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--accent); pointer-events: none; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.active { border-color: var(--accent); }
@@ -5338,6 +5453,7 @@ function GlobalStyle() {
       .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .pill-paid { background: var(--green); color: var(--bg); }
       .pill-unpaid { background: var(--amber); color: var(--bg); }
+      .pill-alert { background: var(--red); color: #ffffff; }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
