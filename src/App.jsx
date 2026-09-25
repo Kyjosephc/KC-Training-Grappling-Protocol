@@ -337,10 +337,16 @@ function pluralizeMilestoneName(rawName, count) {
   const m = base.match(/^(.*?)(\s*\([^)]*\))?$/);
   let main = (m[1] || base).trim();
   const paren = m[2] || "";
+  // A trailing clause was getting the plural instead of the noun — "Saturn V
+  // Rocket, Fully Fueled" came out as "Saturn V Rocket, Fully Fueleds". The
+  // noun is what pluralises; the clause rides along unchanged.
+  let tail = "";
+  const comma = main.indexOf(",");
+  if (comma > 0) { tail = main.slice(comma); main = main.slice(0, comma).trim(); }
   if (/(s|x|z|ch|sh)$/i.test(main)) main += "es";
   else if (/[^aeiou]y$/i.test(main)) main = main.slice(0, -1) + "ies";
   else main += "s";
-  return `${count} ${main}${paren}`;
+  return `${count} ${main}${tail}${paren}`;
 }
 // The first 5 milestones are 50,000 pounds apart; every one after that is 100,000
 // pounds apart, so the full climb to all 300 takes noticeably longer than an
@@ -367,7 +373,7 @@ function generateMilestones() {
       }
     });
     prevKey = best.key;
-    return { name: pluralizeMilestoneName(best.obj.name, best.count), weight, emoji: best.obj.emoji };
+    return { id: `m${weight}`, name: pluralizeMilestoneName(best.obj.name, best.count), weight, emoji: best.obj.emoji };
   });
 }
 const LIFT_MILESTONES = generateMilestones();
@@ -2691,6 +2697,10 @@ function MainApp({ userId, onSignOut }) {
   useEffect(() => { loadActiveClient(); }, [loadActiveClient]);
 
   const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
+  // Holds the newest Personal Record list across taps that fire faster than a
+  // re-render. Reset whenever the active athlete changes.
+  const prLogRef = useRef(null);
+  useEffect(() => { prLogRef.current = null; }, [activeId]);
 
   useEffect(() => { if (client && !client.hasSeenTutorial) setShowTutorial(true); }, [client?.id]); // eslint-disable-line
   // Shown once, after the tutorial, before anyone trains. Re-readable any time
@@ -2714,17 +2724,25 @@ function MainApp({ userId, onSignOut }) {
     // Append. Replacing the list wholesale is how a client whose list failed to
     // load once could lose every record they already had.
     const list = [...clients, { id, name: c.name }];
+    // If the list write fails the record exists but nothing points at it, and
+    // the next load shows onboarding again — orphaning this client, waiver and all.
+    const listSaved = await setClientList(userId, list);
+    if (!listSaved || listSaved.ok === false) return;
     setClients(list);
-    await setClientList(userId, list);
     setActiveId(id);
   };
   const addClient = async (profile, useTemplate) => {
     const id = uid();
     const c = buildClient({ id, ...profile, useTemplate });
-    await setClient(userId, id, c);
+    // If the record itself does not land, adding the name to the list would
+    // leave an entry pointing at nothing — and selecting it strands the app on
+    // a loading screen with no way back out.
+    const saved = await setClient(userId, id, c);
+    if (!saved || saved.ok === false) return;
     const list = [...clients, { id, name: c.name }];
+    const listSaved = await setClientList(userId, list);
+    if (!listSaved || listSaved.ok === false) return;
     setClients(list);
-    await setClientList(userId, list);
     setActiveId(id);
     setShowClients(false);
   };
@@ -2773,7 +2791,10 @@ function MainApp({ userId, onSignOut }) {
   // he keeps on their behalf, and gating those would both trap him behind a
   // record he can't leave and ask him to sign in someone else's name. Athletes
   // who signed up themselves own their own account and are gated normally.
-  if (!isCoach && !client.waiver) {
+  // WAIVER_VERSION is a date string, so this is a string comparison — and a
+  // record with no version at all sorts below every real one, which is what we
+  // want: it predates versioning and should be signed again.
+  if (!isCoach && (!client.waiver || String(client.waiver.version || "") < String(WAIVER_VERSION))) {
     return (
       <div className="app-shell" data-theme={theme}>
         <WaiverModal
@@ -2815,7 +2836,7 @@ function MainApp({ userId, onSignOut }) {
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
             onStartMobility={() => setShowMobility(true)} />
         )}
-        {tab === "program" && <ProgramTab client={client} onPersist={persistClient} />}
+        {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
         {tab === "history" && <HistoryTab client={client} onPersist={persistClient} />}
         {tab === "bjj" && <BJJNotesTab client={client} onPersist={persistClient} />}
         {tab === "progress" && <ProgressTab client={client} />}
@@ -2866,13 +2887,20 @@ function MainApp({ userId, onSignOut }) {
           }}
           onRecordPR={async (entry) => {
             const newRecord = { id: uid(), date: todayStr(), ...entry };
-            const updated = { ...client, prLog: [...(client.prLog || []), newRecord] };
-            await persistClient(updated);
+            // Two taps dispatched before a re-render both closed over the same
+            // prLog, so the second overwrote the first and a record vanished.
+            // The ref carries the newest list between taps.
+            const base = prLogRef.current || client.prLog || [];
+            const next = [...base, newRecord];
+            prLogRef.current = next;
+            await persistClient({ ...client, prLog: next });
             return newRecord;
           }}
           onRemovePR={async (recordId) => {
-            const updated = { ...client, prLog: (client.prLog || []).filter((p) => p.id !== recordId) };
-            await persistClient(updated);
+            const base = prLogRef.current || client.prLog || [];
+            const next = base.filter((p) => p.id !== recordId);
+            prLogRef.current = next;
+            await persistClient({ ...client, prLog: next });
           }}
           onRestartProgram={async () => {
             const updated = { ...client, sessionsCompleted: 0, blockNumber: (client.blockNumber || 1) + 1 };
@@ -3742,12 +3770,14 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
     setTimeout(() => setSavedSchedule(false), 2000);
   };
   const saveBelt = async () => {
-    await onPersist({ ...client, beltLevel: belt });
+    const saved = await onPersist({ ...client, beltLevel: belt });
+    if (saved && saved.ok === false) return;
     setSavedBelt(true);
     setTimeout(() => setSavedBelt(false), 2000);
   };
   const saveInjuryNotes = async () => {
-    await onPersist({ ...client, injuryNotes: injuryNotes.trim() });
+    const saved = await onPersist({ ...client, injuryNotes: injuryNotes.trim() });
+    if (saved && saved.ok === false) return;
     setSavedInjuryNotes(true);
     setTimeout(() => setSavedInjuryNotes(false), 2000);
   };
@@ -3755,7 +3785,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
   // without also having to remember to save the free-text note.
   const saveInjuryAreas = async (next) => {
     setInjuryAreas(next);
-    await onPersist({ ...client, injuryAreas: next });
+    const saved = await onPersist({ ...client, injuryAreas: next });
+    if (saved && saved.ok === false) return;
     setSavedInjuryAreas(true);
     setTimeout(() => setSavedInjuryAreas(false), 2000);
   };
@@ -4398,7 +4429,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
                 {[{ key: "fresh", label: "Good", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 4, readiness: 4 } }, { key: "beat", label: "Rough", entry: { sleep: 1, readiness: 1 } }].map((m) => (
                   <button key={m.key} className="mood-pill" onClick={async () => {
                     const color = classifyReadiness(m.entry);
-                    await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
+                    const saved = await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
+                    if (saved && saved.ok === false) return;
                   }}>{m.label}</button>
                 ))}
               </div>
@@ -4512,7 +4544,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           onSave={async ({ weight, ...entry }) => {
             const color = classifyReadiness(entry);
             const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: Number.isFinite(Number(weight)) && Number(weight) > 0 ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
-            await onPersist(updated);
+            const saved = await onPersist(updated);
+            if (saved && saved.ok === false) return;
             setShowReadiness(false);
           }} />
       )}
@@ -4604,7 +4637,7 @@ function AccomplishmentsPage({ client, onClose }) {
         const prevWeight = idx === 0 ? 0 : LIFT_MILESTONES[idx - 1].weight;
         const pct = achieved ? 100 : Math.max(0, Math.min(100, Math.round(((total - prevWeight) / (m.weight - prevWeight)) * 100)));
         return (
-          <div key={m.name} className={`milestone-row ${achieved ? "achieved" : ""}`}>
+          <div key={m.id} className={`milestone-row ${achieved ? "achieved" : ""}`}>
             <div className="milestone-emoji">{m.emoji}</div>
             <div style={{ flex: 1 }}>
               <div className="milestone-name">{achieved ? "Lifted the weight of " : "Lift the weight of "}{m.name}</div>
@@ -4735,6 +4768,29 @@ function writeDraft(key, value) {
 function clearDraft(key) {
   try { window.localStorage.removeItem(DRAFT_PREFIX + key); } catch { /* nothing to clean up */ }
 }
+// Drafts used to be keyed by the date the session was started, so a session
+// whose save failed became unreachable as soon as the date changed — the sets
+// were still in storage, nothing ever read them again. Keys are dateless now,
+// and this migrates anything left under the old shape for the same day.
+function readDraftForDay(key) {
+  const direct = readDraft(key);
+  if (direct) return direct;
+  try {
+    let newest = null, newestK = null;
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (!k || !k.startsWith(DRAFT_PREFIX + key + ":")) continue;
+      const v = JSON.parse(window.localStorage.getItem(k) || "null");
+      if (v && (!newest || (v.savedAt || 0) > (newest.savedAt || 0))) { newest = v; newestK = k; }
+    }
+    if (newest) {
+      writeDraft(key, newest);
+      try { window.localStorage.removeItem(newestK); } catch {}
+      return newest;
+    }
+  } catch { /* storage blocked — nothing to recover */ }
+  return null;
+}
 // Only the athlete's own typing is restored, matched by exercise id. The
 // prescription itself always comes from the program, so a draft can never
 // resurrect an old target after the program is updated.
@@ -4780,9 +4836,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   // Frozen when the session starts. Deriving this from today's date meant that
   // at midnight the key changed underneath a lifter still training, and a
   // refresh could no longer find their draft.
-  const draftKeyRef = useRef(`${client.id}:${phaseId}:${dayId}:${todayStr()}`);
+  const draftKeyRef = useRef(`${client.id}:${phaseId}:${dayId}`);
   const draftKey = draftKeyRef.current;
-  const restored = useMemo(() => readDraft(draftKey), [draftKey]);
+  const restored = useMemo(() => readDraftForDay(draftKey), [draftKey]);
 
   const [warmupChecked, setWarmupChecked] = useState(() => (restored && restored.warmupChecked) || {});
   // Collapsed by default: it is the same list every session, and expanded it
@@ -4993,7 +5049,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
           {summary.newMilestones.length > 0 && (
             <Card title="New Lifting Milestone!">
               {summary.newMilestones.map((m) => (
-                <div key={m.name} className="pr-line" style={{ fontSize: 14.5 }}>{m.emoji} Congratulations, you've lifted the weight of {m.name} since you started!</div>
+                <div key={m.id} className="pr-line" style={{ fontSize: 14.5 }}>{m.emoji} Congratulations, you've lifted the weight of {m.name} since you started!</div>
               ))}
             </Card>
           )}
@@ -5509,7 +5565,7 @@ function ScheduleTab({ client }) {
   );
 }
 
-function ProgramTab({ client, onPersist }) {
+function ProgramTab({ client, isCoach, onPersist }) {
   const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
   const [editingDay, setEditingDay] = useState(null);
@@ -5544,8 +5600,8 @@ function ProgramTab({ client, onPersist }) {
       {client.program.methodology && <Card title="Methodology"><p className="muted">{client.program.methodology}</p></Card>}
 
       <div className="program-actions">
-        <button className="btn-ghost" onClick={() => setEditingWarmup(true)}><Pencil size={14} /> Edit warm-up</button>
-        <button className="btn-ghost" onClick={() => setEditingPools(true)}><Pencil size={14} /> Edit Max Effort pools</button>
+        {isCoach && <button className="btn-ghost" onClick={() => setEditingWarmup(true)}><Pencil size={14} /> Edit warm-up</button>}
+        {isCoach && <button className="btn-ghost" onClick={() => setEditingPools(true)}><Pencil size={14} /> Edit Max Effort pools</button>}
       </div>
 
       {client.program.phases.map((phase) => (
@@ -5561,7 +5617,7 @@ function ProgramTab({ client, onPersist }) {
                 <div key={day.id} className="day-card">
                   <div className="day-card-head">
                     <span className="day-badge">{day.label}</span><span className="day-name">{day.name}</span>
-                    <button className="icon-btn small" onClick={() => setEditingDay({ phaseId: phase.id, dayId: day.id })} aria-label={`Edit Day ${day.label}`}><Pencil size={14} /></button>
+                    {isCoach && <button className="icon-btn small" onClick={() => setEditingDay({ phaseId: phase.id, dayId: day.id })} aria-label={`Edit Day ${day.label}`}><Pencil size={14} /></button>}
                   </div>
                   {day.intent && <div className="day-intent-preview">{day.intent}</div>}
                   {day.sections.map((sec) => {
@@ -5591,9 +5647,9 @@ function ProgramTab({ client, onPersist }) {
         </div>
       ))}
 
-      {editingDay && <DayEditor client={client} phaseId={editingDay.phaseId} dayId={editingDay.dayId} onClose={() => setEditingDay(null)} onPersist={onPersist} />}
-      {editingWarmup && <WarmupEditor client={client} onClose={() => setEditingWarmup(false)} onPersist={onPersist} />}
-      {editingPools && <MEPoolEditor client={client} onClose={() => setEditingPools(false)} onPersist={onPersist} />}
+      {isCoach && editingDay && <DayEditor client={client} phaseId={editingDay.phaseId} dayId={editingDay.dayId} onClose={() => setEditingDay(null)} onPersist={onPersist} />}
+      {isCoach && editingWarmup && <WarmupEditor client={client} onClose={() => setEditingWarmup(false)} onPersist={onPersist} />}
+      {isCoach && editingPools && <MEPoolEditor client={client} onClose={() => setEditingPools(false)} onPersist={onPersist} />}
     </div>
   );
 }
@@ -6032,7 +6088,9 @@ function BJJNotesTab({ client, onPersist }) {
     } else {
       updatedNotes = [...(client.bjjNotes || []), { id: uid(), date: todayStr(), learned: learned.trim(), workOn: workOn.trim() }];
     }
-    await onPersist({ ...client, bjjNotes: updatedNotes });
+    const saved = await onPersist({ ...client, bjjNotes: updatedNotes });
+    // Keep the editor open on a failed write rather than closing over the text.
+    if (saved && saved.ok === false) return;
     setAdding(false);
     setEditingId(null);
   };
