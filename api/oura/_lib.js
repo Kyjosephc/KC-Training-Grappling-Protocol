@@ -17,13 +17,21 @@ export const OURA_API_BASE = "https://api.ouraring.com/v2/usercollection";
 // sleep" and "why does my coach's app want everything?".
 export const OURA_SCOPE = "daily";
 
+// Which credentials the server is still waiting on. Names only, never values —
+// enough for the coach to see what he has not pasted into Vercel yet, and
+// useless to anyone else.
+export function missingConfig() {
+  const missing = [];
+  if (!process.env.OURA_CLIENT_ID) missing.push("OURA_CLIENT_ID");
+  if (!process.env.OURA_CLIENT_SECRET) missing.push("OURA_CLIENT_SECRET");
+  if (!process.env.SUPABASE_URL && !process.env.VITE_SUPABASE_URL) missing.push("SUPABASE_URL");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!redirectUri()) missing.push("OURA_REDIRECT_URI");
+  return missing;
+}
+
 export function isConfigured() {
-  return Boolean(
-    process.env.OURA_CLIENT_ID &&
-    process.env.OURA_CLIENT_SECRET &&
-    (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  return missingConfig().length === 0;
 }
 
 // The service-role client bypasses row-level security, which is exactly why it

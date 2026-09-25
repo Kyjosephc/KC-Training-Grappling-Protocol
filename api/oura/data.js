@@ -2,7 +2,7 @@
 // daily scores, newest last. The browser never holds an Oura token, so it also
 // never has to be trusted with one.
 
-import { adminClient, userFromRequest, isConfigured, accessTokenFor, ouraGet } from "./_lib.js";
+import { adminClient, userFromRequest, isConfigured, missingConfig, accessTokenFor, ouraGet } from "./_lib.js";
 
 const DAYS = 14;
 
@@ -13,7 +13,7 @@ function isoDay(offsetDays) {
 }
 
 export default async function handler(req, res) {
-  if (!isConfigured()) return res.status(200).json({ connected: false, configured: false, days: [] });
+  if (!isConfigured()) return res.status(200).json({ connected: false, configured: false, days: [], missing: missingConfig() });
 
   const user = await userFromRequest(req);
   if (!user) return res.status(401).json({ error: "not_signed_in" });

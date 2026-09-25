@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
   Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign
+  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, CircleDot
 } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1814,12 +1814,15 @@ async function ouraFetch(path, options = {}) {
 const ouraTo5 = (score) => (score == null ? null : Math.max(0, Math.min(5, Math.round(Number(score) / 20))));
 
 function useOura() {
-  const [state, setState] = useState({ loading: true, configured: false, connected: false, days: [], today: null, reason: null });
+  const [state, setState] = useState({ loading: true, configured: false, connected: false, days: [], today: null, reason: null, missing: null });
 
   const load = useCallback(async () => {
     const json = await ouraFetch("data");
-    if (!json) { setState({ loading: false, configured: false, connected: false, days: [], today: null, reason: null }); return; }
-    setState({ loading: false, configured: json.configured !== false, connected: !!json.connected, days: json.days || [], today: json.today || null, reason: json.reason || null });
+    // No JSON back means the serverless functions aren't deployed yet, which is
+    // its own kind of "not set up" and worth saying so rather than showing an
+    // empty list of missing variables.
+    if (!json) { setState({ loading: false, configured: false, connected: false, days: [], today: null, reason: null, missing: null }); return; }
+    setState({ loading: false, configured: json.configured !== false, connected: !!json.connected, days: json.days || [], today: json.today || null, reason: json.reason || null, missing: json.missing || null });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -1918,7 +1921,8 @@ function MainApp({ userId, onSignOut }) {
   const [showTerms, setShowTerms] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const oura = useOura();
-  useOuraReturn(() => { setShowSettings(false); oura.reload(); });
+  const [showOura, setShowOura] = useState(false);
+  useOuraReturn(() => { setShowSettings(false); setShowOura(true); oura.reload(); });
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -2102,7 +2106,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
-      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
+      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} oura={oura} onOpenOura={() => setShowOura(true)} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} oura={oura} onPersist={persistClient}
@@ -2122,10 +2126,11 @@ function MainApp({ userId, onSignOut }) {
           onSelect={(id) => { setActiveId(id); setShowClients(false); }}
           onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
       )}
-      {showSettings && <SettingsModal client={client} isCoach={isCoach} oura={oura} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showSettings && <SettingsModal client={client} isCoach={isCoach} oura={oura} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onOpenOura={() => { setShowSettings(false); setShowOura(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showOura && <OuraModal oura={oura} isCoach={isCoach} onClose={() => setShowOura(false)} />}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -2349,7 +2354,11 @@ function BrandLockup() {
   );
 }
 
-function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
+function TopBar({ client, isCoach, newSignupCount = 0, oura, onOpenClients, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenOura, onOpenShare }) {
+  // The ring button. Athletes only see it once the connection actually works —
+  // a button that silently fails is worse than no button. The coach always sees
+  // it, so a setup that isn't finished says so out loud instead of vanishing.
+  const showOura = oura && !oura.loading && (oura.configured || isCoach);
   return (
     <div className="topbar">
       <div className="brand-block">
@@ -2367,6 +2376,12 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
       </button>
       <div className="topbar-icons">
         <div style={{ display: "flex", gap: 6 }}>
+          {showOura && (
+            <button className={`icon-btn ${oura.connected ? "icon-btn-on" : ""}`} onClick={onOpenOura}
+              aria-label={oura.connected ? "Oura ring — connected" : "Connect your Oura ring"}>
+              <CircleDot size={20} />
+            </button>
+          )}
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
           {isCoach && (
             <button className="icon-btn icon-btn-badged" onClick={onOpenCoachDashboard}
@@ -2964,28 +2979,60 @@ function InstallGuide() {
 
 // Shown only where the connection is actually available. An athlete whose coach
 // has not set this up sees nothing at all, rather than a button that fails.
-function OuraSettingsSection({ oura }) {
+// The ring screen, opened from the top-bar button and from Settings. One
+// component so the two entry points can never drift apart.
+function OuraModal({ oura, isCoach, onClose }) {
   const [busy, setBusy] = useState(false);
   const [confirmingOff, setConfirmingOff] = useState(false);
-  if (!oura || oura.loading || !oura.configured) return null;
+  if (!oura) return null;
 
-  const connectedSince = oura.today?.day ? fmtDate(oura.today.day) : null;
+  const today = oura.today;
+  const notSetUp = !oura.configured;
 
   return (
-    <>
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Oura Ring</div>
-      {oura.connected ? (
+    <ModalShell onClose={onClose} title="Oura Ring">
+      {notSetUp ? (
+        isCoach ? (
+          <>
+            <div className="adjust-box">
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Not switched on yet</div>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Your athletes can't see this button — only you can, so you're not left wondering where it went. It turns on for everyone once the server has its Oura credentials.
+              </p>
+            </div>
+            <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 6 }}>What's missing</div>
+            {oura.missing && oura.missing.length ? (
+              <>
+                <p className="muted" style={{ marginBottom: 8 }}>These environment variables aren't set on the server:</p>
+                {oura.missing.map((name) => (
+                  <div key={name} className="dash-stat" style={{ marginBottom: 6, fontFamily: "monospace", fontSize: 13 }}>{name}</div>
+                ))}
+              </>
+            ) : (
+              <p className="muted">The server hasn't reported which values it needs. Most often this means the code hasn't been deployed yet — push, let Vercel build, then reopen this.</p>
+            )}
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 12 }}>
+              Add them in Vercel under Settings → Environment Variables, then redeploy. Variables are only read when the site is built, so a redeploy is required.
+            </p>
+          </>
+        ) : (
+          <p className="muted">Ring syncing isn't switched on for this app yet. Ask your coach.</p>
+        )
+      ) : oura.connected ? (
         <>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            Connected. Your sleep and readiness scores fill in your daily check-in each morning, so the session adjusts itself before you get to the gym. You can still change any of it by hand.
-            {connectedSince ? ` Last reading: ${connectedSince}.` : ""}
+          {today ? (
+            <div className="metric-row" style={{ marginBottom: 16 }}>
+              <MetricTile label="Readiness" value={today.readiness != null ? today.readiness : "—"} sub={today.day ? fmtDate(today.day) : ""} color="var(--green)" />
+              <MetricTile label="Sleep" value={today.sleep != null ? today.sleep : "—"} sub="Out of 100" color="var(--info)" />
+            </div>
+          ) : (
+            <div className="adjust-box">No reading yet today. Open the Oura app and let your ring sync, then come back.</div>
+          )}
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Connected. Your sleep and readiness fill in your daily check-in each morning, so the session adjusts itself before you get to the gym. You can still move either slider by hand — what you save is what the workout uses.
           </p>
-          {oura.reason === "rate_limited" && (
-            <div className="adjust-box">Oura is busy right now. Your numbers will catch up on their own.</div>
-          )}
-          {oura.reason === "oura_unavailable" && (
-            <div className="adjust-box">Couldn't reach Oura just now. Your training is unaffected.</div>
-          )}
+          {oura.reason === "rate_limited" && <div className="adjust-box">Oura is busy right now. Your numbers will catch up on their own.</div>}
+          {oura.reason === "oura_unavailable" && <div className="adjust-box">Couldn't reach Oura just now. Your training is unaffected.</div>}
           {confirmingOff ? (
             <div className="intent-box">
               <p style={{ margin: "0 0 10px" }}>Disconnect Oura? Your ring and everything in your Oura account stay exactly as they are — this app just stops reading them.</p>
@@ -3003,26 +3050,29 @@ function OuraSettingsSection({ oura }) {
         </>
       ) : (
         <>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            Optional. Link your Oura account and the app reads your sleep and readiness scores each morning instead of asking you to guess at them. It reads those daily scores and nothing else, it never posts anything to Oura, and you can disconnect here whenever you like.
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Optional. Link your Oura account and the app reads your sleep and readiness scores each morning instead of asking you to guess at them.
+          </p>
+          <p className="muted" style={{ marginBottom: 12 }}>
+            It reads those daily scores and nothing else, it never posts anything to Oura, and you can disconnect here whenever you like. You'll sign in on Oura's own site — this app never sees your Oura password.
           </p>
           {oura.reason === "reconnect_needed" && (
             <div className="adjust-box">Oura signed this app out. Connect again to pick back up.</div>
           )}
-          <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
             Needs an active Oura membership — the ring on its own won't return data.
           </p>
-          <button className="btn-ghost wide" disabled={busy}
+          <button className="btn-primary wide" disabled={busy}
             onClick={async () => { setBusy(true); const went = await oura.connect(); if (!went) setBusy(false); }}>
             {busy ? "Opening Oura…" : "Connect Oura Ring"}
           </button>
         </>
       )}
-    </>
+    </ModalShell>
   );
 }
 
-function SettingsModal({ client, isCoach, oura, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
+function SettingsModal({ client, isCoach, oura, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onOpenOura, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
@@ -3152,7 +3202,19 @@ function SettingsModal({ client, isCoach, oura, onPersist, theme, onChangeTheme,
         </>
       )}
 
-      <OuraSettingsSection oura={oura} />
+      {oura && !oura.loading && (oura.configured || isCoach) && (
+        <>
+          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Oura Ring</div>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            {oura.connected
+              ? "Connected — your sleep and readiness fill in your check-in each morning."
+              : "Link your ring so your sleep and readiness fill in automatically."}
+          </p>
+          <button className="btn-ghost wide" onClick={onOpenOura}>
+            {oura.connected ? "Manage Oura Ring" : "Connect Oura Ring"}
+          </button>
+        </>
+      )}
 
       <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
@@ -5728,6 +5790,7 @@ function GlobalStyle() {
       .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text-dim); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
+      .icon-btn-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
       .icon-btn-badged { position: relative; overflow: visible; }
       .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
       .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
