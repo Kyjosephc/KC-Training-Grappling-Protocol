@@ -767,7 +767,6 @@ function lookupVideo(name) {
 // (the number a client typed carries no unit with it), so these two lists cover exercises by
 // name for that case.
 const TIME_BASED_EXERCISES = new Set([
-  "assault bike or treadmill — repeated-effort tempo",
   "pull-up bar dead hang",
   "copenhagen plank",
   "heavy isometric wall sit",
@@ -804,6 +803,7 @@ const MINUTE_BASED_EXERCISES = new Set([
   "assault bike or treadmill — sustained effort",
   "assault bike, treadmill, or outdoor — aerobic base",
   "assault bike or treadmill — aerobic power intervals",
+  "assault bike or treadmill — repeated-effort tempo",
 ]);
 // Exercises with no external load at all — sprints, shuttles, bodyweight conditioning, band
 // work, and isometric neck holds done without a plate. The Weight input is hidden for these
@@ -1800,7 +1800,6 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     waiver: waiver || null,
     competitionDate: null,
     injuryAreas: Array.isArray(injuryAreas) ? injuryAreas : [],
-    aerobicLogs: [],
   };
 }
 
@@ -2203,67 +2202,125 @@ function InjuryAreaPicker({ value, onChange, compact }) {
   );
 }
 
-/* ============================== EASY AEROBIC WORK ============================== */
-// The program asks for two or three easy aerobic sessions a week and only one
-// of them happens in the gym. Without somewhere to log the other two, the dose
-// is aspirational — the athlete cannot see whether they are doing it and the
-// coach cannot see it at all.
+/* ============================== CONDITIONING DISPLAY ============================== */
+// Conditioning was rendering through the same "Set / Weight / Reps" grid as a
+// barbell lift, so "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max
+// heart rate, equal time easy between each round" arrived as one long sentence
+// above an empty weight box. These helpers turn that sentence back into the
+// structure it is describing, so the shape of the session is visible at a glance
+// and the prose is there for whoever wants it rather than in the way.
 
-const AEROBIC_WEEKLY_TARGET = 3;
-const AEROBIC_KINDS = [
-  { key: "walk", label: "Walk" },
-  { key: "bike", label: "Easy bike" },
-  { key: "jog", label: "Easy jog" },
-  { key: "ruck", label: "Ruck" },
-  { key: "other", label: "Other" },
-];
-
-function mondayOfWeek(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
-  const wd = d.getDay();
-  d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd));
-  return toLocalDateStr(d);
+function parseConditioning(repsText) {
+  const t = String(repsText || "");
+  // "4 rounds of 2 to 3 minutes ..." / "12 rounds of 15 seconds hard effort ..."
+  const m = t.match(/(\d+)\s*rounds?\s+of\s+(\d+)(?:\s*to\s*(\d+))?\s*(minutes?|seconds?)/i);
+  if (m) {
+    const isMin = /^m/i.test(m[4]);
+    const unit = isMin ? "min" : "sec";
+    const work = m[3] ? `${m[2]}\u2013${m[3]} ${unit}` : `${m[2]} ${unit}`;
+    // Seconds are kept alongside the label so the bar below can be drawn to the
+    // real work-to-rest ratio. 15 on / 45 off should not look like 50/50.
+    const workSecs = (Number(m[3] || m[2]) || 0) * (isMin ? 60 : 1);
+    let recovery = "", restSecs = 0;
+    if (/equal time/i.test(t)) { recovery = work; restSecs = workSecs; }
+    else {
+      const r = t.match(/(\d+)\s*(minutes?|seconds?)\s*(?:easy\s*)?recovery/i);
+      if (r) { recovery = `${r[1]} ${/^m/i.test(r[2]) ? "min" : "sec"}`; restSecs = Number(r[1]) * (/^m/i.test(r[2]) ? 60 : 1); }
+    }
+    const rounds = Number(m[1]);
+    return { kind: "intervals", rounds, work, recovery, workSecs, restSecs,
+      totalMins: Math.round((rounds * (workSecs + restSecs)) / 60) };
+  }
+  // "30 to 40 minutes, continuous, easy pace" / "10 to 12 minutes"
+  const d = t.match(/(\d+)(?:\s*to\s*(\d+))?\s*minutes?/i);
+  if (d) return { kind: "continuous", duration: d[2] ? `${d[1]}–${d[2]} min` : `${d[1]} min` };
+  return null;
 }
 
-// Anything aerobic counts, wherever it happened: the session logged in the gym
-// and the walk logged from the phone both move the same number.
-function aerobicThisWeek(client) {
-  const week = mondayOfWeek(todayStr());
-  const logged = (client.aerobicLogs || []).filter((l) => l.date && mondayOfWeek(l.date) === week);
-  const inGym = (client.logs || []).filter((l) => l.date && mondayOfWeek(l.date) === week && l.hadConditioning).length;
-  const minutes = logged.reduce((s, l) => s + (Number(l.minutes) || 0), 0);
-  return { count: logged.length + inGym, minutes, target: AEROBIC_WEEKLY_TARGET };
+// The effort target, stated once and plainly, with the check that does not need
+// a heart rate monitor — most athletes training in a normal gym do not have one.
+function conditioningEffort(target) {
+  const s = `${target.load || ""} ${target.reps || ""}`.toLowerCase();
+  if (/88 to 92|90 percent|max heart rate/.test(s))
+    return { label: "88–92% of max heart rate", tone: "hard", test: "Three or four words at a time, not a full sentence." };
+  if (/hard but controlled|hard effort|hard but repeatable/.test(s))
+    return { label: "Hard but controlled", tone: "medium", test: "Well past comfortable, short of an all-out sprint." };
+  if (/easy|conversational|130 to 150/.test(s))
+    return { label: "Easy and conversational", tone: "easy", test: "You could hold a full conversation the whole way through." };
+  return null;
 }
 
-function AerobicLogModal({ onClose, onSave }) {
-  const [minutes, setMinutes] = useState(30);
-  const [kind, setKind] = useState("walk");
-  const [busy, setBusy] = useState(false);
+// One sentence on what the session is for. The long coaching rationale still
+// exists on the exercise — this is the version you can read between rounds.
+function conditioningBrief(name) {
+  const n = (name || "").toLowerCase();
+  if (/power interval/.test(n))
+    return "Raises the ceiling on your aerobic system — how hard you can work before you are gassed. The work-to-rest pattern copies a real exchange on the mat.";
+  if (/repeated-effort tempo/.test(n))
+    return "Trains firing off another scramble before you have fully recovered. That gap between exchanges is the thing most conditioning skips.";
+  if (/aerobic base|zone 2|easy aerobic|aerobic maintenance/.test(n))
+    return "Builds the engine you recover with — between rounds, between scrambles, between sets. It is meant to feel almost boring.";
+  return null;
+}
+
+function ConditioningPlan({ target, name }) {
+  const [showPacing, setShowPacing] = useState(false);
+  const plan = parseConditioning(target.reps);
+  const effort = conditioningEffort(target);
+  const brief = conditioningBrief(name);
+  const drawn = plan && plan.kind === "intervals" ? Math.min(plan.rounds, 12) : 0;
   return (
-    <ModalShell onClose={onClose} title="Log easy aerobic">
-      <p className="muted" style={{ marginBottom: 14 }}>
-        Anything easy and continuous counts — a brisk walk, an easy spin, a ruck. The test is that you could hold a conversation the whole way through. This is the work that builds the base your recovery between rounds sits on, and it is meant to feel almost boring.
-      </p>
-      <div className="injury-chips" style={{ marginBottom: 16 }}>
-        {AEROBIC_KINDS.map((k) => (
-          <button key={k.key} type="button" className={`injury-chip ${kind === k.key ? "on" : ""}`}
-            aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>
-        ))}
-      </div>
-      <label className="labeled-input">
-        <span>How long? (minutes)</span>
-        <input type="number" inputMode="numeric" min="5" max="180" value={minutes}
-          onChange={(e) => setMinutes(e.target.value)} />
-      </label>
-      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={busy || !(Number(minutes) > 0)}
-        onClick={async () => {
-          setBusy(true);
-          const ok = await onSave({ id: uid(), date: todayStr(), minutes: Number(minutes) || 0, kind });
-          if (ok === false) setBusy(false);
-        }}>
-        {busy ? "Saving…" : "Log it"}
-      </button>
-    </ModalShell>
+    <div className="cond-card">
+      {brief && <p className="cond-why">{brief}</p>}
+
+      {plan && plan.kind === "intervals" ? (
+        <>
+          <div className="cond-stats">
+            <div className="cond-stat"><span className="cond-stat-v">{plan.rounds}</span><span className="cond-stat-l">rounds</span></div>
+            <div className="cond-stat"><span className="cond-stat-v">{plan.work}</span><span className="cond-stat-l">hard</span></div>
+            {plan.recovery && (
+              <div className="cond-stat"><span className="cond-stat-v">{plan.recovery}</span><span className="cond-stat-l">easy between</span></div>
+            )}
+          </div>
+          <div className="cond-bars" aria-hidden="true">
+            {Array.from({ length: drawn }, (_, i) => (
+              <span key={i} className="cond-round">
+                <span className="cond-work" style={{ flexGrow: plan.workSecs || 1 }} />
+                {plan.recovery ? <span className="cond-rest" style={{ flexGrow: plan.restSecs || 1 }} /> : null}
+              </span>
+            ))}
+          </div>
+          <div className="cond-bars-key" aria-hidden="true">
+            <span><span className="cond-key-dot work" />hard</span>
+            <span><span className="cond-key-dot rest" />easy</span>
+            {plan.rounds > drawn && <span className="muted">+{plan.rounds - drawn} more rounds</span>}
+          </div>
+        </>
+      ) : plan && plan.kind === "continuous" ? (
+        <div className="cond-stats">
+          <div className="cond-stat wide"><span className="cond-stat-v">{plan.duration}</span><span className="cond-stat-l">continuous — no intervals, no stopping</span></div>
+        </div>
+      ) : (
+        <div className="cond-stats"><div className="cond-stat wide"><span className="cond-stat-v small">{target.reps}</span></div></div>
+      )}
+
+      {effort && (
+        <div className={`cond-effort tone-${effort.tone}`}>
+          <span className="cond-effort-label">{effort.label}</span>
+          <span className="cond-effort-test">{effort.test}</span>
+        </div>
+      )}
+
+      {target.cues && (
+        <>
+          <button type="button" className="cond-pacing-toggle" onClick={() => setShowPacing((s) => !s)} aria-expanded={showPacing}>
+            <span>How to pace it</span>
+            <ChevronRight size={14} className={showPacing ? "chev-open" : ""} />
+          </button>
+          {showPacing && <div className="log-exercise-cue" style={{ marginTop: 2 }}>{target.cues}</div>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -2414,7 +2471,6 @@ function MainApp({ userId, onSignOut }) {
     if (c.hasSeenSafety === undefined) c.hasSeenSafety = false;
     if (c.competitionDate === undefined) c.competitionDate = null;
     if (!c.injuryAreas) c.injuryAreas = [];
-    if (!c.aerobicLogs) c.aerobicLogs = [];
     if (!c.logs) c.logs = [];
     if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
@@ -4004,15 +4060,6 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                   <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
                   <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
                   <DashStat
-                    label="Easy aerobic this week"
-                    value={(() => {
-                      const a = full ? aerobicThisWeek(full) : null;
-                      if (!a) return "—";
-                      return `${a.count} of ${a.target}${a.minutes ? ` · ${a.minutes} min outside the gym` : ""}`;
-                    })()}
-                    wide
-                  />
-                  <DashStat
                     label="Readiness"
                     value={recentReadiness ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -4081,8 +4128,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const { total: totalLifted, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const nextMilestoneIdx = LIFT_MILESTONES.findIndex((m, idx) => achievedDates[idx] === undefined);
   const [showAccomplishments, setShowAccomplishments] = useState(false);
-  const [showAerobic, setShowAerobic] = useState(false);
-  const aerobic = useMemo(() => aerobicThisWeek(client), [client.aerobicLogs, client.logs]);
   const latestBW = client.bodyweightLog?.length ? client.bodyweightLog[client.bodyweightLog.length - 1] : null;
   const mobilityMinutes = Math.round((client.program.mobility || []).reduce((s, seg) => s + seg.seconds, 0) / 60);
   const hasEverTrained = (client.logs?.length || 0) > 0 || (client.mobilityLogs?.length || 0) > 0;
@@ -4305,22 +4350,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         )}
       </div>
 
-      <Card title="Easy Aerobic" subtitle={`${aerobic.count} of ${aerobic.target} this week`}>
-        <div className="aerobic-track" aria-hidden="true">
-          {Array.from({ length: aerobic.target }, (_, i) => (
-            <span key={i} className={`aerobic-pip ${i < aerobic.count ? "on" : ""}`} />
-          ))}
-        </div>
-        <p className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>
-          {aerobic.count === 0
-            ? "Two or three easy sessions a week is what builds the engine you recover between rounds with. One of them is already in your gym conditioning — the rest are walks, easy bike, anything conversational."
-            : aerobic.count >= aerobic.target
-              ? `That is the week covered${aerobic.minutes ? ` — ${aerobic.minutes} minutes logged outside the gym` : ""}. More is fine as long as it stays easy.`
-              : "Log a walk, an easy spin, anything you could hold a conversation through. It counts."}
-        </p>
-        <button className="btn-ghost wide" onClick={() => setShowAerobic(true)}>Log easy aerobic</button>
-      </Card>
-
       <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
         <button className="btn-ghost wide" onClick={onStartMobility}>Start recovery session</button>
@@ -4338,15 +4367,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
             const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: Number.isFinite(Number(weight)) && Number(weight) > 0 ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
             await onPersist(updated);
             setShowReadiness(false);
-          }} />
-      )}
-      {showAerobic && (
-        <AerobicLogModal onClose={() => setShowAerobic(false)}
-          onSave={async (entry) => {
-            const ok = await onPersist({ ...client, aerobicLogs: [...(client.aerobicLogs || []), entry] });
-            if (ok === false) return false;
-            setShowAerobic(false);
-            return true;
           }} />
       )}
       {showAccomplishments && <AccomplishmentsPage client={client} onClose={() => setShowAccomplishments(false)} />}
@@ -4789,9 +4809,6 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
       exercises: allExercises, totalVolume: Math.round(totalVolume), avgRPE: rpe,
       readinessColor: client.readiness[todayStr()]?.color || null,
       warmupCompleted: totalWarmupItems > 0 && warmupCheckedCount === totalWarmupItems,
-      // Whether the conditioning section was actually ticked off, so the weekly
-      // aerobic count on Today reflects gym work without asking twice for it.
-      hadConditioning: resolvedSections.some((s) => s.type === "conditioning" && complete[s.id]),
       sectionCompletion: complete, notes,
     };
     const totalSessionsCount = totalSessionsIn(client.program);
@@ -4949,7 +4966,11 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   </div>
                   {collapsedSummary && <div className="last-logged" style={{ marginTop: 2 }}>{collapsedSummary}</div>}
                   {exOpen && (<>
-                  <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
+                  {sec.type === "conditioning" ? (
+                    <ConditioningPlan target={en.target} name={displayName} />
+                  ) : (
+                    <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
+                  )}
                   {en.target.tempo ? <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{TEMPO_LEGEND}</div> : null}
                   {en.target.injuryNote && (
                     <div className="intent-box" style={{ marginTop: 8, fontSize: 12.5 }}>
@@ -4958,8 +4979,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     </div>
                   )}
                   {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
-                  {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
-                  {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
+                  {sec.type !== "conditioning" && en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
+                  {sec.type !== "conditioning" && en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
                   {lastWeek ? (
                     <div className="last-logged">Last week, heaviest: {needsWeight(displayName) ? `${lastWeek.weight} pounds × ` : ""}{lastWeek.reps} {exerciseUnit(displayName, en.target.reps)}</div>
                   ) : (
@@ -4982,6 +5003,33 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   </>)}
                 </div>
                 {exOpen && (<>
+                {sec.type === "conditioning" ? (() => {
+                  const plan = parseConditioning(en.target.reps);
+                  const suggestion = plan
+                    ? (plan.kind === "intervals"
+                        ? (plan.totalMins ? String(plan.totalMins) : "")
+                        : plan.duration.replace(/\s*min$/, ""))
+                    : "";
+                  return (
+                    <div className="cond-log">
+                      <label className="cond-log-label" htmlFor={`cond-${en.exerciseId}`}>
+                        How long did you actually go?
+                      </label>
+                      <div className="cond-log-row">
+                        <input id={`cond-${en.exerciseId}`} type="text" inputMode="numeric"
+                          placeholder={suggestion}
+                          value={en.sets[0] ? en.sets[0].reps : ""}
+                          onChange={(e) => updateSet(sec.id, exIdx, 0, "reps", e.target.value)} />
+                        <span className="cond-log-unit">{exerciseUnitLabel(displayName, en.target.reps).toLowerCase()}</span>
+                      </div>
+                      <p className="muted" style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                        {plan && plan.kind === "intervals"
+                          ? "Total time end to end, including the easy recovery between rounds. Coming in short is still worth logging — it is what tells you and your coach how the week actually went."
+                          : "Coming in short is still worth logging — it is what tells you and your coach how the week actually went."}
+                      </p>
+                    </div>
+                  );
+                })() : (<>
                 <div className="set-grid-header"><span>Set</span><span>{needsWeight(displayName) ? "Weight" : ""}</span><span>{exerciseUnitLabel(displayName, en.target.reps)}</span><span /></div>
                 {en.target.perSetTargets && (
                   <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>Each set has its own target below — the weight naturally climbs as reps come down, ending on a true top single.</div>
@@ -5064,6 +5112,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     );
                   });
                 })()}
+                </>)}
                 </>)}
               </div>
             );
@@ -6322,9 +6371,39 @@ function GlobalStyle() {
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
       .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-      .aerobic-track { display: flex; gap: 6px; margin-bottom: 10px; }
-      .aerobic-pip { flex: 1; height: 6px; border-radius: 999px; background: var(--field-border); }
-      .aerobic-pip.on { background: var(--accent); }
+      /* ---- conditioning ---- */
+      .cond-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 8px 0 10px; }
+      .cond-why { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text); }
+      .cond-stats { display: flex; gap: 8px; margin-bottom: 12px; }
+      .cond-stat { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 9px 8px; text-align: center; }
+      .cond-stat.wide { flex-basis: 100%; }
+      .cond-stat-v { display: block; font-family: Oswald, sans-serif; font-weight: 600; font-size: 19px; line-height: 1.1; color: var(--accent); }
+      .cond-stat-v.small { font-size: 13px; font-family: Inter, sans-serif; font-weight: 500; color: var(--text); line-height: 1.45; }
+      .cond-stat-l { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); margin-top: 3px; font-weight: 600; }
+      .cond-bars { display: flex; gap: 3px; margin-bottom: 6px; }
+      .cond-round { flex: 1; display: flex; gap: 2px; min-width: 0; }
+      .cond-work { flex: 1 1 0; min-width: 2px; height: 10px; border-radius: 3px; background: var(--accent); }
+      .cond-rest { flex: 1 1 0; min-width: 2px; height: 10px; border-radius: 3px; background: var(--field-border); }
+      .cond-bars-key { display: flex; gap: 12px; align-items: center; font-size: 11px; color: var(--text-dim); margin-bottom: 12px; }
+      .cond-bars-key > span { display: inline-flex; align-items: center; gap: 5px; }
+      .cond-key-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+      .cond-key-dot.work { background: var(--accent); }
+      .cond-key-dot.rest { background: var(--field-border); }
+      .cond-effort { border-radius: 10px; padding: 9px 11px; margin-bottom: 10px; border: 1px solid; }
+      .cond-effort-label { display: block; font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+      .cond-effort-test { display: block; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
+      .cond-effort.tone-easy { border-color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+      .cond-effort.tone-easy .cond-effort-label { color: var(--green); }
+      .cond-effort.tone-medium { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+      .cond-effort.tone-medium .cond-effort-label { color: var(--amber); }
+      .cond-effort.tone-hard { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+      .cond-effort.tone-hard .cond-effort-label { color: var(--red); }
+      .cond-pacing-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: transparent; border: none; color: var(--text-dim); font-size: 12.5px; font-weight: 600; padding: 8px 0; cursor: pointer; min-height: 44px; }
+      .cond-log { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-top: 10px; }
+      .cond-log-label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); font-weight: 700; margin-bottom: 8px; }
+      .cond-log-row { display: flex; align-items: center; gap: 10px; }
+      .cond-log-row input { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--field-border); border-radius: 10px; color: var(--text); font-size: 16px; padding: 12px; min-height: 44px; }
+      .cond-log-unit { font-size: 13px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
       .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
       .hero-start-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
