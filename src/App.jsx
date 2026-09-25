@@ -2109,10 +2109,6 @@ function applyTaper(sections, daysOut) {
   return { sections: adjusted, taperNote: note };
 }
 
-const WEIGHT_CUT_GUIDANCE = {
-  heading: "Making weight",
-  body: "This program does not prescribe a weight cut and your coach is not going to write you one. But you will probably think about it, so here is the thing most people do not know: IBJJF uses a same-day weigh-in. They weigh you on the day, in your gi, minutes before your first match. There is no overnight rehydration window the way there is in wrestling or MMA. That single rule makes an aggressive cut a fundamentally worse idea in this sport than in almost any other.\n\nWhat that means practically: compete at or very near your walking weight. If you are trimming at all in the final week, keep it to a couple of percent of bodyweight and do it through fibre, salt and water timing — not through sweating it off. No sauna suits, no active dehydration, no diuretics, ever. And know that grip strength and reaction time are among the first things dehydration takes from you, which in a gi is close to the worst possible trade.\n\nIf the gap between you and the division is bigger than that, move up a division for this one and have a conversation with your coach about the next twelve weeks. That is a programming problem, not a water problem.",
-};
 
 /* ============================== TRAINING AROUND AN INJURY ============================== */
 // The app collected an injury note and the program did nothing with it, so a
@@ -2969,8 +2965,11 @@ function OnboardingScreen({ onSubmit }) {
           Read and accept the liability waiver
         </button>
       )}
+      <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowTerms(true)}>
+        Read our Terms &amp; Privacy
+      </button>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
+        Creating this profile means you agree to them. You can read them again any time in Settings.
       </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver })}>
@@ -3662,7 +3661,6 @@ function InstallGuide() {
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
-  const [showWeightCut, setShowWeightCut] = useState(false);
   const [showSafetyCopy, setShowSafetyCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
@@ -3821,16 +3819,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
             {(() => { const d = daysUntil(client.competitionDate); return d == null ? "" : d < 0 ? "That date has passed — clear it or set a new one." : d === 0 ? "That's today. Go compete." : `${d} day${d === 1 ? "" : "s"} out.`; })()}
           </p>
-          <button className="btn-ghost wide" onClick={() => setShowWeightCut(true)}>Read: making weight</button>
         </>
-      )}
-      {showWeightCut && (
-        <ModalShell onClose={() => setShowWeightCut(false)} title={WEIGHT_CUT_GUIDANCE.heading}>
-          {WEIGHT_CUT_GUIDANCE.body.split("\n\n").map((para, i) => (
-            <p key={i} className="muted" style={{ marginBottom: 12, lineHeight: 1.55 }}>{para}</p>
-          ))}
-          <button className="btn-primary wide" onClick={() => setShowWeightCut(false)}>Got it</button>
-        </ModalShell>
       )}
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
