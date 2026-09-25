@@ -486,6 +486,10 @@ function resolveDaySections(day, weekNumber, program, phase, veteranMode, opts) 
         cues: `${e.cues || ""} Veteran Athlete Mode: this deload is deeper than standard — every set trimmed further and with an extra rep in reserve, since accumulated training age benefits from more genuine unloading here.`.trim(),
       }));
     }
+    // Applied last, so a substitution is what the athlete actually sees and
+    // logs — in the preview and in the live session alike, since both resolve
+    // through here.
+    exercises = applyInjurySubstitutions(exercises, opts && opts.injuryAreas);
     return { ...sec, exercises };
   });
 }
@@ -499,7 +503,7 @@ function primaryLiftName(day, weekNumber, program, phase, opts) {
   return day.name;
 }
 function resolveOptsFor(client) {
-  return { blockNumber: client.blockNumber || 1, excludedExercises: client.excludedExercises || [] };
+  return { blockNumber: client.blockNumber || 1, excludedExercises: client.excludedExercises || [], injuryAreas: client.injuryAreas || [] };
 }
 function sectionHeadline(resolvedSec) {
   if ((resolvedSec.type === "strength" || resolvedSec.type === "power") && resolvedSec.exercises[0]) {
@@ -1222,8 +1226,7 @@ const conjugateProgram = {
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Adductor strength and durability. Adductor strain is one of the most common injuries in grappling and the peak block is when mat intensity is highest — this is exactly the wrong time to stop training it.", quality: "Durability" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", load: "hard but repeatable — you have to do it four times", rir: 2, rest: "none", purpose: "The highest-value conditioning in the program, in the block that most needs it. You maintain an aerobic quality by cutting volume and holding intensity, not by cutting both — eight easy minutes maintains nothing. This is also the closest thing in the program to what a hard round actually demands.", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds. No heart rate monitor? Three or four words at a time, not a sentence, and you are at that point by ninety seconds.", quality: "Conditioning",
-                cues: "Shorter than the base-phase sessions but not easier — that is the point. You hold onto an aerobic quality by cutting volume and keeping intensity, not by cutting both. Four rounds, hard and evenly paced, with the full recovery between them. If you are competing this week, skip this session entirely: nothing you do in here five days out makes you fitter, and plenty makes you slower." }),
+              ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", load: "hard but repeatable — you have to do it four times", rir: 2, rest: "none", purpose: "The highest-value conditioning in the program, in the block that most needs it. You maintain an aerobic quality by cutting volume and holding intensity, not by cutting both — eight easy minutes maintains nothing. This is also the closest thing in the program to what a hard round actually demands.", cues: "Shorter than the base-phase sessions but not easier — that is the point. You hold onto an aerobic quality by cutting volume and keeping intensity, not by cutting both. Pace it off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds. No heart rate monitor? Three or four words at a time, not a sentence, and you are at that point by ninety seconds. If you are competing this week, skip this session entirely: nothing you do in here five days out makes you fitter, and plenty makes you slower.", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1774,7 +1777,7 @@ function buildProgramVariant(variant) {
   return base;
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, profilePicture, promoDiscount, weeklySchedule, waiver }) {
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, promoDiscount, weeklySchedule, waiver }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -1796,6 +1799,8 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     // { at: ISO timestamp, version } — the signed record, kept with the athlete
     waiver: waiver || null,
     competitionDate: null,
+    injuryAreas: Array.isArray(injuryAreas) ? injuryAreas : [],
+    aerobicLogs: [],
   };
 }
 
@@ -1914,20 +1919,20 @@ const READINESS_COPY = {
 const SAFETY_SCREEN_TITLE = "Before you start";
 const SAFETY_SCREEN_SECTIONS = [
   {
-    heading: "Get these checked before you train the neck",
-    body: "This program trains your neck deliberately, because you get choked and stacked every week and an untrained neck is how people get hurt. But a neck that already has something going on needs a person who can examine it, not an app. Talk to a physician or physiotherapist before starting the neck work if any of these apply to you: numbness, tingling or weakness in an arm or hand, now or in the last few months; a previous cervical fracture, fusion or neck surgery; a known disc herniation or diagnosed stenosis; dizziness, visual disturbance or nausea when you tip your head back; headaches that started after a neck injury, or neck pain that wakes you at night; rheumatoid arthritis. Everything else in the program is still yours to train in the meantime.",
+    heading: "Medical clearance before the neck work",
+    body: "This program trains the neck deliberately. Grappling applies repeated load to the cervical spine through chokes, stacks and scrambles, and a conditioned neck tolerates that load considerably better than an unconditioned one. A neck with an existing problem, however, requires assessment by a qualified clinician rather than a training program. Please consult a physician or physiotherapist before beginning the neck work if any of the following apply: numbness, tingling or weakness in an arm or hand, currently or within the last three months; previous cervical fracture, fusion or neck surgery; a diagnosed disc herniation or spinal stenosis; dizziness, visual disturbance or nausea on neck extension; headaches that began following a neck injury, or neck pain that wakes you at night; rheumatoid arthritis. The remainder of the program remains appropriate to train in the meantime.",
   },
   {
-    heading: "If you get your bell rung, stop",
-    body: "Any suspected concussion means no lifting, no neck work and no conditioning until a clinician clears you. Not a lighter session — no session. This is the one rule in the program with no autoregulated version, and a bad check-in score is not a substitute for it.",
+    heading: "Head impacts and concussion",
+    body: "A suspected concussion means no lifting, no neck work and no conditioning until you have been cleared by a clinician. Not a reduced session — no session. This is the single rule in the program with no autoregulated alternative, and a low readiness score is not a substitute for it.",
   },
   {
-    heading: "Pain is different from fatigue",
-    body: "The daily check-in handles tired. It does not handle hurt. New or worsening pain, anything sharp, anything that travels down a limb, or anything that is worse the next morning is a message to your coach, not a reason to slide a slider down. Training around an injury is a conversation, and it is one worth having early.",
+    heading: "Pain is not the same as fatigue",
+    body: "The daily check-in is designed to manage fatigue. It is not designed to manage pain. New or worsening pain, anything sharp, anything that radiates down a limb, or anything that is worse the following morning warrants a conversation rather than a lighter session. If you have an area you need to train around, set it in Settings so the program adjusts around it, and tell your coach.",
   },
   {
-    heading: "What this is, and what it isn't",
-    body: "Your coach is a personal trainer and a flexologist studying to be a physical therapist. He is not your doctor and this app is not medical care. It cannot see you, it cannot watch your technique, and it only knows what you type into it. If something needs diagnosing, that is a referral, not a programming change.",
+    heading: "Scope of this program",
+    body: "This is a strength and conditioning program. It is not medical care, and it does not diagnose, treat or rehabilitate injury. It cannot observe you, assess your technique, or account for anything it has not been told. Where a problem requires diagnosis, the appropriate step is a referral to a qualified clinician, not an adjustment to your programming.",
   },
 ];
 
@@ -1935,7 +1940,7 @@ function SafetyScreenModal({ onClose }) {
   return (
     <ModalShell onClose={onClose} title={SAFETY_SCREEN_TITLE}>
       <p className="muted" style={{ marginBottom: 16 }}>
-        A short read before your first session. None of it is common, and most people it doesn't apply to — but the ones it does apply to need to know before they train, not after.
+        Please read this before your first session. Most of it will not apply to you. Where it does apply, it matters more than anything else in the program.
       </p>
       {SAFETY_SCREEN_SECTIONS.map((s) => (
         <div key={s.heading} style={{ marginBottom: 16 }}>
@@ -1943,7 +1948,7 @@ function SafetyScreenModal({ onClose }) {
           <p className="muted" style={{ marginBottom: 0, lineHeight: 1.55 }}>{s.body}</p>
         </div>
       ))}
-      <button className="btn-primary wide" style={{ marginTop: 6 }} onClick={onClose}>Got it</button>
+      <button className="btn-primary wide" style={{ marginTop: 6 }} onClick={onClose}>I've read this</button>
     </ModalShell>
   );
 }
@@ -2005,6 +2010,262 @@ const WEIGHT_CUT_GUIDANCE = {
   heading: "Making weight",
   body: "This program does not prescribe a weight cut and your coach is not going to write you one. But you will probably think about it, so here is the thing most people do not know: IBJJF uses a same-day weigh-in. They weigh you on the day, in your gi, minutes before your first match. There is no overnight rehydration window the way there is in wrestling or MMA. That single rule makes an aggressive cut a fundamentally worse idea in this sport than in almost any other.\n\nWhat that means practically: compete at or very near your walking weight. If you are trimming at all in the final week, keep it to a couple of percent of bodyweight and do it through fibre, salt and water timing — not through sweating it off. No sauna suits, no active dehydration, no diuretics, ever. And know that grip strength and reaction time are among the first things dehydration takes from you, which in a gi is close to the worst possible trade.\n\nIf the gap between you and the division is bigger than that, move up a division for this one and have a conversation with your coach about the next twelve weeks. That is a programming problem, not a water problem.",
 };
+
+/* ============================== TRAINING AROUND AN INJURY ============================== */
+// The app collected an injury note and the program did nothing with it, so a
+// client who wrote "groin pull from July" was prescribed a near-failure
+// Copenhagen in week one. These are the five or six complaints that actually
+// arrive, and what each one changes.
+//
+// This is coaching guidance, not treatment. Anything acute, anything with pain
+// at rest or at night, anything already under a clinician's care — that is a
+// conversation with the coach before week one, not a substitution.
+
+const INJURY_AREAS = [
+  {
+    key: "shoulder", label: "Shoulder",
+    note: "Overhead and barbell pressing swap to neutral-grip and landmine work, which most cranky shoulders tolerate. Pulling moves to a supported row. Face pulls stay — they are part of the fix.",
+    rules: [
+      { match: /overhead press|incline (barbell )?press|bench press|close.?grip bench|spoto press|weighted push|dip\b/i,
+        to: "Neutral-Grip Dumbbell Floor Press",
+        why: "Pressing swapped for a neutral-grip floor press — the floor limits the range at exactly the point an irritated shoulder complains, and the neutral grip keeps the joint centred.",
+        cues: "Elbows tucked to about 45 degrees, upper arms stopping on the floor each rep. If any range of this hurts, shorten it rather than pushing through." },
+      { match: /weighted pull-?up|pull-?up(?! bar dead)/i,
+        to: "Chest-Supported Dumbbell Row",
+        why: "Vertical pulling swapped for a supported row while the shoulder settles.",
+        cues: "Chest stays on the pad. Pull to the bottom of the ribs and stop the set well short of anything that pinches." },
+      { match: /landmine rotational press/i, drop: true, why: "Overhead rotational pressing is out while the shoulder is irritated." },
+    ],
+  },
+  {
+    key: "lowBack", label: "Low back",
+    note: "Spinal loading comes down: axial squatting and pulling swap to supported variations, and loaded spinal flexion is replaced with bracing work.",
+    rules: [
+      { match: /box squat|back squat|zercher|front squat|good morning|anderson squat/i,
+        to: "Leg Press (pain-free range)",
+        why: "Loaded squatting swapped for a leg press while the back settles — same quad and glute work, no bar on your spine.",
+        cues: "Set the range so you never feel your pelvis tuck under at the bottom. Stop short of that point every rep." },
+      { match: /romanian deadlift/i,
+        to: "Supine Hamstring Curl (bodyweight, heels on a slider)",
+        why: "Hamstring work kept, hip hinge removed while the back settles.",
+        cues: "Hips up, heels sliding out slowly. Stop the set the moment your lower back wants to arch." },
+      { match: /jump squat|box jump|depth jump|pogo/i, drop: true,
+        why: "Jumping and landing is out while the back is sore — the landing is the highest spinal load in the program, and it arrives faster than you can brace for it." },
+      { match: /deadlift|trap bar(?! static)/i,
+        to: "Trap Bar Deadlift from blocks (shortened range)",
+        why: "Pulling from blocks rather than the floor, so the range starts above where a sore back usually complains.",
+        cues: "Set the bar at about mid-shin or higher. Reset your brace on the blocks between every rep." },
+      { match: /toes to bar|ab roll ?out|hanging leg raise/i,
+        to: "Dead Bug",
+        why: "Loaded spinal flexion swapped for anti-extension bracing, which is what the trunk actually does in grappling anyway.",
+        cues: "Lower back stays flat on the floor the entire set. The moment it lifts, that rep was the last one." },
+      { match: /farmer carry|suitcase carry/i, lighter: true,
+        why: "Carries kept but lighter and shorter — they are good for a back, right up until they are not." },
+    ],
+  },
+  {
+    key: "knee", label: "Knee",
+    note: "Deep knee flexion and hard landings come out. Single-leg work continues in a range that does not hurt, because strength is most of what protects the joint.",
+    rules: [
+      { match: /bulgarian split squat|split squat|lunge/i,
+        to: "Step-Down to a Low Box",
+        why: "Split squats swapped for a step-down, where you control the depth exactly.",
+        cues: "Start with a low box — six inches is plenty. Lower under control, tap the heel, come back up. Never into a range that hurts." },
+      { match: /jump squat|pogo|box jump|depth jump/i, drop: true,
+        why: "Jumping and landing is out while the knee is sore. It is the highest-force thing in the program and the first thing to go." },
+      { match: /acceleration sprint|shuttle|5-?10-?5/i, drop: true,
+        why: "Sprinting and cutting are out while the knee is sore." },
+      { match: /box squat|back squat|front squat|zercher/i, lighter: true,
+        why: "Squatting kept, but lighter and only through a range that is completely pain-free." },
+    ],
+  },
+  {
+    key: "elbowWrist", label: "Elbow or wrist",
+    note: "Grip and hanging load comes down, because the elbow is almost always a grip-volume problem. Direct forearm work stays, light and slow — that is the part that actually fixes it.",
+    rules: [
+      { match: /weighted pull-?up|pull-?up(?! bar dead)/i,
+        to: "Chest-Supported Dumbbell Row",
+        why: "Hanging swapped for a supported row while the elbow settles.",
+        cues: "Chest on the pad, neutral grip if you have the option." },
+      { match: /dead hang|towel hang/i, drop: true,
+        why: "Hanging is out — it is sustained load on exactly the tissue that is irritated, on top of gripping a gi three times a week." },
+      { match: /farmer carry|suitcase carry|kettlebell hold|landmine.*hold/i, lighter: true,
+        why: "Carries and holds kept but lighter — grip volume is usually the cause here." },
+      { match: /wrist curl/i, lighter: true,
+        why: "Wrist work stays and gets slower. Light, controlled, three seconds down is the loading that helps a cranky elbow rather than aggravating it." },
+    ],
+  },
+  {
+    key: "groin", label: "Groin or adductor",
+    note: "Adductor work stays — it is the thing that rebuilds the tissue — but at a short lever and well away from failure until it is pain-free for two clear weeks.",
+    rules: [
+      { match: /copenhagen/i,
+        to: "Copenhagen Plank — short lever (knee on the bench)",
+        why: "Kept, but at the short lever. A healing adductor taken near failure at full lever is how a strain becomes a re-tear.",
+        cues: "Top leg bent, knee resting on the bench, bottom leg on the floor. Hold comfortably and stop well before shaking. Only lengthen the lever once it has been completely pain-free for two weeks." },
+      { match: /hip adduction machine/i, lighter: true,
+        why: "Kept at a moderate load, well short of failure." },
+      { match: /lateral shuffle|shuttle|5-?10-?5/i, drop: true,
+        why: "Hard lateral cutting is out while the adductor is healing." },
+    ],
+  },
+  {
+    key: "neck", label: "Neck",
+    note: "Bridging comes out entirely and the isometrics drop to an easy dose. Please get a neck looked at rather than training around it.",
+    rules: [
+      { match: /neck bridge/i, drop: true,
+        why: "No bridging on an irritated neck, at any dose. This is the one area where training around it is the wrong instinct — get it looked at." },
+      { match: /4-way isometric neck/i, lighter: true,
+        why: "Isometrics kept at an easy, pain-free pressure only. Any pinching or anything travelling down an arm means stop and see someone." },
+      { match: /neck curl|neck extension/i,
+        to: "Isometric Neck Holds — manual resistance, easy pressure",
+        why: "Loaded neck curls and extensions swapped for gentle isometric holds. Holding a position is far easier on an irritated neck than moving it under a plate.",
+        cues: "Hand on your own head, press just hard enough to feel the muscle work, and hold. No movement at all. Anything sharp, or anything travelling down an arm, means stop and get it looked at." },
+    ],
+  },
+  {
+    key: "hamstring", label: "Hamstring",
+    note: "Sprinting comes out — it is where hamstrings tear. The slow eccentric work stays, because that is the best-evidenced thing you can do for one.",
+    rules: [
+      { match: /acceleration sprint/i, drop: true,
+        why: "Maximal sprinting is out until this is fully settled. If you have a sled, push or drag it instead — same repeat-effort quality, none of the tearing risk." },
+      { match: /romanian deadlift/i, lighter: true,
+        why: "Kept and lightened deliberately. Slow, long-range eccentric loading is the best-evidenced protection for a hamstring — this is the exercise that fixes it, so it stays." },
+    ],
+  },
+];
+
+function applyInjurySubstitutions(exercises, areas) {
+  if (!areas || !areas.length) return exercises;
+  const active = INJURY_AREAS.filter((a) => areas.includes(a.key));
+  if (!active.length) return exercises;
+  const out = [];
+  for (const e of exercises) {
+    let current = e;
+    let dropped = false;
+    for (const area of active) {
+      let swappedHere = false;
+      for (const rule of area.rules) {
+        if (swappedHere) break;
+        // Always test the ORIGINAL name, so one rule's replacement can never be
+        // caught and re-swapped by the next rule in the same list.
+        if (!rule.match.test(e.name)) continue;
+        if (rule.drop) { dropped = true; break; }
+        if (rule.to) {
+          swappedHere = true;
+          current = { ...current, name: rule.to, substitutedFor: e.name, injuryNote: rule.why,
+            cues: rule.cues || current.cues, videoUrl: "", videoUrl2: "" };
+        } else if (rule.lighter) {
+          current = { ...current, rir: Math.max(Number(current.rir) || 0, 4), injuryNote: rule.why,
+            sets: Math.max(1, Math.round((Number(current.sets) || 2) * 0.7)) };
+        }
+      }
+      if (dropped) break;
+    }
+    if (!dropped) out.push(current);
+  }
+  return out;
+}
+
+// The picker. Free text told the coach; this tells the program.
+function InjuryAreaPicker({ value, onChange, compact }) {
+  const selected = value || [];
+  const toggle = (key) => {
+    const next = selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key];
+    onChange(next);
+  };
+  return (
+    <>
+      <div className="injury-chips">
+        {INJURY_AREAS.map((a) => {
+          const on = selected.includes(a.key);
+          return (
+            <button key={a.key} type="button" className={`injury-chip ${on ? "on" : ""}`}
+              aria-pressed={on} onClick={() => toggle(a.key)}>
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 0 && !compact && (
+        <div style={{ marginTop: 10 }}>
+          {INJURY_AREAS.filter((a) => selected.includes(a.key)).map((a) => (
+            <div key={a.key} className="intent-box" style={{ marginBottom: 8 }}>
+              <strong>{a.label}.</strong> {a.note}
+            </div>
+          ))}
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            These swaps happen automatically from your next session. Anything acute, anything that hurts at rest or wakes you at night, or anything you're already seeing someone about — message your coach rather than training around it.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ============================== EASY AEROBIC WORK ============================== */
+// The program asks for two or three easy aerobic sessions a week and only one
+// of them happens in the gym. Without somewhere to log the other two, the dose
+// is aspirational — the athlete cannot see whether they are doing it and the
+// coach cannot see it at all.
+
+const AEROBIC_WEEKLY_TARGET = 3;
+const AEROBIC_KINDS = [
+  { key: "walk", label: "Walk" },
+  { key: "bike", label: "Easy bike" },
+  { key: "jog", label: "Easy jog" },
+  { key: "ruck", label: "Ruck" },
+  { key: "other", label: "Other" },
+];
+
+function mondayOfWeek(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const wd = d.getDay();
+  d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd));
+  return toLocalDateStr(d);
+}
+
+// Anything aerobic counts, wherever it happened: the session logged in the gym
+// and the walk logged from the phone both move the same number.
+function aerobicThisWeek(client) {
+  const week = mondayOfWeek(todayStr());
+  const logged = (client.aerobicLogs || []).filter((l) => l.date && mondayOfWeek(l.date) === week);
+  const inGym = (client.logs || []).filter((l) => l.date && mondayOfWeek(l.date) === week && l.hadConditioning).length;
+  const minutes = logged.reduce((s, l) => s + (Number(l.minutes) || 0), 0);
+  return { count: logged.length + inGym, minutes, target: AEROBIC_WEEKLY_TARGET };
+}
+
+function AerobicLogModal({ onClose, onSave }) {
+  const [minutes, setMinutes] = useState(30);
+  const [kind, setKind] = useState("walk");
+  const [busy, setBusy] = useState(false);
+  return (
+    <ModalShell onClose={onClose} title="Log easy aerobic">
+      <p className="muted" style={{ marginBottom: 14 }}>
+        Anything easy and continuous counts — a brisk walk, an easy spin, a ruck. The test is that you could hold a conversation the whole way through. This is the work that builds the base your recovery between rounds sits on, and it is meant to feel almost boring.
+      </p>
+      <div className="injury-chips" style={{ marginBottom: 16 }}>
+        {AEROBIC_KINDS.map((k) => (
+          <button key={k.key} type="button" className={`injury-chip ${kind === k.key ? "on" : ""}`}
+            aria-pressed={kind === k.key} onClick={() => setKind(k.key)}>{k.label}</button>
+        ))}
+      </div>
+      <label className="labeled-input">
+        <span>How long? (minutes)</span>
+        <input type="number" inputMode="numeric" min="5" max="180" value={minutes}
+          onChange={(e) => setMinutes(e.target.value)} />
+      </label>
+      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={busy || !(Number(minutes) > 0)}
+        onClick={async () => {
+          setBusy(true);
+          const ok = await onSave({ id: uid(), date: todayStr(), minutes: Number(minutes) || 0, kind });
+          if (ok === false) setBusy(false);
+        }}>
+        {busy ? "Saving…" : "Log it"}
+      </button>
+    </ModalShell>
+  );
+}
 
 /* ============================== APP SHELL ============================== */
 
@@ -2152,6 +2413,8 @@ function MainApp({ userId, onSignOut }) {
     if (c.waiver === undefined) c.waiver = null;
     if (c.hasSeenSafety === undefined) c.hasSeenSafety = false;
     if (c.competitionDate === undefined) c.competitionDate = null;
+    if (!c.injuryAreas) c.injuryAreas = [];
+    if (!c.aerobicLogs) c.aerobicLogs = [];
     if (!c.logs) c.logs = [];
     if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
@@ -2433,6 +2696,7 @@ function OnboardingScreen({ onSubmit }) {
   const [schedule, setSchedule] = useState(defaultWeeklySchedule());
   const [programVariant, setProgramVariant] = useState("B");
   const [injuryNotes, setInjuryNotes] = useState("");
+  const [injuryAreas, setInjuryAreas] = useState([]);
   const [logoImageOk, setLogoImageOk] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
@@ -2513,6 +2777,9 @@ function OnboardingScreen({ onSubmit }) {
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
+      <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
+      <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
+      <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Before You Start</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
         This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
@@ -2532,7 +2799,7 @@ function OnboardingScreen({ onSubmit }) {
         By creating this profile you also agree to our <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>.
       </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, profilePicture, weeklySchedule: schedule, waiver })}>
+        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver })}>
         Get started
       </button>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -3233,6 +3500,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
   const [picError, setPicError] = useState("");
   const [injuryNotes, setInjuryNotes] = useState(client?.injuryNotes || "");
   const [savedInjuryNotes, setSavedInjuryNotes] = useState(false);
+  const [injuryAreas, setInjuryAreas] = useState(client?.injuryAreas || []);
+  const [savedInjuryAreas, setSavedInjuryAreas] = useState(false);
   const [excluded, setExcluded] = useState(client?.excludedExercises || []);
   const [savedExcluded, setSavedExcluded] = useState(false);
   const substitutionPool = useMemo(() => {
@@ -3270,6 +3539,14 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
     setSavedInjuryNotes(true);
     setTimeout(() => setSavedInjuryNotes(false), 2000);
   };
+  // Saved on its own so choosing an area takes effect on the next session
+  // without also having to remember to save the free-text note.
+  const saveInjuryAreas = async (next) => {
+    setInjuryAreas(next);
+    await onPersist({ ...client, injuryAreas: next });
+    setSavedInjuryAreas(true);
+    setTimeout(() => setSavedInjuryAreas(false), 2000);
+  };
   const toggleExcluded = (name) => {
     setExcluded((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
   };
@@ -3305,6 +3582,12 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <p className="muted" style={{ marginBottom: 10 }}>Optional context for you and your coach — a bad shoulder, a cranky knee, anything recent. Not a medical form.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <button className="btn-primary wide" onClick={saveInjuryNotes}>{savedInjuryNotes ? "Saved" : "Save Note"}</button>
+
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Sore Areas — Adjust My Program</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>Tap anything that is sore right now and your program swaps the exercises that aggravate it, starting with your next session. Tap it again once it settles.</p>
+      <InjuryAreaPicker value={injuryAreas} onChange={saveInjuryAreas} />
+      {savedInjuryAreas && <div className="success-box" role="status" style={{ marginTop: 10 }}>Saved — your next session is adjusted.</div>}
+      <p className="muted" style={{ marginTop: 6, marginBottom: 10, fontSize: 12, fontStyle: "italic" }}>These swaps are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
 
       {substitutionPool.length > 0 && (
         <>
@@ -3709,12 +3992,26 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     Signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)} · version {full.waiver.version || "unversioned"}
                   </div>
                 )}
+                {full?.injuryAreas?.length > 0 && (
+                  <div className="adjust-box" style={{ marginTop: 10 }}>
+                    <strong>Program adjusting around:</strong> {INJURY_AREAS.filter((a) => full.injuryAreas.includes(a.key)).map((a) => a.label).join(", ")}
+                  </div>
+                )}
                 {full?.injuryNotes && (
-                  <div className="adjust-box" style={{ marginTop: 10 }}>Working around: {full.injuryNotes}</div>
+                  <div className="adjust-box" style={{ marginTop: 10 }}>Their note: {full.injuryNotes}</div>
                 )}
                 <div className="dash-grid" style={{ marginTop: 10 }}>
                   <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
                   <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
+                  <DashStat
+                    label="Easy aerobic this week"
+                    value={(() => {
+                      const a = full ? aerobicThisWeek(full) : null;
+                      if (!a) return "—";
+                      return `${a.count} of ${a.target}${a.minutes ? ` · ${a.minutes} min outside the gym` : ""}`;
+                    })()}
+                    wide
+                  />
                   <DashStat
                     label="Readiness"
                     value={recentReadiness ? (
@@ -3784,6 +4081,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const { total: totalLifted, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const nextMilestoneIdx = LIFT_MILESTONES.findIndex((m, idx) => achievedDates[idx] === undefined);
   const [showAccomplishments, setShowAccomplishments] = useState(false);
+  const [showAerobic, setShowAerobic] = useState(false);
+  const aerobic = useMemo(() => aerobicThisWeek(client), [client.aerobicLogs, client.logs]);
   const latestBW = client.bodyweightLog?.length ? client.bodyweightLog[client.bodyweightLog.length - 1] : null;
   const mobilityMinutes = Math.round((client.program.mobility || []).reduce((s, seg) => s + seg.seconds, 0) / 60);
   const hasEverTrained = (client.logs?.length || 0) > 0 || (client.mobilityLogs?.length || 0) > 0;
@@ -3795,7 +4094,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const pos = positionAtIndex(client.program, viewIndex);
   const isCurrent = viewIndex === (client.sessionsCompleted || 0);
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
-  const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises]);
+  const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
   const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
   // A taper and a rough day stack rather than one overriding the other.
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
@@ -4006,6 +4305,22 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         )}
       </div>
 
+      <Card title="Easy Aerobic" subtitle={`${aerobic.count} of ${aerobic.target} this week`}>
+        <div className="aerobic-track" aria-hidden="true">
+          {Array.from({ length: aerobic.target }, (_, i) => (
+            <span key={i} className={`aerobic-pip ${i < aerobic.count ? "on" : ""}`} />
+          ))}
+        </div>
+        <p className="muted" style={{ marginBottom: 10, fontSize: 12.5 }}>
+          {aerobic.count === 0
+            ? "Two or three easy sessions a week is what builds the engine you recover between rounds with. One of them is already in your gym conditioning — the rest are walks, easy bike, anything conversational."
+            : aerobic.count >= aerobic.target
+              ? `That is the week covered${aerobic.minutes ? ` — ${aerobic.minutes} minutes logged outside the gym` : ""}. More is fine as long as it stays easy.`
+              : "Log a walk, an easy spin, anything you could hold a conversation through. It counts."}
+        </p>
+        <button className="btn-ghost wide" onClick={() => setShowAerobic(true)}>Log easy aerobic</button>
+      </Card>
+
       <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
         <button className="btn-ghost wide" onClick={onStartMobility}>Start recovery session</button>
@@ -4023,6 +4338,15 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
             const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: Number.isFinite(Number(weight)) && Number(weight) > 0 ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
             await onPersist(updated);
             setShowReadiness(false);
+          }} />
+      )}
+      {showAerobic && (
+        <AerobicLogModal onClose={() => setShowAerobic(false)}
+          onSave={async (entry) => {
+            const ok = await onPersist({ ...client, aerobicLogs: [...(client.aerobicLogs || []), entry] });
+            if (ok === false) return false;
+            setShowAerobic(false);
+            return true;
           }} />
       )}
       {showAccomplishments && <AccomplishmentsPage client={client} onClose={() => setShowAccomplishments(false)} />}
@@ -4274,7 +4598,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const toggleExerciseOpen = (exerciseId, currentlyOpen) =>
     setExCollapseOverride((prev) => ({ ...prev, [exerciseId]: !currentlyOpen }));
 
-  const rawResolvedSections = useMemo(() => resolveDaySections(day, weekNumber, client.program, phase, false, resolveOptsFor(client)), [day, weekNumber, client.program, phase, client.blockNumber, client.excludedExercises]);
+  const rawResolvedSections = useMemo(() => resolveDaySections(day, weekNumber, client.program, phase, false, resolveOptsFor(client)), [day, weekNumber, client.program, phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
   const { sections: resolvedSections, adjustedNote } = useMemo(() => adjustSectionsForReadiness(rawResolvedSections, readinessToday), [rawResolvedSections, readinessToday]);
   const mainLift = primaryLiftName(day, weekNumber, client.program, phase, resolveOptsFor(client));
 
@@ -4465,6 +4789,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
       exercises: allExercises, totalVolume: Math.round(totalVolume), avgRPE: rpe,
       readinessColor: client.readiness[todayStr()]?.color || null,
       warmupCompleted: totalWarmupItems > 0 && warmupCheckedCount === totalWarmupItems,
+      // Whether the conditioning section was actually ticked off, so the weekly
+      // aerobic count on Today reflects gym work without asking twice for it.
+      hadConditioning: resolvedSections.some((s) => s.type === "conditioning" && complete[s.id]),
       sectionCompletion: complete, notes,
     };
     const totalSessionsCount = totalSessionsIn(client.program);
@@ -4624,6 +4951,12 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   {exOpen && (<>
                   <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
                   {en.target.tempo ? <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{TEMPO_LEGEND}</div> : null}
+                  {en.target.injuryNote && (
+                    <div className="intent-box" style={{ marginTop: 8, fontSize: 12.5 }}>
+                      {en.target.substitutedFor ? <><strong>Swapped from {en.target.substitutedFor}.</strong>{" "}</> : <><strong>Eased back.</strong>{" "}</>}
+                      {en.target.injuryNote}
+                    </div>
+                  )}
                   {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
@@ -5989,6 +6322,9 @@ function GlobalStyle() {
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
       .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .aerobic-track { display: flex; gap: 6px; margin-bottom: 10px; }
+      .aerobic-pip { flex: 1; height: 6px; border-radius: 999px; background: var(--field-border); }
+      .aerobic-pip.on { background: var(--accent); }
       .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
       .hero-start-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -6010,6 +6346,9 @@ function GlobalStyle() {
       .bw-input, .edit-input, .select-input, .section-check-box, .sig-input {
         border-color: var(--field-border);
       }
+      .injury-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+      .injury-chip { background: var(--card); border: 1px solid var(--field-border); border-radius: 999px; padding: 10px 14px; min-height: 44px; font-size: 13.5px; color: var(--text); cursor: pointer; }
+      .injury-chip.on { background: color-mix(in srgb, var(--amber) 18%, var(--card)); border-color: var(--amber); font-weight: 700; }
       .icon-btn-badged { position: relative; overflow: visible; }
       .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
       .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
