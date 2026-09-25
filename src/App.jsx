@@ -775,6 +775,7 @@ function lookupVideo(name) {
 // (the number a client typed carries no unit with it), so these two lists cover exercises by
 // name for that case.
 const TIME_BASED_EXERCISES = new Set([
+  "towel hang",
   "pull-up bar dead hang",
   "copenhagen plank",
   "heavy isometric wall sit",
@@ -878,6 +879,13 @@ function exerciseUnit(name, repsText) {
     if (hasSecond || /\bhold\b|\btime\b/.test(t)) return "seconds";
   }
   return "reps";
+}
+// "1 reps" / "1 seconds" turn up wherever a logged count meets its unit, and a
+// single rep is the most common number on a Personal Record.
+function unitFor(count, name, repsText) {
+  const u = exerciseUnit(name, repsText);
+  if (Number(count) !== 1) return u;
+  return u === "reps" ? "rep" : u === "seconds" ? "second" : u === "minutes" ? "minute" : u === "meters" ? "meter" : u;
 }
 function exerciseUnitLabel(name, repsText) {
   const u = exerciseUnit(name, repsText);
@@ -2079,33 +2087,65 @@ function daysUntil(dateStr) {
 // rather than one overwriting the other.
 function applyTaper(sections, daysOut) {
   if (daysOut == null || daysOut < 0 || daysOut > TAPER_DAYS) return { sections, taperNote: null };
+
+  // Competition day. The note used to say nothing in the gym helps you while the
+  // screen still listed a session underneath it — so the session is actually
+  // cleared now rather than only being talked out of.
+  if (daysOut === 0) {
+    return {
+      sections: sections.map((sec) => ({ ...sec, exercises: [], skipped: true,
+        skipNote: "Nothing today. Warm up, breathe, and go compete." })),
+      taperNote: "Competition day. Nothing in the gym today makes you better — warm up, breathe, and go compete.",
+    };
+  }
+
+  // A taper ramps down; it does not drop once and sit flat. Volume comes off
+  // gradually across the window — about 10 percent at the far end, down to 60
+  // percent on the eve — while intensity is held, which is the half of a taper
+  // that actually preserves the adaptation you spent twelve weeks building.
+  const keep = 0.4 + ((daysOut - 1) / (TAPER_DAYS - 1)) * 0.5;   // 0.40 at 1 day out, 0.90 at 10
+  const scale = (n, floor = 1) => Math.max(floor, Math.round((n || 0) * keep));
+
   const adjusted = sections.map((sec) => {
     if (sec.type === "conditioning" && daysOut <= 5) {
-      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, reps: "15 minutes easy — conversational", cues: "No hard conditioning inside five days of competing. Easy movement only; the fitness is already banked and anything hard now just costs you." })) };
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: 1, reps: "15 minutes easy — conversational", cues: "No hard conditioning inside five days of competing. Easy movement only; the fitness is already banked and anything hard now just costs you." })) };
     }
     if (sec.type === "strength") {
       return { ...sec, exercises: (sec.exercises || []).map((e) => {
         const isRamp = /down to 1|top single|working sets/i.test(String(e.reps));
+        // An opener, and it gets lighter as the date closes in.
+        const openerPct = daysOut >= 7 ? "90" : daysOut >= 4 ? "85" : "80";
         return {
-        ...e,
-        sets: isRamp ? 1 : Math.max(1, Math.round((e.sets || 3) * 0.5)),
-        reps: isRamp ? "one crisp set of 2 to 3 at around 90 percent — an opener, not a max" : e.reps,
-        rir: Math.max(e.rir || 0, 2),
-        cues: `${e.cues || ""} Taper: half the sets, and nothing that leaves a mark. You are sharpening, not building — there is no session between now and the mat that can make you stronger, and plenty that can make you slower.`.trim(),
+          ...e,
+          sets: isRamp ? 1 : scale(e.sets || 3),
+          reps: isRamp ? `one crisp set of 2 to 3 at around ${openerPct} percent — an opener, not a max` : e.reps,
+          rir: Math.max(Number(e.rir) || 0, daysOut >= 7 ? 2 : 3),
+          cues: `${e.cues || ""} Taper, ${daysOut} day${daysOut === 1 ? "" : "s"} out: fewer sets, same weight on the bar, and nothing that leaves a mark. You are sharpening, not building — no session between now and the mat can make you stronger, and plenty can make you slower.`.trim(),
         };
       }) };
     }
     if (sec.type === "power") {
-      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 6) * 0.5), 2), cues: `${e.cues || ""} Keep these — speed work is what keeps you sharp through a taper. Just fewer of them.`.trim() })) };
+      // Speed work is the last thing to cut — it is what keeps you sharp — so it
+      // holds a floor of two sets right up to the day before.
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: scale(e.sets || 6, 2), cues: `${e.cues || ""} Keep these — speed work is what keeps you sharp through a taper. Just fewer of them.`.trim() })) };
     }
     if (sec.type === "durability") {
-      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.5)) })) };
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: scale(e.sets || 2) })) };
     }
     return sec;
   });
-  const note = daysOut === 0
-    ? "Competition day. Nothing in the gym today helps you — warm up, breathe, and go compete."
-    : `${daysOut} day${daysOut === 1 ? "" : "s"} out. Tapering: half the sets, no maximal lifting, speed work kept short and sharp.`;
+
+  // Rounding can swallow a small cut entirely on a day built from two- and
+  // three-set exercises, so the note reports the reduction that actually
+  // landed rather than the one the factor asked for.
+  const countSets = (list) => list.reduce((t, sec) => t + (sec.exercises || []).reduce((s, e) => s + (Number(e.sets) || 0), 0), 0);
+  const before = countSets(sections);
+  const after = countSets(adjusted);
+  const realCut = before > 0 ? Math.round(((before - after) / before) * 100) : 0;
+  const head = `${daysOut} day${daysOut === 1 ? "" : "s"} out.`;
+  const note = realCut > 0
+    ? `${head} Tapering: volume down about ${realCut} percent today, intensity held, no maximal lifting, speed work kept short and sharp.`
+    : `${head} The taper has started — today is close to a normal session, and the volume comes down from here. No maximal lifting between now and the mat.`;
   return { sections: adjusted, taperNote: note };
 }
 
@@ -3509,7 +3549,7 @@ function ClientDashboard({ client, onClose }) {
       <div className="card">
         <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</h3>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
-          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {exerciseUnit(p.exerciseName)} — {fmtDate(p.date)}</span></div>
+          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {unitFor(p.reps, p.exerciseName)} — {fmtDate(p.date)}</span></div>
         ))}
       </div>
     </ModalShell>
@@ -3807,7 +3847,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Competing?</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Set a date and the last ten days before it taper automatically — half the sets, no maximal lifting, speed work kept short. Leave it blank and the program runs as normal.
+        Set a date and the last ten days before it taper automatically — volume comes down gradually as the date approaches, intensity stays, no maximal lifting, and competition day itself is left clear. Leave it blank and the program runs as normal.
       </p>
       <label className="labeled-input">
         <span>Competition date (optional)</span>
@@ -4164,7 +4204,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                   <div className="adjust-box" style={{ marginTop: 10 }}>Their note: {full.injuryNotes}</div>
                 )}
                 <div className="dash-grid" style={{ marginTop: 10 }}>
-                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${exerciseUnit(recentPR.exerciseName)}` : "None yet"} wide />
+                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${unitFor(recentPR.reps, recentPR.exerciseName)}` : "None yet"} wide />
                   <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
                   <DashStat
                     label="Readiness"
@@ -4311,7 +4351,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       </Card>
 
       {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {exerciseUnit(recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
+        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {unitFor(recentPR.reps, recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
       )}
 
       <WearableStrip
@@ -5043,7 +5083,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
       {resolvedSections.map((sec) => (
         <div className="log-exercise" key={sec.id}>
           <SectionHeader title={sectionHeadline(sec)} subtitle={SECTION_LABELS[sec.type]} complete={!!complete[sec.id]} onToggleComplete={() => toggleComplete(sec.id)} expanded={expanded[sec.id] !== false} onToggleExpand={() => toggleExpand(sec.id)} />
-          {expanded[sec.id] !== false && sec.skipped && <div className="muted" style={{ marginTop: 10, fontStyle: "italic" }}>Skipped today — recovery priority given your readiness check-in.</div>}
+          {expanded[sec.id] !== false && sec.skipped && <div className="muted" style={{ marginTop: 10, fontStyle: "italic" }}>{sec.skipNote || "Skipped today — recovery priority given your readiness check-in."}</div>}
           {expanded[sec.id] !== false && !sec.skipped && entriesBySection[sec.id].map((en, exIdx) => {
             const last = lastSessionFor(client, en.name);
             const lastWeek = lastWeekBest(client, en.name, weekNumber);
@@ -5096,9 +5136,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   {sec.type !== "conditioning" && en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {sec.type !== "conditioning" && en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
                   {lastWeek ? (
-                    <div className="last-logged">Last week, heaviest: {needsWeight(displayName) ? `${lastWeek.weight} pounds × ` : ""}{lastWeek.reps} {exerciseUnit(displayName, en.target.reps)}</div>
+                    <div className="last-logged">Last week, heaviest: {needsWeight(displayName) ? `${lastWeek.weight} pounds × ` : ""}{lastWeek.reps} {unitFor(lastWeek.reps, displayName, en.target.reps)}</div>
                   ) : (
-                    last?.best && <div className="last-logged">Last logged: {needsWeight(displayName) ? `${last.best.weight} pounds × ` : ""}{last.best.reps} {exerciseUnit(displayName, en.target.reps)} ({fmtDate(last.date)})</div>
+                    last?.best && <div className="last-logged">Last logged: {needsWeight(displayName) ? `${last.best.weight} pounds × ` : ""}{last.best.reps} {unitFor(last.best.reps, displayName, en.target.reps)} ({fmtDate(last.date)})</div>
                   )}
                   <VideoLinkBlock canEdit={isCoach} url={en.target.videoUrl} onSave={(url) => setVideoForEntry(sec.id, exIdx, url)} onDelete={() => setVideoForEntry(sec.id, exIdx, "")} label={en.target.videoUrl2 !== undefined ? "Demo 1" : undefined} />
                   {en.target.videoUrl2 !== undefined && (
@@ -5151,8 +5191,12 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                 {(() => {
                   const isMainLift = sec.type === "strength" || sec.type === "power";
                   const loggedSessions = isMainLift ? sessionsLoggedFor(client, displayName) : 0;
-                  // Hold the suggestion back until a second session corroborates it.
-                  const priorBestForPct = loggedSessions >= 2 ? lastAllTimeBest(client, displayName) : null;
+                  // One logged session is enough. The Max Effort lifts rotate every
+                  // two weeks out of a six-lift pool, so an athlete sees any given
+                  // one exactly twice in a twelve-week block — waiting for a second
+                  // session meant the suggestion never arrived for the main lifts at
+                  // all, while the screen promised it twice.
+                  const priorBestForPct = loggedSessions >= 1 ? lastAllTimeBest(client, displayName) : null;
                   const pctForSet = (i) => {
                     if (i < 0 || i >= en.sets.length) return null;
                     const ps = en.target.perSetTargets ? en.target.perSetTargets[i] : null;
@@ -5200,14 +5244,12 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                           <div className="pct-1rm-row">
                             {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max{runEffort ? ` \u00b7 effort ${runEffort}` : ""}
                             {targetWeight
-                              ? ` \u2014 try about ${targetWeight} lb, based on your heaviest logged set so far`
+                              ? ` \u2014 try about ${targetWeight} lb, based on ${loggedSessions === 1 ? "the one session you have logged on this lift, so treat it as a starting point" : "your heaviest logged set so far"}`
                               : !isFirstRun
                                 ? ""
                                 : loggedSessions === 0
-                                  ? " \u2014 once you log this exercise, future sessions will suggest a weight"
-                                  : loggedSessions === 1
-                                    ? " \u2014 log this once more and future sessions will suggest a weight"
-                                    : ""}
+                                  ? " \u2014 log this one and the next time it comes round you will get a suggested weight"
+                                  : ""}
                           </div>
                         )}
                         <div className="set-grid-row">
@@ -6209,7 +6251,7 @@ function PRsTab({ client }) {
                 <ChevronRight size={18} className={open ? "chev-open" : ""} />
               </div>
               <div className="pr-side-row" style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
-                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {unit}</span>
+                <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {unitFor(mostRecent.reps, name)}</span>
               </div>
               <div className="pr-side-row"><CalendarDays size={13} color="var(--text-dim)" /><span className="muted">{fmtDate(mostRecent.date)} — most recent</span></div>
               {records.length > 1 && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{records.length} Personal Records logged — tap to see your progress</div>}
@@ -6255,7 +6297,7 @@ function PRsTab({ client }) {
                 )}
                 {earlier.map((h) => (
                   <div key={h.id} className="pr-history-row-v2">
-                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {unit}</div>
+                    <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {unitFor(h.reps, name)}</div>
                     <div className="pr-history-date"><CalendarDays size={12} /> {fmtDate(h.date)}</div>
                   </div>
                 ))}
