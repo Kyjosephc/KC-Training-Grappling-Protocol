@@ -26,6 +26,10 @@ const PROGRAM_PRICE = 20;
 const PROMO_CODES = { INFINITI: 5 };
 
 /* ============================== STORAGE HELPERS ============================== */
+// Returned by a read that FAILED, as opposed to a read that found nothing. The
+// difference matters enormously: "no client list" means show onboarding, and
+// "couldn't reach the server" must never mean that.
+const LOAD_FAILED = Symbol("load-failed");
 // These five functions are the ONLY place the rest of the app talks to storage.
 // Everything else in this file is unchanged from the original Claude-artifact version.
 
@@ -92,8 +96,11 @@ async function kvGet(userId, key) {
     return data;
   });
   if (!outcome.ok) {
+    // NOT null. A failed read and an empty record are completely different
+    // things, and conflating them is how an eight-week athlete gets shown the
+    // welcome screen on bad gym wifi and overwrites their own client list.
     emitToast({ kind: "error", message: "Couldn't load your data — check your connection.", autoDismissMs: 6000 });
-    return null;
+    return LOAD_FAILED;
   }
   return outcome.result ? outcome.result.value : null;
 }
@@ -124,12 +131,12 @@ async function kvDelete(userId, key) {
   return { ok: false };
 }
 
-async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST_KEY); return v || []; }
+async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST_KEY); return v === LOAD_FAILED ? LOAD_FAILED : (v || []); }
 async function setClientList(userId, list) { return kvSet(userId, CLIENT_LIST_KEY, list); }
-async function getClient(userId, id) { const v = await kvGet(userId, clientKey(id)); return v || null; }
+async function getClient(userId, id) { const v = await kvGet(userId, clientKey(id)); return v === LOAD_FAILED ? LOAD_FAILED : (v || null); }
 async function setClient(userId, id, data) { return kvSet(userId, clientKey(id), data); }
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
-async function getSettings(userId) { const v = await kvGet(userId, SETTINGS_KEY); return v || { theme: "dark" }; }
+async function getSettings(userId) { const v = await kvGet(userId, SETTINGS_KEY); return (!v || v === LOAD_FAILED) ? { theme: "dark" } : v; }
 async function setSettings(userId, s) { return kvSet(userId, SETTINGS_KEY, s); }
 
 /* ============================== ID / MATH HELPERS ============================== */
@@ -144,6 +151,15 @@ const toLocalDateStr = (d) => {
 };
 const todayStr = () => toLocalDateStr(new Date());
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+// Charts keep the ISO date as their key so two different years can never land
+// on the same point, and only format it for display. Past twelve months the
+// year is shown, because "Sep 24" alone stops being unambiguous.
+const fmtChartDate = (d) => {
+  if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return String(d ?? "");
+  const dt = new Date(d + "T00:00:00");
+  const sameYear = dt.getFullYear() === new Date().getFullYear();
+  return dt.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "2-digit" });
+};
 // Full date and time, for the waiver record — a signature without a timestamp
 // is not much of a record.
 const fmtDateTime = (iso) => { try { return new Date(iso).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }); } catch { return String(iso || ""); } };
@@ -167,10 +183,14 @@ function reengagementMessage(days) {
   return `It's been over ${Math.floor(days / 7)} weeks since your last session. Nothing is lost — restart whenever it works for you, today or any day.`;
 }
 
+// Epley, capped. Past about a dozen reps the formula stops describing strength
+// and starts describing work capacity — at 20 reps it claims 1.67x, which would
+// then drive every weight suggestion the app makes from that day on.
+const E1RM_REP_CAP = 12;
 function est1RM(weight, reps) {
   if (!weight || !reps) return 0;
   if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30));
+  return Math.round(weight * (1 + Math.min(reps, E1RM_REP_CAP) / 30));
 }
 function bestSetOf(sets) {
   let best = null;
@@ -178,6 +198,9 @@ function bestSetOf(sets) {
     const w = Number(s.weight) || 0;
     const r = Number(s.reps) || 0;
     if (!w || !r) continue;
+    // A high-rep back-off set is not evidence of a new max. Ignore those
+    // entirely rather than letting one set of twenty poison the estimate.
+    if (r > E1RM_REP_CAP) continue;
     const e = est1RM(w, r);
     if (!best || e > best.e1rm) best = { weight: w, reps: r, e1rm: e };
   }
@@ -384,7 +407,7 @@ function weeklyVolumeSeries(client) {
     const key = toLocalDateStr(monday);
     map[key] = (map[key] || 0) + (log.totalVolume || 0);
   });
-  return Object.keys(map).sort().map((k) => ({ date: fmtDate(k), volume: map[k] }));
+  return Object.keys(map).sort().map((k) => ({ date: k, volume: map[k] }));
 }
 
 /* ============================== CONJUGATE HELPERS ============================== */
@@ -512,19 +535,61 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
   const adjusted = sections.map((sec) => {
     let exs = sec.exercises;
     let skipped = false;
-    if (color === "RED" && (sec.type === "agility" || sec.type === "durability" || sec.type === "arms_core")) {
+    // The warm-up always stays. Walking in cold and ramping to a heavy lift is
+    // the last thing a beaten-up athlete should do, and this block was being
+    // deleted on exactly the day it mattered most.
+    if (color === "RED" && sec.type === "arms_core") {
       return { ...sec, exercises: [], skipped: true };
     }
-    if (color === "RED" && (sec.type === "strength" || sec.type === "power")) {
+    // Durability — neck, adductors, tibialis — costs almost no fatigue and is
+    // the most protective work in the session. This athlete is still rolling
+    // tonight and still getting choked. It stays, at a reduced dose.
+    if (color === "RED" && sec.type === "durability") {
+      exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.5)) }));
+    }
+    if (color === "RED" && sec.type === "agility") {
+      exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.5)),
+        cues: `${e.cues || ""} Today: movement prep only — keep it easy and submaximal.`.trim() }));
+    }
+    // Cut the neural work first, and cut SETS rather than shaving load —
+    // volume is what drives fatigue, and a 15% lighter bar over the same six
+    // ramping sets is barely a reduction at all.
+    if (color === "RED" && sec.type === "strength") {
+      exs = exs.map((e) => {
+        // A max-effort ramp collapses to a single controlled top set; everything
+        // else just loses half its sets.
+        const isRamp = /down to 1|top single|working sets/i.test(String(e.reps));
+        return {
+        ...e,
+        sets: isRamp ? 1 : Math.max(1, Math.round((e.sets || 3) * 0.5)),
+        reps: isRamp ? "one top set of 3 to 5, well short of a max" : e.reps,
+        rir: Math.max(e.rir || 0, 3),
+        cues: `${e.cues || ""} Today: no singles and no grinding. One controlled top set of 3 to 5 at roughly 70 percent, then move on. You flagged low readiness and this is the session respecting that.`.trim(),
+        perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, 1).map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 70) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 80 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
+        pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 70) : e.pct1rmFlat,
+        };
+      });
+    }
+    // Speed and power work is a nervous-system and landing demand, and it is
+    // the first thing that degrades when you are wrecked. Halve it.
+    if (color === "RED" && sec.type === "power") {
       exs = exs.map((e) => ({
-        ...e, rir: Math.max(e.rir || 0, 3),
-        cues: `${e.cues || ""} Today: cap effort well short of a max — technical rehearsal only given low readiness.`.trim(),
-        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 85) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 90 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
-        pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 85) : e.pct1rmFlat,
+        ...e,
+        sets: Math.max(1, Math.round((e.sets || 6) * 0.5)),
+        cues: `${e.cues || ""} Today: half the usual sets. Speed work is worth nothing when you are this tired — stop early if it is not sharp.`.trim(),
+        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, pct1rm: t.pct1rm ? Math.min(t.pct1rm, 55) : t.pct1rm })) : e.perSetTargets,
+        pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 55) : e.pct1rmFlat,
       }));
     }
     if (color === "RED" && sec.type === "conditioning") {
-      exs = exs.map((e) => ({ ...e, reps: "easy pace, roughly half the normal duration", cues: "Red readiness overrides today's usual protocol, whatever it normally calls for — easy pace only, no hard effort, roughly half the normal duration. This applies the same whether today was aerobic base, VO2max intervals, or sustained effort." }));
+      exs = exs.map((e) => {
+        const isHard = /interval|round|tempo|hard|sprint|power/i.test(`${e.name} ${e.reps}`);
+        // Easy aerobic work on a bad day actively helps you recover. It is the
+        // hard intervals that are worth nothing today, so those are what goes.
+        return isHard
+          ? { ...e, name: e.name, reps: "20 minutes easy — conversational pace", cues: "Today's intervals are replaced with easy aerobic work. A hard session on low readiness costs a lot and delivers almost nothing, because the efforts will not be sharp enough to drive the adaptation anyway. Easy movement is genuinely useful on a day like this." }
+          : { ...e, cues: `${e.cues || ""} Keep this easy today — on a low-readiness day this is recovery work, and it is worth doing.`.trim() };
+      });
     }
     if (color === "YELLOW" && (sec.type === "strength" || sec.type === "power")) {
       exs = exs.map((e) => ({
@@ -533,7 +598,9 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
         pct1rmFlat: e.pct1rmFlat ? Math.max(50, e.pct1rmFlat - 5) : e.pct1rmFlat,
       }));
     }
-    if (color === "YELLOW" && (sec.type === "durability" || sec.type === "arms_core")) {
+    // Durability is left alone on yellow. It is minutes of work and it is the
+    // reason the athlete stays on the mat; arm and core work is the filler.
+    if (color === "YELLOW" && sec.type === "arms_core") {
       exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.7)) }));
     }
     if (color === "YELLOW" && sec.type === "conditioning") {
@@ -545,8 +612,8 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     return { ...sec, exercises: exs, skipped };
   });
 
-  if (color === "RED") notes.push("Red: capped at 85% max, agility/durability/arm-core skipped, conditioning trimmed.");
-  else if (color === "YELLOW") notes.push("Yellow: −5% off every set, extra rep in reserve, durability/arm-core trimmed, conditioning effort backed off slightly.");
+  if (color === "RED") notes.push("You flagged a rough day, so today is half the sets, no singles, and no hard conditioning. Your warm-up and your neck and adductor work stay in — they cost almost nothing and they are what keeps you training.");
+  else if (color === "YELLOW") notes.push("A notch back today: 5% lighter, one extra rep in reserve, less arm and core filler. Everything that protects you stays in.");
   if (bjjHard) notes.push("Hard grappling flagged: conditioning trimmed since training already supplied that stimulus today.");
 
   return { sections: adjusted, adjustedNote: notes.length ? notes.join(" ") : null };
@@ -845,7 +912,7 @@ function meRetestSets() {
 }
 function meLowerBlock() {
   return ex({ name: meLowerPool[0].name, rotatingPool: "meLowerPool", sets: 6, reps: "working sets of 3 down to 1", perSetTargets: meWorkingSets(), load: "autoregulated", rir: 0, rest: "3 to 4 minutes", quality: "Max Effort",
-    cues: "Work up in doubles and triples to a heavy top single or triple. This is a true max effort — stop when bar speed or technique breaks down, not at a preset percentage." });
+    cues: "Work up in doubles and triples to a heavy top single or triple. This is a true max effort — stop when bar speed or technique breaks down, not at a preset percentage.\n\nNew to barbell training? If you have been lifting seriously for less than about six months, do not chase a true single yet. Work up to a heavy triple that still looks clean and stop there. The max effort method assumes you can read your own bar speed, and that is a skill that takes a while to build. You lose nothing by waiting — a heavy triple drives almost the same adaptation at a fraction of the risk." });
 }
 function meUpperBlock() {
   return ex({ name: meUpperPool[0].name, rotatingPool: "meUpperPool", sets: 6, reps: "working sets of 3 down to 1", perSetTargets: meWorkingSets(), load: "autoregulated", rir: 0, rest: "3 to 4 minutes", quality: "Max Effort",
@@ -893,7 +960,7 @@ const hipPool = [
   { name: "Hip Adduction Machine", notes: "Direct, loaded adductor strength through a full range of motion — a machine-based complement to the Copenhagen Plank for groin and guard-retention durability", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/BmMmt-c9aNM" },
 ];
 const conditioningIntervalPool = [
-  { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "30 to 40 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time — conversational pace, roughly 60 to 70 percent of your max heart rate if you're tracking it, but the real test is that you could hold a conversation the whole way through without gasping. If you're breathing hard or can't talk, you're going too fast for what this session is built to train. This is meant to feel almost boring. That's correct. Thirty to forty minutes is the dose here rather than a full hour, because you're already accumulating aerobic work on the mats and this sits on the end of a lifting session." },
+  { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "30 to 40 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time. The test is that you could hold a full conversation the whole way through without gasping — if you can only manage short sentences, you are going too fast for what this session trains. If you have a heart rate monitor, 130 to 150 beats per minute is the band; the talk test comes first and the number is just the check. This is meant to feel almost boring. That's correct.\n\nDo this one at the end of today's session, and then do one or two more like it across the rest of the week, off your lifting days — a brisk walk, an easy bike, a ruck with the dog. That is the part that actually builds the base, and it costs you no gym time and no recovery. One session a week will not do it; three easy ones will." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate, not off how hard it feels. You are aiming to be at 88 to 92 percent of your max heart rate by about the ninety-second mark and to hold it there to the end of the round — hard and honest, but deliberately below what you could manage for a single round, because you have to do it four times. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds, easy movement or complete rest." },
   { rir: 3, name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
 ];
@@ -959,9 +1026,9 @@ const conjugateProgram = {
   sport: "Brazilian Jiu-Jitsu / Wrestling",
   sessionsPerWeek: 3,
   coachNote:
-    "I've spent years studying the training philosophies of Westside Barbell, Phil Daru, Joel Jamieson, Marv Marinovich, Doctor Edythe Heus, Dane Miller, Josh Settlage, and other coaches who train elite strength and combat athletes, and merged that study with my own coaching experience to build this all-in-one program for grapplers who want to be in the top one percent. Technique decides a match between two athletes of different skill levels. But when two athletes are matched in technique, the stronger, more explosive, more durable athlete wins that exchange the overwhelming majority of the time. That gap — physical advantage between technically equal grapplers — is what this program exists to close.",
+    "I've spent years studying the training philosophies of Westside Barbell, Phil Daru, Joel Jamieson, Marv Marinovich, Doctor Edythe Heus, Dane Miller, Josh Settlage, and other coaches who train elite strength and combat athletes, and merged that study with my own coaching experience to build this all-in-one program for grapplers who want to be the strongest, most durable version of themselves on the mat. Technique decides a match between two athletes of different skill levels. But when two athletes are matched in technique, the stronger, more explosive, more durable athlete wins that exchange the overwhelming majority of the time. That gap — physical advantage between technically equal grapplers — is what this program exists to close.",
   methodology:
-    "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 120 to 150 beats per minute, the qualifying standard for that work), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used sparingly rather than every week, since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, a landmine attachment, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
+    "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 130 to 150 beats per minute, with the talk test as the primary gate), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used sparingly rather than every week, since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, a landmine attachment, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
   conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, hipPool, meRotationWeeks: 2 },
@@ -988,8 +1055,8 @@ const conjugateProgram = {
               ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "8", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is the best-evidenced protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells, add the weighted vest for extra load if grip becomes the limiter", rir: 1, rest: "2 minutes", purpose: "Grip and trunk bracing under load", quality: "Grip/Trunk" }),
-              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
+              ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells — if your grip is what gives out, that is the session working", rir: 3, rest: "2 minutes", purpose: "Grip and trunk bracing under load. If grip is the limiter, shorten the distance rather than adding weight — your grip failing is what stops you loading your spine with more than you can hold, and grip is the quality we are actually training here.", quality: "Grip/Trunk" }),
+              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
@@ -1003,10 +1070,11 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
               ex({ name: "Weighted Pull-Up", sets: 4, reps: "5", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength, grappling transfer", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
+              ex({ name: "Chest-Supported Dumbbell Row", sets: 3, reps: "10", load: "moderate — a weight you can hold at the top for a beat", rir: 2, rest: "90 seconds", purpose: "The horizontal pull this program was missing. Twelve weeks of pressing against one vertical pull leaves the shoulder unbalanced, and more to the point, pulling an opponent toward you is the most common upper-body action in grappling — collar drags, arm drags, two-on-one, breaking posture from guard. A face pull is prehab; this is the actual pattern.", cues: "Chest stays on the pad the whole set — no heaving off it. Pull to the bottom of your ribs, elbows past your body, and hold the top for a beat before lowering under control.", quality: "Accessory" }),
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+              ex({ name: "Towel Hang (two towels over the bar)", sets: 3, reps: "20 to 30 seconds", load: "bodyweight, one towel in each hand", rir: 3, rest: "90 seconds", purpose: "The gi-specific version of a dead hang, and the single biggest gap this program had. Gi grip is cloth, not steel — a four-finger hold on fabric under a sustained pull, which is a genuinely different demand from a crush grip on a smooth bar. This is the closest gym analogue to holding a sleeve against someone trying to strip it.", cues: "Two towels to start, one in each hand. Shoulders active, not hanging dead off the joint. Progress by adding time first, then by moving to a single towel held in both hands. Stop the set when your grip starts sliding rather than fighting the last second — you are training the hold, not the failure.", quality: "Grip" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
@@ -1018,7 +1086,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Combines acceleration, deceleration, lateral movement, and change of direction in a single drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
@@ -1054,8 +1122,8 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
-              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 1, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "Neck Bridge (front and back, controlled)", sets: 2, reps: "8 to 10 per direction, slow and controlled", load: "bodyweight, spot yourself against a wall until confident", rir: 1, rest: "60 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
+              ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
+              ex({ name: "Neck Bridge (back only, hands assisting)", sets: 1, reps: "5, slow and controlled", load: "bodyweight, with both hands on the mat taking part of your weight", rir: 5, rest: "90 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover. Deliberately one short set: this is your first exposure to loading the neck dynamically and the only goal for these three weeks is that it feels easy.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -1070,6 +1138,7 @@ const conjugateProgram = {
               ex({ name: "Weighted Pull-Up", sets: 4, reps: "4", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength maintenance", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+              ex({ name: "Chest-Supported Dumbbell Row", sets: 3, reps: "10", load: "moderate — a weight you can hold at the top for a beat", rir: 2, rest: "90 seconds", purpose: "The horizontal pull this program was missing. Twelve weeks of pressing against one vertical pull leaves the shoulder unbalanced, and more to the point, pulling an opponent toward you is the most common upper-body action in grappling — collar drags, arm drags, two-on-one, breaking posture from guard. A face pull is prehab; this is the actual pattern.", cues: "Chest stays on the pad the whole set — no heaving off it. Pull to the bottom of your ribs, elbows past your body, and hold the top for a beat before lowering under control.", quality: "Accessory" }),
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/watch?v=hbo-nSIEmXo" }),
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
@@ -1083,7 +1152,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Acceleration, deceleration, lateral movement, and change of direction in one drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
@@ -1115,7 +1184,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 2, reps: "20 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk maintenance, low volume for freshness", quality: "Grip/Trunk" }),
-              ex({ name: "Neck Bridge (front and back, controlled)", sets: 1, reps: "6 per direction, slow and controlled", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
+              ex({ name: "Neck Bridge (back only, hands assisting)", sets: 1, reps: "5, slow and controlled", load: "bodyweight, hands assisting as needed", rir: 5, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
               ex({ name: "Hanging Leg Raise", sets: 2, reps: "10", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Trunk flexion strength, kept brief to protect freshness", quality: "Trunk" }),
             ]},
           ]},
@@ -1128,7 +1197,8 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/watch?v=hbo-nSIEmXo" }),
-              ex({ name: "Weighted Pull-Up", sets: 3, reps: "5", load: "moderate — speed matters more than load this close to competing", rir: 3, rest: "2 minutes", purpose: "The week's only loaded pulling, moved here off Day 3 so it survives if Day 3 gets cut. Pressing volume stays high right through the peak, and dropping pulling entirely leaves the shoulder working against an imbalance in the weeks it can least afford one.", quality: "Pull" }),
+              ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Horizontal pulling, kept through the peak block at a reduced dose. Pressing volume does not drop here and neither should the thing balancing it — and this is the pattern you actually use to break posture and drag an arm.", cues: "Chest on the pad, pull to the bottom of your ribs, hold for a beat.", quality: "Pull" }),
+              ex({ name: "Weighted Pull-Up", sets: 3, reps: "5", load: "moderate — speed matters more than load this close to competing", rir: 3, rest: "2 minutes", purpose: "The week's only loaded vertical pulling, moved here off Day 3 so it survives if Day 3 gets cut. Pressing volume stays high right through the peak, and dropping pulling entirely leaves the shoulder working against an imbalance in the weeks it can least afford one.", quality: "Pull" }),
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Grip maintenance, minimal volume", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 1, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Brief wrist flexor and extensor maintenance, kept low to protect freshness this close to peak weeks", quality: "Durability" }),
               ex({ name: "Neck Curl and Neck Extension (light plate or manual resistance)", sets: 1, reps: "8 per direction", load: "light plate or your own hand for resistance", rir: 2, rest: "45 seconds", purpose: "Brief neck maintenance, kept low to protect freshness this close to peak weeks", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/i7Fn4aimzOM" }),
@@ -1139,7 +1209,7 @@ const conjugateProgram = {
           intent: "Keep it snappy and short. This is the easiest day to cut entirely if grappling is heavy this week. If you're training grappling four or more times a week, splitting the Dynamic Effort lift and the conditioning piece across two days works just as well as cutting either one.",
           sections: [
             { id: uid(), type: "agility", name: "Speed & Agility", exercises: [
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery", rir: 1, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery", rir: 1, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
             ]},
             // Speed bench already runs on Day 1 of this week. A second eight-set
             // block of it in a taper block is volume for its own sake, and the
@@ -1152,8 +1222,8 @@ const conjugateProgram = {
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Adductor strength and durability. Adductor strain is one of the most common injuries in grappling and the peak block is when mat intensity is highest — this is exactly the wrong time to stop training it.", quality: "Durability" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: "Assault Bike or Treadmill — Aerobic Maintenance", sets: 1, reps: "8 to 10 minutes", load: "easy to moderate, heart rate under about 140 beats per minute", rir: 6, rest: "none", purpose: "Maintain aerobic qualities without adding fatigue this close to peak weeks", quality: "Conditioning",
-                cues: "This is deliberately shorter and easier than the base-phase version — the goal now is just to hold onto what you've already built, not add more. Stay well under 140 beats per minute the whole time; if you can check it, this should feel closer to a warm-up than real training. No rest, continuous movement for the full 8 to 10 minutes." }),
+              ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", load: "hard but repeatable — you have to do it four times", rir: 2, rest: "none", purpose: "The highest-value conditioning in the program, in the block that most needs it. You maintain an aerobic quality by cutting volume and holding intensity, not by cutting both — eight easy minutes maintains nothing. This is also the closest thing in the program to what a hard round actually demands.", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds. No heart rate monitor? Three or four words at a time, not a sentence, and you are at that point by ninety seconds.", quality: "Conditioning",
+                cues: "Shorter than the base-phase sessions but not easier — that is the point. You hold onto an aerobic quality by cutting volume and keeping intensity, not by cutting both. Four rounds, hard and evenly paced, with the full recovery between them. If you are competing this week, skip this session entirely: nothing you do in here five days out makes you fitter, and plenty makes you slower." }),
             ]},
           ]},
       ],
@@ -1184,7 +1254,7 @@ const conjugateProgram = {
           intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered.",
           sections: [
             { id: uid(), type: "conditioning", name: "Aerobic Base — Deload", exercises: [
-              ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Jamieson Zone 1)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 120 to 150 beats per minute — easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
+              ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Zone 2)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 130 to 150 beats per minute — easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1229,10 +1299,12 @@ const rpeProgramCues = {
   "Zercher Squat": "Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
   "Trap Bar Deadlift": "Hips somewhere between a squat and a deadlift, chest up, and push the floor away. The bar comes up in a straight line. Reset your brace on the floor between every rep rather than bouncing them.",
   "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
-  "Trap Bar Static Hold (Quarter Squat)": "Pull the bar to the top, bend the knees slightly, then hold dead still. Shoulders back, ribs down, shallow breaths. Set it down under control rather than dropping it.",
+  "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
   "4-Way Isometric Neck Holds": "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there.",
   "Weighted Neck Bridge (front and back, light plate on chest, controlled)": "Only start this once the isometric holds from the earlier blocks feel easy. Begin with a five or ten pound plate on your chest and add nothing for the first two weeks. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Anything that pinches, tingles, or travels down an arm, stop the set and put the plate down.",
+  "Neck Bridge (back only, hands assisting)": "Only start this once the 4-way isometric holds from the earlier block feel genuinely easy — if they don't, keep doing those instead and come back to this next block. Keep both hands on the mat taking part of your weight, and only reduce that once five reps feel like nothing. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Never bridge on a day your neck is already sore from training. Anything that pinches, tingles, or travels down an arm: stop the set, come off it, and tell your coach.",
+  "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
   "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
   "Renegade Row": "Feet wide for a stable base. The hips are what you are really training here — do not let them rotate as you row. If they twist, go lighter.",
@@ -1288,7 +1360,7 @@ function buildProgramCContent() {
           ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Suitcase Carry (each side)", { sets: 3, reps: "30 meters each side", rpe: 9 }),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", sets: 1, reps: "25 to 30 minutes, continuous, easy pace", load: "heart rate held at 120 to 150 beats per minute — conversational the whole way", rir: 7, rest: "none", purpose: "Builds the aerobic base everything else sits on top of — how fast you recover between rounds, between scrambles, and between sets. This block is where that foundation gets laid, so the harder conditioning in later blocks has something to build on.", cues: "This has to feel genuinely easy or it isn't doing its job. You should be able to hold a full conversation the entire time. If you're breathing hard, you've drifted out of the zone that actually builds this quality and into one that just costs you recovery for tomorrow's mat time. It's meant to feel almost boring — that's correct.", quality: "Conditioning" }),
+          ex({ name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", sets: 1, reps: "25 to 30 minutes, continuous, easy pace", load: "heart rate held at 130 to 150 beats per minute — conversational the whole way", rir: 7, rest: "none", purpose: "Builds the aerobic base everything else sits on top of — how fast you recover between rounds, between scrambles, and between sets. This block is where that foundation gets laid, so the harder conditioning in later blocks has something to build on.", cues: "This has to feel genuinely easy or it isn't doing its job. You should be able to hold a full conversation the entire time. If you're breathing hard, you've drifted out of the zone that actually builds this quality and into one that just costs you recovery for tomorrow's mat time. It's meant to feel almost boring — that's correct.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1340,7 +1412,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 4, reps: "6 each side", tempo: "3/1/X", rpe: 7 }),
           ssSingle(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
-          ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "heavier than your trap bar deadlift max — you are only holding it, not lifting it", rpe: 7 }, "Yielding Strength"),
+          ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max — heavy, but a weight you can genuinely stand up with", rpe: 7 }, "Yielding Strength"),
           ssSingle(5, "Ab Roll Out", { sets: 2, reps: "12", rpe: 7 }, "Trunk"),
           ssSingle(6, "Weighted Neck Bridge (front and back, light plate on chest, controlled)", { sets: 2, reps: "6 per direction", rpe: 7 }, "Durability"),
           ssSingle(7, "Plate Lifts (Around the World)", { sets: 2, reps: "10 each direction", rpe: 7 }, "Core"),
@@ -1365,7 +1437,7 @@ function buildProgramCContent() {
           ssSingle(5, "High Plank Kettlebell Pull-Through", { sets: 2, reps: "8 each side", rpe: 8 }, "Contralateral Stability"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "3 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", load: "90 percent of maximum effort — how hard you're pushing, not a heart rate number", rir: 1, rest: "none", purpose: "The concurrent aerobic work this block is named for. Jamieson's aerobic power protocol raises the ceiling on the aerobic system, and the work-to-rest pattern mirrors a real exchange on the mat rather than one long grind.", cues: "Deliberately only three rounds. This block already carries the heaviest session of the program and you're doing speed and power work on top of your mat time — three honest rounds is a real stimulus without turning this into a second workout. Each round should be close to all you can hold for its full length. Take the whole recovery between rounds so you can bring genuine effort to the next one instead of just surviving it.", quality: "Conditioning" }),
+          ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "3 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", load: "88 to 92 percent of your max heart rate — pace this off heart rate, not off how hard it feels", rir: 1, rest: "none", purpose: "The concurrent aerobic work this block is named for. Jamieson's aerobic power protocol raises the ceiling on the aerobic system, and the work-to-rest pattern mirrors a real exchange on the mat rather than one long grind.", cues: "Deliberately only three rounds. This block already carries the heaviest session of the program and you're doing speed and power work on top of your mat time — three honest rounds is a real stimulus without turning this into a second workout. Each round should be close to all you can hold for its full length. Take the whole recovery between rounds so you can bring genuine effort to the next one instead of just surviving it.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1436,7 +1508,7 @@ function defaultMobility() {
   // recovery, because post-exercise stretching does neither to any meaningful
   // degree, and the cue text says so rather than promising otherwise.
   return [
-    { id: uid(), name: "Slow Breathing — Six Breaths a Minute", seconds: 150, type: "breath", detail: "Five seconds in through the nose, five seconds out through the mouth. No holding your breath at either end. Do this first, before you stretch anything, while your heart rate is still up — this is the part that genuinely shifts you out of training mode, and holding your breath here works against that.", videoUrl: "" },
+    { id: uid(), name: "Slow Breathing — Six Breaths a Minute", seconds: 150, type: "breath", detail: "Five seconds in through the nose, five seconds out through the mouth. No holding your breath at either end. Do this first, before you stretch anything, while your heart rate is still up — this is the part that genuinely shifts you out of training mode, and holding your breath here works against that.\n\nThis is also the same breathing you'll use in the twenty minutes before a match. Every time you do it here you're rehearsing it, so that on the day it's a habit rather than something you're trying for the first time under pressure.", videoUrl: "" },
     { id: uid(), name: "Couch Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Rear knee down, hips squared forward, glute of the back leg engaged. The hip flexor and quad take a beating from squatting and from playing guard.", videoUrl: "" },
     { id: uid(), name: "90/90 Hip Switch Flow", seconds: 60, type: "stretch", detail: "Flow slowly side to side, feeling both hips through internal and external rotation. Internal rotation is the range most grapplers lose first and miss the most.", videoUrl: "" },
     { id: uid(), name: "Figure-4 / Pigeon Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Sit into the hip, keep the spine tall, breathe out into the stretch rather than forcing it down.", videoUrl: "" },
@@ -1577,7 +1649,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
         intent: "Sprints first while you're completely fresh, then max effort on the press, the week's pulling work, explosive lower body work, and the week's one conditioning session to finish. Shoulder activation and neck work stay on Day 1 to keep this day, with its long conditioning finisher, clear of the two-hour mark.",
         sections: [
           { id: uid(), type: "agility", name: "Speed & Acceleration", exercises: [
-            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week. Placed here rather than ahead of the max-effort squat, so neither the sprint nor the lift is run on the other's fatigue.", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week. Placed here rather than ahead of the max-effort squat, so neither the sprint nor the lift is run on the other's fatigue.", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [
             meUpperBlock(),
@@ -1602,7 +1674,7 @@ function buildTwoDayHybridContent() {
     sport: "Brazilian Jiu-Jitsu / Wrestling",
     sessionsPerWeek: 2,
     coachNote:
-      "Built for clients who genuinely only have two days a week for the weight room — most people training Brazilian Jiu-Jitsu or wrestling four or five times a week don't have a third lifting day in them, and a program that assumes they do just gets skipped. This borrows Program A's conjugate structure (a Max Effort lift paired with a Dynamic Effort lift in the same session, the way coaches like Josh Settlage and Phil Daru build sessions for grapplers with limited time) and Program B's efficiency mindset — nothing wasted, every slot earning its place — and compresses them into two sessions that still cover a heavy lift, a speed lift, durability work, and conditioning every single week. Before shipping this one, I had a strength and conditioning coach look specifically at the two-day-a-week question, since that's the part most templates get wrong by either doing too little or trying to cram three days into two. Their read matched what the training research consistently shows about frequency: two focused sessions a week is enough to keep building strength in an athlete who is already getting high-frequency skill practice on the mat, as long as neither session gets skipped. That last part is the whole deal — there is no third day to absorb a missed one.",
+      "Built for clients who genuinely only have two days a week for the weight room — most people training Brazilian Jiu-Jitsu or wrestling four or five times a week don't have a third lifting day in them, and a program that assumes they do just gets skipped. This borrows Program A's conjugate structure (a Max Effort lift paired with a Dynamic Effort lift in the same session, the way coaches like Josh Settlage and Phil Daru build sessions for grapplers with limited time) and Program B's efficiency mindset — nothing wasted, every slot earning its place — and compresses them into two sessions that still cover a heavy lift, a speed lift, durability work, and conditioning every single week. Before shipping this one, I had a strength and conditioning coach look specifically at the two-day-a-week question, since that's the part most templates get wrong by either doing too little or trying to cram three days into two. Their read matched what the training research consistently shows about frequency: two focused sessions a week is enough to keep building strength in an athlete who is already getting high-frequency skill practice on the mat. Which does mean each session carries more weight than it would in a three-day week — so get them both in when you can. But miss one and the week is lighter, not lost. Do it late if there's room; if there isn't, the next one is the one that counts.",
     methodology:
       "Same conjugate foundation as Program A — Max Effort and Dynamic Effort work, rotating exercise pools so nothing goes stale — restructured for two sessions instead of three: Day 1 pairs a Max Effort Lower lift with Dynamic Effort Upper speed work, Day 2 pairs Max Effort Upper with Dynamic Effort Lower and closes with that week's one conditioning session, since there's no third day to host it separately. Durability, hip, and core work is trimmed to what fits in two sessions without turning either one into a two-hour workout — less total volume than Program A, on purpose, to match the lower session count, with extras dropped even further in the final phase before a competition the same way Program A does.",
     philosophy:
@@ -1629,9 +1701,41 @@ function buildTwoDayHybridContent() {
     ],
   };
 }
+// Speed is a quality that only exists when you are fresh. The main lift has to
+// come first, but the accessory work does not belong between it and the speed
+// work — reaching an 8x3 speed bench after 48 reps of split squats and RDLs
+// means training something that is no longer speed.
+//
+// So: main lift, then the speed work, then the accessories. This splits the
+// strength block rather than rewriting any prescription.
+function sequenceForFreshness(program) {
+  (program.phases || []).forEach((phase) => {
+    (phase.days || []).forEach((day) => {
+      const secs = day.sections || [];
+      const powerIdx = secs.findIndex((s) => s.type === "power");
+      if (powerIdx < 0) return;
+      const strengthIdx = secs.findIndex((s) => s.type === "strength");
+      if (strengthIdx < 0 || strengthIdx > powerIdx) return;
+      const strength = secs[strengthIdx];
+      if (!strength.exercises || strength.exercises.length < 2) return;
+
+      const main = strength.exercises.slice(0, 1);
+      const accessories = strength.exercises.slice(1);
+      strength.exercises = main;
+      const accessorySection = {
+        id: uid(), type: "strength", name: "Accessory Strength",
+        exercises: accessories,
+      };
+      // Drop it in immediately after the speed work.
+      secs.splice(powerIdx + 1, 0, accessorySection);
+    });
+  });
+  return program;
+}
+
 function buildProgramVariant(variant) {
   if (variant === "C") {
-    return buildTwoDayHybridContent();
+    return sequenceForFreshness(buildTwoDayHybridContent());
   }
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
@@ -1656,6 +1760,7 @@ function buildProgramVariant(variant) {
         }
       });
     });
+    sequenceForFreshness(base);
   } else {
     base.name = "Offseason Strength Build — Twelve-Week Program (Program B)";
     base.variant = "B";
@@ -1690,6 +1795,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     maxSessionsReached: 0,
     // { at: ISO timestamp, version } — the signed record, kept with the athlete
     waiver: waiver || null,
+    competitionDate: null,
   };
 }
 
@@ -1700,10 +1806,17 @@ const PROGRAM_VARIANT_LABELS = {
   C: "Program C — Two-Day Hybrid",
 };
 
+// Replacing the suffering-as-virtue quotes with coaching. These are the lines
+// that agree with the program underneath them.
 const MENTAL_COACHING_LIBRARY = [
+  { quote: "Backing off today is a training decision, not a concession. The set you don't grind is the one you don't pay for on Thursday.", author: "Your coach" },
+  { quote: "Stop when the bar slows, not when the number looks right.", author: "Your coach" },
+  { quote: "A deload week is supposed to feel too easy. That's the dose, not a mistake.", author: "Your coach" },
+  { quote: "The neck work takes four minutes and it's the reason you're still training in five years.", author: "Your coach" },
+  { quote: "Showing up on the days you don't feel like it is most of the program.", author: "Your coach" },
+
   // Weighted toward training and combat sport: the athlete reads one of these
   // standing in the gym deciding whether to load the bar, not at a desk.
-  { quote: "I hated every minute of training, but I said, 'Don't quit. Suffer now and live the rest of your life as a champion.'", author: "Muhammad Ali" },
   { quote: "The fight is won or lost far away from witnesses — behind the lines, in the gym, and out there on the road, long before I dance under those lights.", author: "Muhammad Ali" },
   { quote: "Champions aren't made in gyms. Champions are made from something they have deep inside them — a desire, a dream, a vision.", author: "Muhammad Ali" },
   { quote: "It isn't the mountains ahead to climb that wear you out; it's the pebble in your shoe.", author: "Muhammad Ali" },
@@ -1714,16 +1827,12 @@ const MENTAL_COACHING_LIBRARY = [
   { quote: "Always assume that your opponent is going to be bigger, stronger and faster than you, so that you learn to rely on technique, timing and leverage rather than brute strength.", author: "Helio Gracie" },
   { quote: "Once you've wrestled, everything else in life is easy.", author: "Dan Gable" },
   { quote: "Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", author: "Dan Gable" },
-  { quote: "The last three or four reps is what makes the muscle grow. This area of pain divides a champion from someone who is not a champion.", author: "Arnold Schwarzenegger" },
   { quote: "The Iron never lies to you.", author: "Henry Rollins" },
   { quote: "Discipline equals freedom.", author: "Jocko Willink" },
-  { quote: "Fatigue makes cowards of us all.", author: "Vince Lombardi" },
   { quote: "It's not whether you get knocked down, it's whether you get up.", author: "Vince Lombardi" },
   { quote: "If you train hard, you'll not only be hard, you'll be hard to beat.", author: "Herschel Walker" },
-  { quote: "We must all suffer one of two things: the pain of discipline, or the pain of regret.", author: "Jim Rohn" },
   { quote: "No one has ever drowned in sweat.", author: "Lou Holtz" },
   { quote: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
-  { quote: "Great things come from hard work and perseverance. No excuses.", author: "Kobe Bryant" },
   { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
   { quote: "Champions keep playing until they get it right.", author: "Billie Jean King" },
   { quote: "I really think a champion is defined not by their wins but by how they can recover when they fall.", author: "Serena Williams" },
@@ -1755,6 +1864,14 @@ function mentalTipForDate(dateStr) {
 
 /* ============================== READINESS ============================== */
 
+// Every read of READINESS_COPY goes through here. A check-in saved before the
+// colour field existed would otherwise take down the Progress tab and the coach
+// dashboard on an undefined lookup.
+function readinessCopyFor(entry) {
+  const key = entry && entry.color;
+  return READINESS_COPY[key] || READINESS_COPY[classifyReadiness(entry || {})] || READINESS_COPY.YELLOW;
+}
+
 function classifyReadiness(r) {
   // Check-ins saved before this changed carry energy and soreness instead of a
   // readiness score. They are scored the way they were scored on the day, so a
@@ -1768,14 +1885,18 @@ function classifyReadiness(r) {
   // Both rows now count for the athlete rather than against, so the score is a
   // straight average on the same 0 to 5 scale the sliders use.
   const score = (Number(r.sleep) + Number(r.readiness)) / 2;
+  // A normal day has to mean "train the session as written". At a 3.5 cut-off
+  // the default 3/3 and the "Normal" quick-pick both came back yellow, so the
+  // majority of sessions were quietly backed off and the athlete was told daily
+  // that they were below par.
   if (score <= 1.5) return "RED";
-  if (score >= 3.5) return "GREEN";
+  if (score >= 3) return "GREEN";
   return "YELLOW";
 }
 const READINESS_COPY = {
-  GREEN: { detail: "Complete today's session as written.", color: "var(--green)", textColor: "var(--bg)" },
-  YELLOW: { detail: "Session automatically adjusted: one extra rep in reserve on strength and power, durability and arm/core work trimmed.", color: "var(--amber)", textColor: "var(--bg)" },
-  RED: { detail: "Session automatically adjusted: agility, durability, and arm/core work skipped, strength capped well short of failure, conditioning trimmed.", color: "var(--red)", textColor: "#ffffff" },
+  GREEN: { detail: "Good to go — today's session runs exactly as written.", color: "var(--green)", textColor: "var(--bg)" },
+  YELLOW: { detail: "You flagged a rough night, so today runs a notch back: a little lighter, one more rep left in the tank, less arm and core filler. Your neck and adductor work stays in. This is the session doing its job, not you failing a test.", color: "var(--amber)", textColor: "var(--bg)" },
+  RED: { detail: "You said you're wrecked, so today is half the sets, no singles and no hard conditioning. The warm-up and the neck and adductor work stay — they cost you nothing and you're still training tonight. Come back to the heavy stuff when you're fresh.", color: "var(--red)", textColor: "#ffffff" },
 };
 
 
@@ -1785,6 +1906,105 @@ const READINESS_COPY = {
 
 
 
+
+// Things that have to be looked at by somebody who can actually examine you.
+// These are written as coaching guidance rather than diagnosis, and they exist
+// because this program loads the cervical spine and is delivered through a
+// phone to someone training on their own.
+const SAFETY_SCREEN_TITLE = "Before you start";
+const SAFETY_SCREEN_SECTIONS = [
+  {
+    heading: "Get these checked before you train the neck",
+    body: "This program trains your neck deliberately, because you get choked and stacked every week and an untrained neck is how people get hurt. But a neck that already has something going on needs a person who can examine it, not an app. Talk to a physician or physiotherapist before starting the neck work if any of these apply to you: numbness, tingling or weakness in an arm or hand, now or in the last few months; a previous cervical fracture, fusion or neck surgery; a known disc herniation or diagnosed stenosis; dizziness, visual disturbance or nausea when you tip your head back; headaches that started after a neck injury, or neck pain that wakes you at night; rheumatoid arthritis. Everything else in the program is still yours to train in the meantime.",
+  },
+  {
+    heading: "If you get your bell rung, stop",
+    body: "Any suspected concussion means no lifting, no neck work and no conditioning until a clinician clears you. Not a lighter session — no session. This is the one rule in the program with no autoregulated version, and a bad check-in score is not a substitute for it.",
+  },
+  {
+    heading: "Pain is different from fatigue",
+    body: "The daily check-in handles tired. It does not handle hurt. New or worsening pain, anything sharp, anything that travels down a limb, or anything that is worse the next morning is a message to your coach, not a reason to slide a slider down. Training around an injury is a conversation, and it is one worth having early.",
+  },
+  {
+    heading: "What this is, and what it isn't",
+    body: "Your coach is a personal trainer and a flexologist studying to be a physical therapist. He is not your doctor and this app is not medical care. It cannot see you, it cannot watch your technique, and it only knows what you type into it. If something needs diagnosing, that is a referral, not a programming change.",
+  },
+];
+
+function SafetyScreenModal({ onClose }) {
+  return (
+    <ModalShell onClose={onClose} title={SAFETY_SCREEN_TITLE}>
+      <p className="muted" style={{ marginBottom: 16 }}>
+        A short read before your first session. None of it is common, and most people it doesn't apply to — but the ones it does apply to need to know before they train, not after.
+      </p>
+      {SAFETY_SCREEN_SECTIONS.map((s) => (
+        <div key={s.heading} style={{ marginBottom: 16 }}>
+          <h3 className="log-exercise-name" style={{ marginBottom: 5 }}>{s.heading}</h3>
+          <p className="muted" style={{ marginBottom: 0, lineHeight: 1.55 }}>{s.body}</p>
+        </div>
+      ))}
+      <button className="btn-primary wide" style={{ marginTop: 6 }} onClick={onClose}>Got it</button>
+    </ModalShell>
+  );
+}
+
+// Three numbers on a lift, in seconds: down, pause, up. Nobody is born knowing
+// that, and reading it backwards turns the RDL's protective slow lowering into
+// a fast one.
+const TEMPO_LEGEND = "Tempo is three numbers — for example 3/0/1. The first is how many seconds to lower the weight, the second is how long to pause at the bottom, the third is how many seconds to lift it. An X means lift it as fast as you can. So 3/0/1 is a slow three-second lowering, no pause, then up in one. The lowering half is usually the part doing the work.";
+
+/* ============================== COMPETITION PREP ============================== */
+// A phase called "Compete Prep" that prescribes true max singles in its final
+// week isn't competition prep. With a date set, the last ten days taper; without
+// one, the written rule below is what the athlete gets.
+
+const TAPER_DAYS = 10;
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const then = new Date(dateStr + "T00:00:00");
+  const now = new Date(todayStr() + "T00:00:00");
+  return Math.round((then - now) / 86400000);
+}
+
+// Applied on top of the readiness adjustment, so a taper and a rough day stack
+// rather than one overwriting the other.
+function applyTaper(sections, daysOut) {
+  if (daysOut == null || daysOut < 0 || daysOut > TAPER_DAYS) return { sections, taperNote: null };
+  const adjusted = sections.map((sec) => {
+    if (sec.type === "conditioning" && daysOut <= 5) {
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, reps: "15 minutes easy — conversational", cues: "No hard conditioning inside five days of competing. Easy movement only; the fitness is already banked and anything hard now just costs you." })) };
+    }
+    if (sec.type === "strength") {
+      return { ...sec, exercises: (sec.exercises || []).map((e) => {
+        const isRamp = /down to 1|top single|working sets/i.test(String(e.reps));
+        return {
+        ...e,
+        sets: isRamp ? 1 : Math.max(1, Math.round((e.sets || 3) * 0.5)),
+        reps: isRamp ? "one crisp set of 2 to 3 at around 90 percent — an opener, not a max" : e.reps,
+        rir: Math.max(e.rir || 0, 2),
+        cues: `${e.cues || ""} Taper: half the sets, and nothing that leaves a mark. You are sharpening, not building — there is no session between now and the mat that can make you stronger, and plenty that can make you slower.`.trim(),
+        };
+      }) };
+    }
+    if (sec.type === "power") {
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 6) * 0.5), 2), cues: `${e.cues || ""} Keep these — speed work is what keeps you sharp through a taper. Just fewer of them.`.trim() })) };
+    }
+    if (sec.type === "durability") {
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.5)) })) };
+    }
+    return sec;
+  });
+  const note = daysOut === 0
+    ? "Competition day. Nothing in the gym today helps you — warm up, breathe, and go compete."
+    : `${daysOut} day${daysOut === 1 ? "" : "s"} out. Tapering: half the sets, no maximal lifting, speed work kept short and sharp.`;
+  return { sections: adjusted, taperNote: note };
+}
+
+const WEIGHT_CUT_GUIDANCE = {
+  heading: "Making weight",
+  body: "This program does not prescribe a weight cut and your coach is not going to write you one. But you will probably think about it, so here is the thing most people do not know: IBJJF uses a same-day weigh-in. They weigh you on the day, in your gi, minutes before your first match. There is no overnight rehydration window the way there is in wrestling or MMA. That single rule makes an aggressive cut a fundamentally worse idea in this sport than in almost any other.\n\nWhat that means practically: compete at or very near your walking weight. If you are trimming at all in the final week, keep it to a couple of percent of bodyweight and do it through fibre, salt and water timing — not through sweating it off. No sauna suits, no active dehydration, no diuretics, ever. And know that grip strength and reaction time are among the first things dehydration takes from you, which in a gi is close to the worst possible trade.\n\nIf the gap between you and the division is bigger than that, move up a division for this one and have a conversation with your coach about the next twelve weeks. That is a programming problem, not a water problem.",
+};
 
 /* ============================== APP SHELL ============================== */
 
@@ -1822,6 +2042,29 @@ class AppErrorBoundary extends React.Component {
   }
 }
 
+// Shown when a read failed rather than came back empty. The distinction is the
+// whole point: this screen exists so that a dropped connection can never be
+// mistaken for a new account.
+function ConnectionErrorScreen({ onRetry, onSignOut }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="pad" style={{ paddingTop: 60, maxWidth: 420, margin: "0 auto" }}>
+      <h1 className="program-title">Can't reach the server</h1>
+      <p className="muted" style={{ marginBottom: 6 }}>
+        Your training is safe. Every workout, record and check-in lives on the server, not on this phone — this screen just couldn't load it.
+      </p>
+      <p className="muted" style={{ marginBottom: 18 }}>
+        This is almost always a patchy connection. Try again in a moment.
+      </p>
+      <button className="btn-primary wide" disabled={busy}
+        onClick={async () => { setBusy(true); await onRetry(); setBusy(false); }}>
+        {busy ? "Trying…" : "Try again"}
+      </button>
+      <button className="btn-ghost wide" style={{ marginTop: 10 }} onClick={onSignOut}>Sign out</button>
+    </div>
+  );
+}
+
 function MainApp({ userId, onSignOut }) {
   const isCoach = !!COACH_USER_ID && userId === COACH_USER_ID;
   const [clients, setClients] = useState([]);
@@ -1835,11 +2078,14 @@ function MainApp({ userId, onSignOut }) {
   const [showDashboard, setShowDashboard] = useState(false);
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showSafety, setShowSafety] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [logging, setLogging] = useState(null);
   const [showMobility, setShowMobility] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [clientLoadError, setClientLoadError] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [newSignupCount, setNewSignupCount] = useState(0);
 
@@ -1859,21 +2105,41 @@ function MainApp({ userId, onSignOut }) {
 
   useEffect(() => { refreshNewSignups(); }, [refreshNewSignups]);
 
+  // Signup-time linking fails whenever email confirmation is on, because there
+  // is no session yet for row-level security to check. Re-asserting it here, on
+  // every authenticated load, means a client who slipped through still lands in
+  // the coach's dashboard the first time they actually sign in.
   useEffect(() => {
+    if (!supabase || !userId || !COACH_USER_ID || userId === COACH_USER_ID) return;
     (async () => {
-      const list = await getClientList(userId);
-      const settings = await getSettings(userId);
-      setTheme(settings.theme || "dark");
-      setClients(list || []);
-      if (list && list.length) setActiveId(list[0].id);
-      setLoaded(true);
+      const { error } = await supabase.from("client_links")
+        .upsert({ client_user_id: userId, coach_user_id: COACH_USER_ID }, { onConflict: "client_user_id" });
+      if (error) console.warn("coach link:", error.message);
     })();
   }, [userId]);
 
-  useEffect(() => {
+  const loadClientList = useCallback(async () => {
+    setLoadError(false);
+    const list = await getClientList(userId);
+    const settings = await getSettings(userId);
+    setTheme(settings.theme || "dark");
+    // A failed read stops here. Falling through would show an existing athlete
+    // the onboarding screen and let them overwrite their own client list.
+    if (list === LOAD_FAILED) { setLoadError(true); setLoaded(true); return; }
+    setClients(list || []);
+    if (list && list.length) setActiveId(list[0].id);
+    setLoaded(true);
+  }, [userId]);
+
+  useEffect(() => { loadClientList(); }, [loadClientList]);
+
+  const loadActiveClient = useCallback(async () => {
     if (!activeId) return;
-    (async () => {
+    setClientLoadError(false);
+    {
       const c = await getClient(userId, activeId);
+      if (c === LOAD_FAILED) { setClientLoadError(true); return; }
+      let healedReadiness = false;
       if (c) {
         if (!c.bodyweightLog) c.bodyweightLog = [];
         if (!c.mobilityLogs) c.mobilityLogs = [];
@@ -1884,19 +2150,37 @@ function MainApp({ userId, onSignOut }) {
         if (c.injuryNotes === undefined) c.injuryNotes = "";
     if (c.maxSessionsReached === undefined) c.maxSessionsReached = c.sessionsCompleted || 0;
     if (c.waiver === undefined) c.waiver = null;
+    if (c.hasSeenSafety === undefined) c.hasSeenSafety = false;
+    if (c.competitionDate === undefined) c.competitionDate = null;
     if (!c.logs) c.logs = [];
     if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
         if (c.paid === undefined) c.paid = true;
+        if (!c.program) {
+          // Nothing sensible to render without a program, and silently throwing
+          // here used to leave the app on a spinner with no way out.
+          setClientLoadError(true);
+          return;
+        }
         if (!c.program.mobility) c.program.mobility = defaultMobility();
+
+        // Check-ins saved before the colour field existed are scored once and
+        // written back, so every screen that reads a colour finds one.
+        Object.entries(c.readiness || {}).forEach(([day, entry]) => {
+          if (entry && !entry.color) {
+            entry.color = classifyReadiness(entry);
+            if (!entry.date) entry.date = day;
+            healedReadiness = true;
+          }
+        });
 
         // Self-heal: older versions of this app briefly saved rotating Max Effort
         // exercises with a blank name, which then got frozen into this client's
         // stored data forever. Repair any of those on load, and any pool entries
         // that are missing a name, using the current default pools as reference.
-        let healed = false;
+        let healed = healedReadiness;
         // Weekly schedule used to be free-typed text per day; it's now a set of
         // fixed activity chips per day (an array). A schedule saved in the old
         // text format can't be mapped onto the new chips automatically, so it
@@ -1928,12 +2212,19 @@ function MainApp({ userId, onSignOut }) {
         if (healed) await setClient(userId, c.id, c);
       }
       setClientState(c);
-    })();
+    }
   }, [activeId, userId]);
+
+  useEffect(() => { loadActiveClient(); }, [loadActiveClient]);
 
   const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
 
   useEffect(() => { if (client && !client.hasSeenTutorial) setShowTutorial(true); }, [client?.id]); // eslint-disable-line
+  // Shown once, after the tutorial, before anyone trains. Re-readable any time
+  // from Settings.
+  useEffect(() => {
+    if (client && client.hasSeenTutorial && !client.hasSeenSafety) setShowSafety(true);
+  }, [client?.id, client?.hasSeenTutorial, client?.hasSeenSafety]); // eslint-disable-line
   const changeTheme = async (t) => { setTheme(t); await setSettings(userId, { theme: t }); };
 
   const completeOnboarding = async (profile) => {
@@ -1945,8 +2236,11 @@ function MainApp({ userId, onSignOut }) {
       promoDiscount = PROMO_CODES[code] || 0;
     } catch {}
     const c = buildClient({ id, ...profile, useTemplate: true, promoDiscount });
-    await setClient(userId, id, c);
-    const list = [{ id, name: c.name }];
+    const saved = await setClient(userId, id, c);
+    if (!saved || saved.ok === false) return;
+    // Append. Replacing the list wholesale is how a client whose list failed to
+    // load once could lose every record they already had.
+    const list = [...clients, { id, name: c.name }];
     setClients(list);
     await setClientList(userId, list);
     setActiveId(id);
@@ -1983,7 +2277,19 @@ function MainApp({ userId, onSignOut }) {
   };
 
   if (!loaded) return <div className="app-shell" data-theme={theme}><LoadingState /><ToastHost /><GlobalStyle /></div>;
+  if (loadError) return (
+    <div className="app-shell" data-theme={theme}>
+      <ConnectionErrorScreen onRetry={loadClientList} onSignOut={onSignOut} />
+      <ToastHost /><GlobalStyle />
+    </div>
+  );
   if (clients.length === 0) return <div className="app-shell" data-theme={theme}><OnboardingScreen onSubmit={completeOnboarding} /><ToastHost /><GlobalStyle /></div>;
+  if (clientLoadError) return (
+    <div className="app-shell" data-theme={theme}>
+      <ConnectionErrorScreen onRetry={loadActiveClient} onSignOut={onSignOut} />
+      <ToastHost /><GlobalStyle />
+    </div>
+  );
   if (!client) return <div className="app-shell" data-theme={theme}><LoadingState /><ToastHost /><GlobalStyle /></div>;
 
   // Athletes whose profile predates the waiver reach this and go no further.
@@ -2001,7 +2307,16 @@ function MainApp({ userId, onSignOut }) {
           dismissible={false}
           defaultName={client.name && client.name !== "Athlete" ? client.name : [client.firstName, client.lastName].filter(Boolean).join(" ")}
           onAccept={async ({ signature }) => {
-            await persistClient({ ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "" } });
+            // A signed release that only exists in local state is not a record.
+            // If the write fails the gate stays shut and the modal stays open.
+            const signed = { ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "" } };
+            const saved = await setClient(userId, signed.id, signed);
+            if (!saved || saved.ok === false) {
+              emitToast({ kind: "error", message: "Couldn't save your signature — check your connection and try again.", autoDismissMs: 7000 });
+              return false;
+            }
+            setClientState(signed);
+            return true;
           }}
           onClose={undefined}
           intro={(
@@ -2044,6 +2359,12 @@ function MainApp({ userId, onSignOut }) {
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showSafety && (
+        <SafetyScreenModal onClose={async () => {
+          setShowSafety(false);
+          if (client && !client.hasSeenSafety) await persistClient({ ...client, hasSeenSafety: true });
+        }} />
+      )}
       {showTutorial && (
         <TutorialModal onClose={async () => {
           setShowTutorial(false);
@@ -2138,7 +2459,7 @@ function OnboardingScreen({ onSubmit }) {
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
       <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
       <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Set up your profile below to get started.</p>
-      <div className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</div>
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
         <div className="settings-avatar-preview">
           {profilePicture ? <img src={profilePicture} alt="" /> : <span>{(firstName || "?").trim().charAt(0).toUpperCase()}</span>}
@@ -2165,10 +2486,15 @@ function OnboardingScreen({ onSubmit }) {
           {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
       </label>
-      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. You can change this any time in Settings.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
-      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+        The speed-work sets are prescribed as a percentage of your one-rep max on the bench press and the trap bar deadlift. You do not need to go test either one — take your best recent heavy set of three to five reps and add about fifteen percent, and that is close enough to start. Week 8 is a good point to re-estimate, because by then the original number will be stale and the speed work will have drifted light.
+      </p>
+
+      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
       <div role="radiogroup" aria-label="Choose Your Program">
       <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")} role="radio" aria-checked={programVariant === "A"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("A"); } }}>
@@ -2184,10 +2510,10 @@ function OnboardingScreen({ onSubmit }) {
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>2 days a week — built for a packed mat schedule with no room for a 3rd lifting day. Each session pairs a Max Effort lift with a Dynamic Effort lift like Program A, with slightly more work per session to make up for it. Best if you're training grappling 4 or more times a week.</p>
       </div>
       </div>
-      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
-      <div className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Before You Start</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Before You Start</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
         This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
         assumption of risk and release of liability before a program can be created for you.
@@ -2369,6 +2695,7 @@ function SignatureBlock({ value, onChange, dated }) {
 
 function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissible = true, intro = null, footer = null }) {
   const [ticked, setTicked] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [signature, setSignature] = useState(defaultName);
   const signedName = signature.trim();
   // Two words, or one long enough to be a name. Enough to stop an empty stroke
@@ -2382,7 +2709,7 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
       <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Version {WAIVER_VERSION}</p>
       {WAIVER_SECTIONS.map((s) => (
         <div key={s.heading} style={{ marginBottom: 16 }}>
-          <div className="log-exercise-name" style={{ marginBottom: 5 }}>{s.heading}</div>
+          <h3 className="log-exercise-name" style={{ marginBottom: 5 }}>{s.heading}</h3>
           <p className="muted" style={{ marginBottom: 0, lineHeight: 1.55 }}>{s.body}</p>
         </div>
       ))}
@@ -2406,9 +2733,15 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
             <span>I am 18 or older. I have read and understood this agreement, I accept the risks, and I agree to the release above.</span>
           </label>
           <SignatureBlock value={signature} onChange={setSignature} dated={today} />
-          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk}
-            onClick={() => onAccept({ signature: signedName })}>
-            Sign and continue
+          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk || signing}
+            onClick={async () => {
+              setSigning(true);
+              const ok = await onAccept({ signature: signedName });
+              // `false` means the write failed — stay on this screen so the
+              // athlete can retry rather than believing they've signed.
+              if (ok === false) setSigning(false);
+            }}>
+            {signing ? "Saving…" : "Sign and continue"}
           </button>
           {!signatureOk && ticked && (
             <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>Type your full name above to sign.</p>
@@ -2589,11 +2922,12 @@ function TrendArea({ data, dataKey, color = "var(--accent)", height = 170, domai
                 <stop offset="100%" stopColor={color} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="date" stroke="var(--border)" tick={{ fill: "var(--text-dim)", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={24} />
+            <XAxis dataKey="date" stroke="var(--border)" tick={{ fill: "var(--text-dim)", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} minTickGap={24} tickFormatter={fmtChartDate} />
             <YAxis stroke="var(--border)" tick={{ fill: "var(--text-dim)", fontSize: 11 }} tickLine={false} axisLine={false} domain={domain} width={44} />
             <Tooltip cursor={{ stroke: "var(--border)", strokeWidth: 1 }}
               contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--text)", fontSize: 13 }}
               labelStyle={{ color: "var(--text-dim)" }}
+              labelFormatter={fmtChartDate}
               formatter={(v) => [`${valueFormat(v)}${unit}`, ""]} />
             <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#${gid})`}
               dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--card)" }} />
@@ -2603,7 +2937,7 @@ function TrendArea({ data, dataKey, color = "var(--accent)", height = 170, domai
       {last ? (
         <div className="chart-endlabel">
           <span className="chart-endlabel-dot" style={{ background: color }} />
-          Latest: <strong>{valueFormat(last[dataKey])}{unit}</strong> on {last.date}
+          Latest: <strong>{valueFormat(last[dataKey])}{unit}</strong> on {fmtChartDate(last.date)}
         </div>
       ) : null}
     </>
@@ -2728,12 +3062,12 @@ function ClientDashboard({ client, onClose }) {
         <DashStat label="Last Workout" value={lastLog ? `${fmtDate(lastLog.date)} — Day ${lastLog.dayLabel}` : "None yet"} wide />
       </div>
       <div className="card">
-        <div className="log-exercise-name" style={{ marginBottom: 8 }}>Overall Progress</div>
+        <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>Overall Progress</h3>
         <div className="progress-bar-track"><div className="progress-bar-fill" style={{ width: `${completionPct}%` }} /></div>
         <p className="muted" style={{ marginTop: 8, fontSize: 12.5 }}>{client.sessionsCompleted || 0} of {totalSessions} sessions completed this block.</p>
       </div>
       <div className="card">
-        <div className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</div>
+        <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</h3>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
           <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {exerciseUnit(p.exerciseName)} — {fmtDate(p.date)}</span></div>
         ))}
@@ -2776,7 +3110,7 @@ function OneRepMaxCalculator({ onClose }) {
 
       {percentRows.length > 0 && (
         <div className="card">
-          <div className="log-exercise-name" style={{ marginBottom: 8 }}>Suggested Training Weights</div>
+          <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>Suggested Training Weights</h3>
           {percentRows.map((row) => (
             <div key={row.pct} className="pr-history-row"><span>{row.pct} percent of your One-Rep Max</span><span>{row.weight} pounds</span></div>
           ))}
@@ -2841,7 +3175,7 @@ function InstallGuide() {
   );
   return (
     <>
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Put This App On Your Home Screen</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Put This App On Your Home Screen</h3>
       <p className="muted" style={{ marginBottom: 12 }}>
         Takes about fifteen seconds and you only do it once. Afterwards the app has its own icon on your home screen and opens full screen with no browser bar — the same as any app you would download from a store. Nothing to install, and it takes no real space on your phone.
       </p>
@@ -2887,6 +3221,8 @@ function InstallGuide() {
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
+  const [showWeightCut, setShowWeightCut] = useState(false);
+  const [showSafetyCopy, setShowSafetyCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [schedule, setSchedule] = useState(client?.weeklySchedule || defaultWeeklySchedule());
@@ -2945,7 +3281,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
   return (
     <ModalShell onClose={onClose} title="Settings">
-      <div className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</div>
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
         <div className="settings-avatar-preview">
           {client?.profilePicture ? <img src={client.profilePicture} alt="" /> : <span>{(client?.name || "?").trim().charAt(0).toUpperCase()}</span>}
@@ -2959,20 +3295,20 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           {picError && <p className="muted" style={{ color: "var(--accent)", fontSize: 12, marginTop: 6 }}>{picError}</p>}
         </div>
       </div>
-      <div className="log-exercise-name" style={{ marginBottom: 6 }}>Brazilian Jiu-Jitsu Belt Level</div>
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Brazilian Jiu-Jitsu Belt Level</h3>
       <select className="select-input" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
         {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
       <button className="btn-primary wide" onClick={saveBelt}>{savedBelt ? "Saved" : "Save Belt Level"}</button>
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Optional context for you and your coach — a bad shoulder, a cranky knee, anything recent. Not a medical form.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <button className="btn-primary wide" onClick={saveInjuryNotes}>{savedInjuryNotes ? "Saved" : "Save Note"}</button>
 
       {substitutionPool.length > 0 && (
         <>
-          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Exercise Substitutions</div>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Exercise Substitutions</h3>
           <p className="muted" style={{ marginBottom: 10 }}>Check anything you need to avoid right now. Your Max Effort rotation will skip these and pick the next exercise in the pool instead — no code, no waiting on your coach.</p>
           {substitutionPool.map((name) => (
             <label key={name} className="bjj-toggle">
@@ -2984,23 +3320,23 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </>
       )}
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Data &amp; Sync</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Data &amp; Sync</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         {lastSynced ? `Everything is saved to your account. Last synced ${lastSynced.toLocaleString()}.` : "Everything you log saves to your account automatically. If a save ever fails, you'll see a banner at the bottom of the screen with a Retry button — nothing is lost silently."}
       </p>
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
       {isCoach && (
         <>
-          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</div>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</h3>
           <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
           <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
 
-          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</div>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</h3>
           <p className="muted" style={{ marginBottom: 10 }}>
             {client?.paid
               ? "This athlete is marked as paid — they have full access to the program going forward, with no more payment prompts."
@@ -3014,9 +3350,37 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </>
       )}
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Competing?</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        Set a date and the last ten days before it taper automatically — half the sets, no maximal lifting, speed work kept short. Leave it blank and the program runs as normal.
+      </p>
+      <label className="labeled-input">
+        <span>Competition date (optional)</span>
+        <input type="date" value={client.competitionDate || ""} min={todayStr()}
+          onChange={async (e) => { await onPersist({ ...client, competitionDate: e.target.value || null }); }} />
+      </label>
+      {client.competitionDate && (
+        <>
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+            {(() => { const d = daysUntil(client.competitionDate); return d == null ? "" : d < 0 ? "That date has passed — clear it or set a new one." : d === 0 ? "That's today. Go compete." : `${d} day${d === 1 ? "" : "s"} out.`; })()}
+          </p>
+          <button className="btn-ghost wide" onClick={() => setShowWeightCut(true)}>Read: making weight</button>
+        </>
+      )}
+      {showWeightCut && (
+        <ModalShell onClose={() => setShowWeightCut(false)} title={WEIGHT_CUT_GUIDANCE.heading}>
+          {WEIGHT_CUT_GUIDANCE.body.split("\n\n").map((para, i) => (
+            <p key={i} className="muted" style={{ marginBottom: 12, lineHeight: 1.55 }}>{para}</p>
+          ))}
+          <button className="btn-primary wide" onClick={() => setShowWeightCut(false)}>Got it</button>
+        </ModalShell>
+      )}
+
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
       <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
+      <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
+      {showSafetyCopy && <SafetyScreenModal onClose={() => setShowSafetyCopy(false)} />}
       <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
       {client?.waiver?.at && (
         <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -3025,7 +3389,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       )}
       {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         Your program was saved when you set up your profile, so improvements your coach makes afterward don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
       </p>
@@ -3043,7 +3407,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </div>
       )}
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Switch Program</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Switch Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
@@ -3053,7 +3417,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </button>
       ))}
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Veteran Athlete Mode</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Veteran Athlete Mode</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         {(client?.sessionsCompleted || 0)} sessions logged since {client?.createdAt ? fmtDate(client.createdAt) : "you started"}
         {client?.createdAt ? (() => {
@@ -3069,7 +3433,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <InstallGuide />
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Export Your Data</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Export Your Data</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Download every workout, bodyweight entry, readiness check-in, and Personal Record you've ever logged as a single file — a personal backup that's yours to keep, independent of this app.</p>
       <button className="btn-ghost wide" onClick={() => {
         const exportData = {
@@ -3096,7 +3460,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         <Download size={14} /> Download My Training Data
       </button>
 
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 10 }}>Appearance</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 10 }}>Appearance</h3>
       <div className="radio-group">
         <label className={`radio-pill ${theme === "dark" ? "active" : ""}`} onClick={() => onChangeTheme("dark")}>
           <input type="radio" checked={theme === "dark"} onChange={() => onChangeTheme("dark")} />
@@ -3109,7 +3473,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </div>
 
       {isCoach && (<>
-      <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Start Over From the Welcome Screen</div>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Start Over From the Welcome Screen</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         Use this to preview the exact first-time experience a new client sees when they open this app — the welcome screen where they enter their name, bodyweight, and height. This permanently deletes every athlete profile, workout, check-in, and Personal Record currently saved here, so only use it for testing before you send this app to your clients — each of them gets their own fresh welcome screen automatically the first time they open it themselves.
       </p>
@@ -3128,7 +3492,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       {onSignOut && (
         <>
-          <div className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Account</div>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Account</h3>
           <button className="btn-ghost wide" onClick={onSignOut}><LogOut size={15} style={{ marginRight: 6, verticalAlign: -2 }} />Sign Out</button>
         </>
       )}
@@ -3247,6 +3611,16 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const togglePaid = async (id, full, ownerId) => {
     if (!full) return;
     setBusyId(id);
+    // Re-read first. `full` was fetched when this dashboard opened, and every
+    // write here replaces the whole client record — so writing it back would
+    // delete any session, PR or check-in the athlete logged in the meantime.
+    const fresh = await getClient(ownerId, id);
+    if (fresh === LOAD_FAILED || !fresh) {
+      emitToast({ kind: "error", message: "Couldn't reach that athlete's record — try again.", autoDismissMs: 6000 });
+      setBusyId(null);
+      return;
+    }
+    full = fresh;
     const updated = { ...full, paid: !full.paid };
     if (id === activeId && ownerId === userId) {
       await onPersistActive(updated);
@@ -3345,7 +3719,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     label="Readiness"
                     value={recentReadiness ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <span className="hero-dot" style={{ background: READINESS_COPY[recentReadiness.color].color }} />
+                        <span className="hero-dot" style={{ background: readinessCopyFor(recentReadiness).color }} />
                         {recentReadiness.color} — {fmtDate(recentReadiness.date)}
                       </span>
                     ) : "None yet"}
@@ -3423,6 +3797,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
   const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises]);
   const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
+  // A taper and a rough day stack rather than one overriding the other.
+  const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
+  const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
 
   if (actualComplete) {
     return (
@@ -3474,9 +3851,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
       </Card>
 
-      <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: READINESS_COPY[readinessToday.color].color, color: READINESS_COPY[readinessToday.color].textColor }}>{readinessToday.color}</span> : null}>
+      <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: readinessCopyFor(readinessToday).color, color: readinessCopyFor(readinessToday).textColor }}>{readinessToday.color}</span> : null}>
         {readinessToday ? (
-          <div><p className="muted" style={{ marginBottom: 10 }}>{READINESS_COPY[readinessToday.color].detail}</p><button className="btn-ghost" onClick={() => setShowReadiness(true)}>Update today's check-in</button></div>
+          <div><p className="muted" style={{ marginBottom: 10 }}>{readinessCopyFor(readinessToday).detail}</p><button className="btn-ghost" onClick={() => setShowReadiness(true)}>Update today's check-in</button></div>
         ) : (
           <div><p className="muted" style={{ marginBottom: 10 }}>Quick check-in before today's session — how you slept, how ready you feel to train, your bodyweight, and whether grappling has been rough lately. The workout adjusts itself based on your answers.</p><button className="btn-primary" onClick={() => setShowReadiness(true)}>Check in</button></div>
         )}
@@ -3520,14 +3897,14 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         {isCurrent && (
           readinessToday ? (
             <div className="hero-readiness-badge">
-              <span className="hero-dot" style={{ background: READINESS_COPY[readinessToday.color].color }} />
-              {readinessToday.color === "GREEN" ? "Fresh — full session today" : readinessToday.color === "YELLOW" ? "Normal — session lightly adjusted" : "Beat up — session eased back"}
+              <span className="hero-dot" style={{ background: readinessCopyFor(readinessToday).color }} />
+              {readinessToday.color === "GREEN" ? "Good to go — full session today" : readinessToday.color === "YELLOW" ? "Rough night — session a notch back" : "Rough day — session eased right back"}
             </div>
           ) : (
             <>
               <div className="mood-row-label">How do you feel today?</div>
               <div className="mood-row">
-                {[{ key: "fresh", label: "Fresh", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 3, readiness: 3 } }, { key: "beat", label: "Beat up", entry: { sleep: 1, readiness: 1 } }].map((m) => (
+                {[{ key: "fresh", label: "Good", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 4, readiness: 4 } }, { key: "beat", label: "Rough", entry: { sleep: 1, readiness: 1 } }].map((m) => (
                   <button key={m.key} className="mood-pill" onClick={async () => {
                     const color = classifyReadiness(m.entry);
                     await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
@@ -3581,6 +3958,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         )}
 
         {pos.day.intent && <div className="intent-box">{pos.day.intent}</div>}
+        {tapered.taperNote && <div className="intent-box">{tapered.taperNote}</div>}
         {adjustment.adjustedNote && <div className="adjust-box">{adjustment.adjustedNote}</div>}
 
         <button className="preview-toggle" onClick={() => setShowPreview((s) => !s)}>
@@ -3589,7 +3967,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         </button>
         {showPreview && (
           <div className="section-preview-list">
-            {adjustment.sections.filter((sec) => sec.exercises.length > 0).map((sec) => (
+            {tapered.sections.filter((sec) => sec.exercises.length > 0).map((sec) => (
               <div key={sec.id}>
                 <div className="section-subheading" style={{ margin: "10px 0 4px" }}>{sec.name || SECTION_LABELS[sec.type]}{sec.skipped ? " (skipped today)" : ""}</div>
                 {sec.exercises.map((e, i) => (
@@ -3642,7 +4020,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <ReadinessModal existing={readinessToday} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
           onSave={async ({ weight, ...entry }) => {
             const color = classifyReadiness(entry);
-            const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: weight ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
+            const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: Number.isFinite(Number(weight)) && Number(weight) > 0 ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
             await onPersist(updated);
             setShowReadiness(false);
           }} />
@@ -3673,8 +4051,43 @@ function findRecentPR(client) {
 function AccomplishmentsPage({ client, onClose }) {
   const { total, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const volumeSeries = useMemo(() => weeklyVolumeSeries(client), [client]);
+  // Sessions and weeks, not tonnage. Neck holds, carries, sprints and every
+  // second of conditioning produce almost no tonnage, and an honestly reported
+  // rough week visibly slows a tonnage bar — so tonnage alone was quietly
+  // rewarding the wrong behaviour.
+  const sessionCount = (client.logs || []).length + (client.mobilityLogs || []).length;
+  const weeksTrained = useMemo(() => {
+    const weeks = new Set();
+    [...(client.logs || []), ...(client.mobilityLogs || [])].forEach((l) => {
+      if (!l.date) return;
+      const d = new Date(l.date + "T00:00:00");
+      const wd = d.getDay();
+      d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd));
+      weeks.add(toLocalDateStr(d));
+    });
+    return weeks.size;
+  }, [client.logs, client.mobilityLogs]);
+  const comebacks = useMemo(() => {
+    const dates = [...(client.logs || []), ...(client.mobilityLogs || [])]
+      .map((l) => l.date).filter(Boolean).sort();
+    let n = 0;
+    for (let i = 1; i < dates.length; i++) {
+      const gap = (new Date(dates[i] + "T00:00:00") - new Date(dates[i - 1] + "T00:00:00")) / 86400000;
+      if (gap > 14) n++;
+    }
+    return n;
+  }, [client.logs, client.mobilityLogs]);
   return (
     <ModalShell onClose={onClose} title="Lifting Milestones">
+      <div className="metric-row" style={{ marginBottom: 14 }}>
+        <MetricTile label="Sessions" value={sessionCount} sub="Completed, all time" color="var(--accent)" />
+        <MetricTile label="Weeks trained" value={weeksTrained} sub="Never resets" color="var(--green)" />
+      </div>
+      {comebacks > 0 && (
+        <div className="intent-box">
+          <strong>You came back{comebacks > 1 ? ` ${comebacks} times` : ""}.</strong> After a break of two weeks or more, you started again. That is the hardest thing anyone does in this sport and almost nothing tracks it, so it is tracked here.
+        </div>
+      )}
       <div className="card" style={{ textAlign: "center", padding: 24 }}>
         <div className="finish-stat-value" style={{ fontSize: 26 }}>{formatWeight(total)}</div>
         <div className="muted">Total weight lifted since you started</div>
@@ -3684,7 +4097,7 @@ function AccomplishmentsPage({ client, onClose }) {
           <div style={{ height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={volumeSeries}>
-                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+                <CartesianGrid stroke="var(--border)" />
                 <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={10} />
                 <YAxis stroke="var(--text-dim)" fontSize={10} tickFormatter={(v) => formatWeight(v)} />
                 <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} formatter={(v) => formatWeight(v)} />
@@ -3724,13 +4137,19 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
     // Both rows run the same direction — higher is better on each — so a slider
     // pushed right never means something bad on one row and good on the next.
     { key: "sleep", label: "Sleep quality", hint: "0 = terrible, 5 = great", max: 5 },
-    { key: "readiness", label: "How ready do you feel to train?", hint: "0 = flat and beaten up, 5 = fresh and ready to go", max: 5 },
+    { key: "readiness", label: "How does your body feel today?", hint: "0 = wrecked, 5 = good. This is your body, not your mood — not feeling like training on a normal body is still a training day.", max: 5 },
   ];
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
       <button className="btn-primary wide" style={{ marginBottom: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
-      <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (pounds)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+        New or worsening pain isn't a rough day — that's worth a message to your coach rather than a lighter session.
+      </p>
       {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
+      <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (optional)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 14 }}>
+        Weekly is plenty. Day to day this tells you more about hydration than about you.
+      </p>
       <label className="bjj-toggle">
         <input type="checkbox" checked={!!v.bjjHard} onChange={(e) => setV({ ...v, bjjHard: e.target.checked })} />
         <span>Hard Brazilian Jiu-Jitsu training recently?</span>
@@ -3753,7 +4172,7 @@ function SectionHeader({ title, subtitle, complete, onToggleComplete, expanded, 
         <span className="section-check-box">{complete && <Check size={14} />}</span>
       </button>
       <button type="button" className="section-header" onClick={onToggleExpand} aria-expanded={expanded}>
-        <div style={{ textAlign: "left" }}><div className="log-exercise-name">{title}</div>{subtitle && <div className="muted" style={{ fontSize: 12 }}>{subtitle}</div>}</div>
+        <div style={{ textAlign: "left" }}><h3 className="log-exercise-name">{title}</h3>{subtitle && <div className="muted" style={{ fontSize: 12 }}>{subtitle}</div>}</div>
         <ChevronRight size={16} className={expanded ? "chev-open" : ""} />
       </button>
     </div>
@@ -3867,7 +4286,11 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     return map;
   }, [resolvedSections]);
 
-  const draftKey = `${client.id}:${phaseId}:${dayId}:${todayStr()}`;
+  // Frozen when the session starts. Deriving this from today's date meant that
+  // at midnight the key changed underneath a lifter still training, and a
+  // refresh could no longer find their draft.
+  const draftKeyRef = useRef(`${client.id}:${phaseId}:${dayId}:${todayStr()}`);
+  const draftKey = draftKeyRef.current;
   const restored = useMemo(() => readDraft(draftKey), [draftKey]);
 
   const [warmupChecked, setWarmupChecked] = useState(() => (restored && restored.warmupChecked) || {});
@@ -4200,6 +4623,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   {collapsedSummary && <div className="last-logged" style={{ marginTop: 2 }}>{collapsedSummary}</div>}
                   {exOpen && (<>
                   <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
+                  {en.target.tempo ? <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{TEMPO_LEGEND}</div> : null}
                   {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
                   {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
                   {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
@@ -4294,7 +4718,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                         <div className="set-grid-row">
                           <span className="set-num">{setIdx + 1}</span>
                           {needsWeight(displayName) ? (
-                            <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder={targetWeight ? String(targetWeight) : "pounds"} aria-label="Weight in pounds" value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
+                            <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder={targetWeight ? String(targetWeight) : "pounds"} aria-label={`${displayName}, set ${setIdx + 1}, weight in pounds`} value={s.weight} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "weight", e.target.value)} />
                           ) : (
                             <span aria-hidden="true" />
                           )}
@@ -4325,8 +4749,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
         )}
       </div>
 
-      <div className="log-exercise"><div className="log-exercise-head"><div className="log-exercise-name">Session Rate of Perceived Exertion</div></div><SliderRow label="Overall difficulty" value={rpe} max={10} onChange={setRpe} /></div>
-      <div className="log-exercise"><div className="log-exercise-head"><div className="log-exercise-name">Notes</div></div><textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it felt, anything to flag…" /></div>
+      <div className="log-exercise"><div className="log-exercise-head"><h3 className="log-exercise-name">Session Rate of Perceived Exertion</h3></div><SliderRow label="Overall difficulty" value={rpe} max={10} onChange={setRpe} /></div>
+      <div className="log-exercise"><div className="log-exercise-head"><h3 className="log-exercise-name">Notes</h3></div><textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it felt, anything to flag…" /></div>
       <button className="btn-primary wide" style={{ margin: "16px 0 40px" }} onClick={finishWorkout} disabled={savingSession}>{savingSession ? "Saving…" : "Finish & save day"}</button>
     </ModalShell>
   );
@@ -4448,7 +4872,7 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
         <div className="finish-summary">
           <div className="finish-stat"><div className="finish-stat-value">{Math.round(totalSeconds / 60)} minutes</div><div className="finish-stat-label">Total mobility time</div></div>
           <div className="log-exercise">
-            <div className="log-exercise-head"><div className="log-exercise-name">Session Notes</div></div>
+            <div className="log-exercise-head"><h3 className="log-exercise-name">Session Notes</h3></div>
             <textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did mobility feel? Anything tight, anything to flag…" />
           </div>
           <button className="btn-primary wide" onClick={async () => { const r = await onSave({ id: uid(), date: todayStr(), totalSeconds, notes }); if (r && r.ok === false) return; onClose(); }}>Save & finish</button>
@@ -4466,7 +4890,7 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
       <div className="muted" style={{ marginBottom: 8 }}>Segment {idx + 1} of {segments.length} — {Math.round(elapsedBefore / 60)} of {Math.round(totalSeconds / 60)} minutes elapsed</div>
       <div className="card" style={{ textAlign: "center" }}>
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
-        <div className="log-exercise-name" style={{ fontSize: 20, marginTop: 6, marginBottom: 6 }}>{seg.name}</div>
+        <h3 className="log-exercise-name" style={{ fontSize: 20, marginTop: 6, marginBottom: 6 }}>{seg.name}</h3>
         {seg.detail && <p className="muted" style={{ marginBottom: 10 }}>{seg.detail}</p>}
         <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock canEdit={isCoach} url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
         <div className="mobility-timer">{mins}:{String(secs).padStart(2, "0")}</div>
@@ -4745,7 +5169,7 @@ function MEPoolEditor({ client, onClose, onPersist }) {
 
   const renderPool = (poolKey, label) => (
     <div className="edit-ex-card">
-      <div className="log-exercise-name" style={{ marginBottom: 8 }}>{label}</div>
+      <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>{label}</h3>
       {conj[poolKey].map((item, idx) => (
         <div key={idx} className="edit-ex-card">
           <div className="edit-ex-row">
@@ -4814,7 +5238,13 @@ function EditableLogBody({ log, client, onPersist }) {
     draft.forEach((e) => e.sets.forEach((s) => { totalVolume += (Number(s.weight) || 0) * (Number(s.reps) || 0); }));
     const updatedLog = { ...log, exercises: draft, totalVolume: Math.round(totalVolume) };
     const updatedLogs = client.logs.map((l) => (l.id === log.id ? updatedLog : l));
-    await onPersist({ ...client, logs: updatedLogs });
+    const result = await onPersist({ ...client, logs: updatedLogs });
+    // Only claim it saved if it saved. Telling someone their correction landed
+    // when it didn't is worse than showing them the failure.
+    if (result && result.ok === false) {
+      emitToast({ kind: "error", message: "Couldn't save that edit — check your connection and try again.", autoDismissMs: 6000 });
+      return;
+    }
     setEditing(false);
     setSaved(true);
   };
@@ -4825,13 +5255,13 @@ function EditableLogBody({ log, client, onPersist }) {
         <div className="history-date" style={{ marginBottom: 8 }}>Editing — Week {log.weekNumber}, Day {log.dayLabel}</div>
         {draft.map((e, exIdx) => (
           <div key={e.exerciseId} className="edit-ex-card">
-            <div className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</div>
-            <div className="set-grid-header"><span>Set</span><span>{needsWeight(e.name) ? "Weight" : ""}</span><span>{exerciseUnitLabel(e.name)}</span><span>Effort</span></div>
+            <h3 className="log-exercise-name" style={{ fontSize: 13.5, marginBottom: 6 }}>{e.name}</h3>
+            <div className="set-grid-header" style={{ gridTemplateColumns: "26px 1fr 1fr 1fr" }}><span>Set</span><span>{needsWeight(e.name) ? "Weight" : ""}</span><span>{exerciseUnitLabel(e.name)}</span><span>Effort</span></div>
             {e.sets.map((s, setIdx) => (
-              <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "24px 1fr 1fr 1fr" }}>
+              <div className="set-grid-row" key={setIdx} style={{ gridTemplateColumns: "26px 1fr 1fr 1fr" }}>
                 <span className="set-num">{setIdx + 1}</span>
                 {needsWeight(e.name) ? (
-                  <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label="Weight in pounds" value={s.weight} onChange={(ev) => updateDraftSet(exIdx, setIdx, "weight", ev.target.value)} />
+                  <input type="number" step="0.1" inputMode="decimal" min="0" max="2000" placeholder="pounds" aria-label={`Set ${setIdx + 1}, weight in pounds`} value={s.weight} onChange={(ev) => updateDraftSet(exIdx, setIdx, "weight", ev.target.value)} />
                 ) : (
                   <span aria-hidden="true" />
                 )}
@@ -5071,7 +5501,7 @@ function BJJNotesTab({ client, onPersist }) {
 
       {adding && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div className="log-exercise-name" style={{ marginBottom: 8 }}>{editingId ? "Edit Entry" : "New Entry"}</div>
+          <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>{editingId ? "Edit Entry" : "New Entry"}</h3>
           <label className="labeled-input">
             <span>What I learned in class today</span>
             <textarea className="notes-box" rows={4} value={learned} onChange={(e) => setLearned(e.target.value)} placeholder="New sweep from De La Riva, a detail on my armbar setup, a rolling tip from a training partner..." />
@@ -5127,7 +5557,7 @@ function DetailBarToggle({ label, entries, dataKey, domain }) {
         <div style={{ marginTop: 10 }}>
           <ResponsiveContainer width="100%" height={Math.max(140, entries.length * 24)}>
             <BarChart data={entries} layout="vertical" margin={{ left: 10, right: 20 }}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+              <CartesianGrid stroke="var(--border)" />
               <XAxis type="number" stroke="var(--text-dim)" fontSize={10} domain={domain} />
               <YAxis type="category" dataKey="date" stroke="var(--text-dim)" fontSize={10} width={56} />
               <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
@@ -5142,13 +5572,13 @@ function DetailBarToggle({ label, entries, dataKey, domain }) {
 
 function ProgressTab({ client }) {
   const CHART_WINDOW = 90;
-  const bwData = (client.bodyweightLog || []).map((b) => ({ date: fmtDate(b.date), weight: b.weight })).slice(-CHART_WINDOW);
+  const bwData = (client.bodyweightLog || []).map((b) => ({ date: b.date, weight: b.weight })).slice(-CHART_WINDOW);
   const readinessEntries = Object.values(client.readiness || {}).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-CHART_WINDOW);
-  const readinessData = readinessEntries.map((r) => ({ date: fmtDate(r.date), score: r.color === "GREEN" ? 3 : r.color === "YELLOW" ? 2 : 1 }));
+  const readinessData = readinessEntries.map((r) => ({ date: r.date, score: r.color === "GREEN" ? 3 : r.color === "YELLOW" ? 2 : 1 }));
   // Only entries that actually carry each row, so the old and new shapes each
   // chart their own history instead of plotting zeros where a row didn't exist.
-  const feltReadyData = readinessEntries.filter((r) => r.readiness != null).map((r) => ({ date: fmtDate(r.date), readiness: Number(r.readiness) }));
-  const sorenessData = readinessEntries.filter((r) => r.readiness == null && r.soreness != null).map((r) => ({ date: fmtDate(r.date), soreness: Number(r.soreness) }));
+  const feltReadyData = readinessEntries.filter((r) => r.readiness != null).map((r) => ({ date: r.date, readiness: Number(r.readiness) }));
+  const sorenessData = readinessEntries.filter((r) => r.readiness == null && r.soreness != null).map((r) => ({ date: r.date, soreness: Number(r.soreness) }));
   const totalBwEntries = (client.bodyweightLog || []).length;
   const totalReadinessEntries = Object.keys(client.readiness || {}).length;
 
@@ -5181,7 +5611,7 @@ function ProgressTab({ client }) {
       <div className="ring-row">
         <MetricRing label="Readiness" value={readinessPct === null ? 0 : readinessPct}
           display={readinessPct === null ? "—" : `${readinessPct}%`}
-          color={latestReadiness ? READINESS_COPY[latestReadiness.color].color : "var(--text-dim)"}
+          color={latestReadiness ? readinessCopyFor(latestReadiness).color : "var(--text-dim)"}
           sublabel={latestReadiness ? "Last check-in" : "No check-in yet"} />
         <MetricRing label="This week" value={sessionsThisWeek} max={perWeekTarget}
           display={`${sessionsThisWeek}/${perWeekTarget}`} sublabel="Sessions" />
@@ -5268,7 +5698,7 @@ function PRsTab({ client }) {
         const unit = exerciseUnit(name);
         const useWeight = needsWeight(name);
         const history = open ? exerciseHistorySeries(client, name) : [];
-        const chartData = history.map((h) => ({ date: fmtDate(h.date), value: h.value, reps: h.reps, isPR: h.isPR }));
+        const chartData = history.map((h) => ({ date: h.date, value: h.value, reps: h.reps, isPR: h.isPR }));
         return (
           <div key={name} className="pr-card-wrap">
             <button className="pr-card-v2" onClick={() => setOpenName(open ? null : name)}>
@@ -5289,7 +5719,7 @@ function PRsTab({ client }) {
                     <div style={{ height: 190 }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+                          <CartesianGrid stroke="var(--border)" />
                           <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={11} />
                           <YAxis stroke="var(--text-dim)" fontSize={11} domain={["auto", "auto"]} label={useWeight ? { value: "pounds", angle: -90, position: "insideLeft", fill: "var(--text-dim)", fontSize: 10 } : undefined} />
                           <Tooltip
@@ -5385,7 +5815,7 @@ function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose })
 /* ============================== SHARED UI ============================== */
 
 function Card({ title, subtitle, right, children }) {
-  return <div className="card"><div className="card-head"><div><div className="card-title">{title}</div>{subtitle && <div className="muted" style={{ fontSize: 13 }}>{subtitle}</div>}</div>{right}</div>{children}</div>;
+  return <div className="card"><div className="card-head"><div><h2 className="card-title">{title}</h2>{subtitle && <div className="muted" style={{ fontSize: 13 }}>{subtitle}</div>}</div>{right}</div>{children}</div>;
 }
 function StatChip({ label, value }) { return <div className="stat-chip"><div className="stat-chip-value">{value}</div><div className="stat-chip-label">{label}</div></div>; }
 function LoadingState({ label }) {
@@ -5433,17 +5863,38 @@ function ModalShell({ title, children, onClose, fullscreen, headerRight, headerL
     return () => document.removeEventListener("keydown", onKey);
   }, [dismissOnEscape, onClose]);
   // Move focus into the dialog so a keyboard or screen-reader user isn't left
-  // behind on the page underneath it.
-  useEffect(() => { (closeRef.current || headRef.current)?.focus(); }, []);
+  // behind on the page underneath it, keep Tab inside it while it's open, and
+  // hand focus back to whatever opened it on the way out.
+  const boxRef = useRef(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    (closeRef.current || headRef.current)?.focus();
+    const onKey = (e) => {
+      if (e.key !== "Tab" || !boxRef.current) return;
+      const focusable = boxRef.current.querySelectorAll(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (opener && typeof opener.focus === "function" && document.contains(opener)) opener.focus();
+    };
+  }, []);
   return (
     <div className={`modal-overlay ${fullscreen ? "fullscreen" : ""}`}>
-      <div className="modal-box" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : undefined}>
+      <div className="modal-box" ref={boxRef} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : (typeof title === "object" ? "Dialog" : undefined)}>
         <div className="modal-head">
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: hideClose ? 42 : undefined }}>
             {!hideClose && <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>}
             {headerLeftExtra}
           </div>
-          <div className="modal-title" ref={headRef} tabIndex={-1}>{title}</div>
+          <h2 className="modal-title" ref={headRef} tabIndex={-1}>{title}</h2>
           <div style={{ minWidth: 42, display: "flex", justifyContent: "flex-end" }}>{headerRight}</div>
         </div>
         <div className="modal-content">{children}</div>
@@ -5457,10 +5908,10 @@ function ModalShell({ title, children, onClose, fullscreen, headerRight, headerL
 function GlobalStyle() {
   return (
     <style>{`
-      .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
+      .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#c9b400; }
+      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --field-border:#888e97; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#7d6f00; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -5513,17 +5964,19 @@ function GlobalStyle() {
       .milestone-row.achieved { opacity: 1; border-color: var(--green); }
       .milestone-emoji { font-size: 26px; flex-shrink: 0; }
       .milestone-name { font-weight: 600; font-size: 13.5px; }
-      .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
+      .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
       .icon-btn.small { width: 34px; height: 34px; }
       .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); }
-      .nav-btn { flex: 1; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 10px; font-size: 12px; cursor: pointer; position: relative; }
+      .nav-btn { flex: 1; min-width: 0; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 10px; font-size: 11.5px; line-height: 1.1; white-space: nowrap; cursor: pointer; position: relative; }
+      .nav-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+      @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } }
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
       .stat-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
       .hero-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
-      .hero-nav-btn:disabled { opacity: 0.35; }
+      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
+      .hero-nav-btn:disabled { opacity: 0.55; }
       .hero-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
       .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
       .hero-select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5550,27 +6003,36 @@ function GlobalStyle() {
       .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text-dim); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
+      /* Form fields need a 3:1 edge against their background. --border is 1.4:1,
+         which is right for a card outline and invisible on an input you are
+         tapping at arm's length in a bright gym. */
+      .set-grid-row input, .labeled-input input, .labeled-input textarea, .notes-box,
+      .bw-input, .edit-input, .select-input, .section-check-box, .sig-input {
+        border-color: var(--field-border);
+      }
       .icon-btn-badged { position: relative; overflow: visible; }
       .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
       .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
       .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .pill-paid { background: var(--green); color: var(--bg); }
-      .pill-unpaid { background: var(--amber); color: var(--bg); }
+      .pill-unpaid { background: var(--amber); color: #000000; }
       .pill-alert { background: var(--red); color: #ffffff; }
       .intent-box { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .nudge-card { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .error-box { background: color-mix(in srgb, var(--red) 14%, transparent); border: 1px solid var(--red); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .success-box { background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid var(--green); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
       .day-nav-row { display: flex; align-items: center; gap: 8px; }
-      .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
-      .day-nav-btn:disabled { opacity: 0.3; cursor: default; }
+      .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
+      .day-nav-btn:disabled { opacity: 0.55; cursor: default; }
       .jump-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; max-height: 240px; overflow-y: auto; }
       .jump-week-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--border); }
       .jump-week-row:last-child { border-bottom: none; }
       .jump-week-label { font-size: 12px; color: var(--text-dim); }
       .jump-day-row { display: flex; gap: 6px; }
-      .jump-day-btn { width: 36px; height: 36px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
+      .jump-day-btn { width: 44px; height: 44px; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
       .jump-day-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .jump-day-btn.is-today:not(.active) { border-color: var(--accent); color: var(--accent); }
       .day-intent-preview { font-size: 13px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; }
@@ -5582,7 +6044,7 @@ function GlobalStyle() {
       .section-subheading { font-size: 12px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
       .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px 18px; font-weight: 800; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
-      .btn-primary:disabled { opacity: 0.4; }
+      .btn-primary:disabled { opacity: 0.6; }
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
@@ -5601,7 +6063,7 @@ function GlobalStyle() {
       .sig-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }
       .sig-input { width: 100%; box-sizing: border-box; background: transparent; border: none; outline: none; color: var(--text); font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; padding: 0 2px 6px; min-height: 48px; }
       .sig-input::placeholder { color: var(--text-dim); opacity: 0.45; }
-      .sig-input:focus-visible { outline: none; }
+      .sig-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
       .sig-block:focus-within .sig-rule { background: var(--accent); }
       .sig-signed { font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; color: var(--text); padding: 0 2px 6px; min-height: 48px; word-break: break-word; }
       .sig-rule { height: 1px; background: var(--border); margin-bottom: 8px; transition: background 0.15s ease; }
@@ -5609,8 +6071,9 @@ function GlobalStyle() {
       .bjj-toggle { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 16px; cursor: pointer; }
       .bjj-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
       .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
-      .modal-box { background: var(--bg); width: 100%; max-width: 480px; max-height: 88vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden; }
-      .modal-overlay.fullscreen .modal-box { max-height: 100vh; height: 100vh; border-radius: 0; }
+      .modal-box { background: var(--bg); width: 100%; max-width: 480px; max-height: 88dvh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+      .modal-overlay.fullscreen .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; }
+      .modal-overlay.fullscreen .modal-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
       .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px; }
       .modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 16px; flex: 1; }
       .modal-content { padding: 16px; overflow-y: auto; flex: 1; }
@@ -5622,7 +6085,7 @@ function GlobalStyle() {
       .progress-circle-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--text); }
       .rest-banner { display: flex; align-items: flex-start; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 10px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; }
       .rest-banner span { flex: 1; }
-      .rest-dismiss { background: rgba(0,0,0,0.18); border: none; border-radius: 999px; width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: inherit; cursor: pointer; }
+      .rest-dismiss { background: rgba(0,0,0,0.18); border: none; border-radius: 999px; width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: inherit; cursor: pointer; }
       .log-exercise { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
       .log-exercise-head { margin-bottom: 10px; }
       .log-exercise-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -5647,7 +6110,7 @@ function GlobalStyle() {
       .pct-1rm-row { font-size: 13px; color: var(--accent); margin: 4px 0 5px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
-      .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
+      .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .link-edit-btn { background: none; border: none; color: var(--text-dim); font-size: 12px; text-decoration: underline; cursor: pointer; }
       .add-link-btn { background: none; border: 1px dashed var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; padding: 3px 10px; cursor: pointer; margin-top: 8px; }
       .video-edit-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
@@ -5672,7 +6135,7 @@ function GlobalStyle() {
       .set-grid-header { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
-      .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 4px; font-size: 15px; font-weight: 700; width: 100%; text-align: center; }
+      .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px 4px; min-height: 44px; font-size: 16px; font-weight: 700; width: 100%; text-align: center; }
       .set-grid-row input:focus { border-color: var(--accent); outline: none; }
       .set-grid-row input[type="number"]::-webkit-outer-spin-button,
       .set-grid-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -5757,7 +6220,8 @@ function GlobalStyle() {
       .radio-group { display: flex; gap: 8px; }
       .radio-pill { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; font-size: 12.5px; cursor: pointer; color: var(--text-dim); display: flex; align-items: center; justify-content: center; }
       .radio-pill.active { border-color: var(--accent); color: var(--accent); }
-      .radio-pill input { display: none; }
+      .radio-pill input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+      .radio-pill:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
       .mobility-type-tag { display: inline-block; font-size: 12px; letter-spacing: 0.04em; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 10px; }
       .mobility-timer { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 48px; color: var(--accent); }
       .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -5820,7 +6284,7 @@ function GlobalStyle() {
       .heatmap-days { display: flex; flex-direction: column; gap: 3px; margin-right: 2px; }
       .heatmap-dayname { font-size: 9px; color: var(--text-dim); height: 12px; line-height: 12px; width: 10px; }
       .heatmap-col { display: flex; flex-direction: column; gap: 3px; }
-      .heatmap-cell { width: 12px; height: 12px; border-radius: 3px; display: block; flex-shrink: 0; background: var(--card); }
+      .heatmap-cell { width: 12px; height: 12px; border-radius: 3px; display: block; flex-shrink: 0; background: color-mix(in srgb, var(--text) 9%, var(--bg)); }
       .heatmap-cell.is-rest { box-shadow: inset 0 0 0 1px var(--border); }
       .heatmap-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 11.5px; color: var(--text-dim); }
 
@@ -5836,7 +6300,7 @@ function GlobalStyle() {
       .toast-host { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; width: calc(100% - 32px); max-width: 448px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
       .toast { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text); box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5); }
       .toast-error { border-left-color: #ff6b6b; }
-      .toast-action { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; min-height: 30px; }
+      .toast-action { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 11px; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; min-height: 44px; }
       .toast-dismiss { background: none; border: none; color: var(--text-dim); cursor: pointer; display: flex; padding: 6px; flex-shrink: 0; }
       @media (prefers-reduced-motion: no-preference) { .toast { animation: toast-in 0.2s ease-out; } }
       @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -5893,9 +6357,15 @@ function AuthScreen() {
           if (newUserId && COACH_USER_ID && newUserId !== COACH_USER_ID) {
             // Best-effort: link this new client to the coach so they show up in the
             // Coach Dashboard automatically. Never blocks or fails signup if it errors.
-            try {
-              await supabase.from("client_links").insert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email });
-            } catch {}
+            // supabase-js returns { error }, it does not throw — so a bare
+            // try/catch here silently swallowed every failure. And with email
+            // confirmation on there is no session yet, so RLS rejects this
+            // insert outright. Either way the athlete would never appear in the
+            // coach dashboard, pay, and then hard-lock at week 2. The upsert on
+            // load below is the real fix; this is just the fast path.
+            const { error: linkErr } = await supabase.from("client_links")
+              .upsert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email }, { onConflict: "client_user_id" });
+            if (linkErr) console.warn("client_links insert deferred to first sign-in:", linkErr.message);
           }
           setInfo("Account created. If we ask you to confirm your email, open the link we just sent you and then come back and sign in. Otherwise you'll be taken straight to your program.");
         }
@@ -5961,8 +6431,8 @@ function AuthScreen() {
           {mode === "signin" && (
             <button type="button" className="link-btn" style={{ display: "block", marginBottom: 12 }} onClick={() => { setMode("forgot"); setError(""); setInfo(""); }}>Forgot password?</button>
           )}
-          {error && <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>{error}</div>}
-          {info && <div className="adjust-box" style={{ borderColor: "var(--green)", marginBottom: 12 }}>{info}</div>}
+          {error && <div className="error-box" role="alert">{error}</div>}
+          {info && <div className="success-box" role="status">{info}</div>}
           <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create Account" : mode === "forgot" ? "Send Reset Link" : "Sign In"}</button>
         </form>
         {mode === "forgot" ? (
@@ -6006,7 +6476,7 @@ function ResetPasswordScreen({ onDone }) {
             <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />New password</span>
             <input type="password" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
           </label>
-          {error && <div className="adjust-box" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>{error}</div>}
+          {error && <div className="error-box" role="alert">{error}</div>}
           <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : "Update Password"}</button>
         </form>
       </div>
