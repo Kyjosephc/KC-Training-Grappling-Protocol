@@ -672,6 +672,7 @@ const VIDEO_LIBRARY = {
   "band external rotation at 90/90": "https://www.youtube.com/shorts/PTi9pfttH64",
   "ankle rocks": "https://www.youtube.com/shorts/I-Hgtc2e2fU",
   "rack pec opener": "https://www.youtube.com/shorts/PQJ4tDLrf4Q",
+  "foam roller circuit": "https://www.youtube.com/shorts/pH0rGQ5qwL8",
   "broad jumps": "https://www.youtube.com/shorts/v0yrBWA3eEs",
   "standing barbell overhead press": "https://www.youtube.com/watch?v=cGnhixvC8uA",
   "upright shoulder overhead press": "https://www.youtube.com/watch?v=cGnhixvC8uA",
@@ -1272,21 +1273,6 @@ const conjugateProgram = {
   ],
 };
 
-function rigoWarmup() {
-  return [
-    { id: uid(), block: "Movement Prep", duration: "8 to 10 minutes", items: [
-      { id: uid(), name: "Heel to Toe Walks", detail: "10 meters", videoUrl: "" },
-      { id: uid(), name: "Heel Walks", detail: "20 meters", videoUrl: "" },
-      { id: uid(), name: "Toe Walks", detail: "20 meters", videoUrl: "" },
-      { id: uid(), name: "Banded Lateral Step", detail: "20 meters both ways", videoUrl: "" },
-      { id: uid(), name: "Banded Sumo Steps", detail: "20 meters both ways", videoUrl: "" },
-      { id: uid(), name: "Single Leg Glute Bridge", detail: "10 reps each side", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
-      { id: uid(), name: "Bulldog Circuit", detail: "5 reps each way", videoUrl: "" },
-      { id: uid(), name: "Box Jumps", detail: "5 reps", videoUrl: "" },
-      { id: uid(), name: "Arm Swings Forward & Backward", detail: "30 reps each way", videoUrl: "" },
-    ]},
-  ];
-}
 // Builds one superset pair as two adjacent exercises sharing a numbered A/B label, RPE-driven (not %1RM),
 // with tempo notation exactly as in the source program (eccentric/pause/concentric, X = explosive).
 // Whether a percentage-of-1RM target means anything for this exercise. Bands,
@@ -1485,20 +1471,43 @@ function buildProgramCContent() {
     ]
   );
 
-  return { phases: [phase1, deloadPhase(4, "the first block"), phase2, deloadPhase(8, "the second block"), phase3, deloadPhase(12, "the speed-strength block")], warmup: rigoWarmup() };
+  return { phases: [phase1, deloadPhase(4, "the first block"), phase2, deloadPhase(8, "the second block"), phase3, deloadPhase(12, "the speed-strength block")], warmup: defaultWarmup() };
 }
+
+// One warm-up, used by every program. Built on Ian Jeffreys' RAMP structure —
+// Raise, Activate, Mobilise, Potentiate — so each phase feeds the next rather
+// than being a pile of drills. Bumping WARMUP_VERSION replaces it for athletes
+// who already have the old one saved against their program.
+const WARMUP_VERSION = 2;
 
 function defaultWarmup() {
   return [
-    { id: uid(), block: "General Raise", duration: "3 to 5 minutes", items: [
-      { id: uid(), name: "Assault Bike or Treadmill, light pace", detail: "Build to a light sweat, nasal breathing only", videoUrl: "" },
+    { id: uid(), block: "Raise", duration: "4 to 5 minutes", items: [
+      { id: uid(), name: "Assault Bike", detail: "3 minutes. Easy for the first minute, moderate for the second, then add three or four 5-second surges. Drive the arms through the handles rather than letting them get pushed around — that is the half of you a treadmill never warms up. The cue is temperature, not the clock: you want to be lightly sweating before you touch a bar. If you finish this breathing hard, you went too hard.", videoUrl: "" },
+      { id: uid(), name: "Foam Roller Circuit", detail: "About 30 seconds per area, roughly 90 seconds total. Keep moving rather than parking on a tender spot, and do it now while the tissue is warm — rolling cold is less comfortable and does less. This is a warm-up, not a massage.", videoUrl: "https://www.youtube.com/shorts/pH0rGQ5qwL8", videoUrl2: "https://www.youtube.com/shorts/hnWNTEntonc", videoUrl3: "https://www.youtube.com/shorts/bomnVey6IrA" },
     ]},
-    { id: uid(), block: "Dynamic Mobility", duration: "5 to 6 minutes", items: [
-      { id: uid(), name: "World's Greatest Stretch", detail: "5 reps per side", videoUrl: "https://www.youtube.com/watch?v=-CiWQ2IvY34" },
-      { id: uid(), name: "Leg Swings, front-to-back and lateral", detail: "10 reps per direction per side", videoUrl: "https://www.youtube.com/shorts/wF10oYsLUw0" },
-      { id: uid(), name: "Hip Circles", detail: "8 reps per direction per side", videoUrl: "https://www.youtube.com/shorts/P8P1E_IosqA" },
-      { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "8 reps per side", videoUrl: "https://www.youtube.com/shorts/Lfn-Fv_xmmQ" },
-      { id: uid(), name: "Cable Pull-Apart (light, rope attachment)", detail: "15 reps", videoUrl: "https://www.youtube.com/shorts/Ol-QWheu9Yg" },
+    { id: uid(), block: "Activate", duration: "3 minutes", items: [
+      { id: uid(), name: "Banded Lateral Step", detail: "30 seconds each direction. Band above the knees, small athletic stance, stay low — no bobbing up and down between steps.", videoUrl: "https://www.youtube.com/watch?v=RW4ZvH22l48" },
+      { id: uid(), name: "Banded Sumo Steps", detail: "30 seconds each direction. Toes slightly out, drive the knees against the band the whole way.", videoUrl: "https://www.youtube.com/shorts/MeCwofJYAzo" },
+      { id: uid(), name: "Single Leg Glute Bridge", detail: "8 reps a side. Ribs down, squeeze at the top for a beat. If you feel it in your hamstring cramping, you are pushing through the heel too far forward.", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
+      { id: uid(), name: "Band Pull-Apart", detail: "15 reps. Light band, straight arms, pull to the chest and squeeze the shoulder blades together.", videoUrl: "https://www.youtube.com/shorts/SuvO4TBwSu4" },
+      { id: uid(), name: "Overhead Band Pass", detail: "15 reps. Wide grip to start — go only as narrow as you can without the shoulders shrugging or the ribs flaring. Narrower is not better here.", videoUrl: "https://www.youtube.com/shorts/07lFW_Ulz6E" },
+      { id: uid(), name: "Band External Rotation at 90/90", detail: "12 reps a side, light band. Elbow stays pinned at shoulder height. This is the cuff work that holds the shoulder centred under everything you are about to press — light and controlled, not loaded.", videoUrl: "https://www.youtube.com/shorts/PTi9pfttH64" },
+    ]},
+    { id: uid(), block: "Mobilise", duration: "4 to 5 minutes", items: [
+      { id: uid(), name: "World's Greatest Stretch", detail: "3 reps a side. Hip flexor, adductor and thoracic rotation in one movement — move through it rather than holding.", videoUrl: "https://www.youtube.com/watch?v=-CiWQ2IvY34" },
+      { id: uid(), name: "Leg Swings, front-to-back and lateral", detail: "10 reps each direction, each leg. Start small and let the range grow — do not throw the first one.", videoUrl: "https://www.youtube.com/shorts/wF10oYsLUw0" },
+      { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "6 reps a side. Hand behind the head, rotate from the mid-back and follow the elbow with your eyes. Rotation you do not have here gets taken from your lower back instead.", videoUrl: "https://www.youtube.com/shorts/Lfn-Fv_xmmQ" },
+      { id: uid(), name: "Ankle Rocks (knee-to-wall)", detail: "30 seconds. Heel stays down, drive the knee forward over the toes. Ankle range is what lets you squat and land properly, and it is the first thing that stiffens up.", videoUrl: "https://www.youtube.com/shorts/I-Hgtc2e2fU" },
+      { id: uid(), name: "Heel Walks", detail: "A short pass. Toes pulled up, walk on the heels.", videoUrl: "https://www.youtube.com/shorts/h4V7X5ZDnU0" },
+      { id: uid(), name: "Toe Walks", detail: "A short pass. Up on the toes, tall through the ankles.", videoUrl: "https://www.youtube.com/watch?v=3d2S7a3D9YY" },
+      { id: uid(), name: "Heel to Toe Walks", detail: "A short pass. Roll heel to toe deliberately, one foot directly in front of the other.", videoUrl: "https://www.youtube.com/shorts/d1fpuaq6RVg" },
+      { id: uid(), name: "Pogo Hops", detail: "10 quick reps to finish the ankle work. Short ground contacts, stiff ankles, barely bend the knees. Think bouncing, not jumping.", videoUrl: "https://www.youtube.com/shorts/L_khHgMz9uU" },
+      { id: uid(), name: "Rack Pec Opener", detail: "15 seconds at low, mid and high arm positions, both sides. Forearm on the upright, rotate away. The three heights hit the three lines of the chest — one arm position will not reach all of them. Keep each hold short; this is opening, not stretching for range.", videoUrl: "https://www.youtube.com/shorts/PQJ4tDLrf4Q" },
+    ]},
+    { id: uid(), block: "Potentiate", duration: "1 minute", items: [
+      { id: uid(), name: "Box Jumps", detail: "3 reps. Step down off the box every single rep — never jump down. Jumping down roughly doubles the landing force for no added benefit and is the most common way people hurt an Achilles or patellar tendon on this.", videoUrl: "https://www.youtube.com/shorts/bCNpPn5b3Y4" },
+      { id: uid(), name: "Broad Jumps", detail: "3 reps. Stick the landing and reset fully between each one. Three good jumps prime you; ten leave you worse off for the session. Land soft with the knees tracking over the toes.", videoUrl: "https://www.youtube.com/shorts/v0yrBWA3eEs" },
     ]},
   ];
 }
@@ -1805,6 +1814,11 @@ function videoRegistry() {
   return reg;
 }
 
+function finishProgram(program) {
+  if (program) program.warmupVersion = WARMUP_VERSION;
+  return backfillVideos(program);
+}
+
 function backfillVideos(program) {
   if (!program || HARVESTING) return program;
   // A coach can attach a video to one athlete's program, so that athlete's own
@@ -1828,7 +1842,7 @@ function backfillVideos(program) {
 
 function buildProgramVariant(variant) {
   if (variant === "C") {
-    return backfillVideos(sequenceForFreshness(buildTwoDayHybridContent()));
+    return finishProgram(sequenceForFreshness(buildTwoDayHybridContent()));
   }
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
@@ -1864,7 +1878,7 @@ function buildProgramVariant(variant) {
     base.phases = built.phases;
     base.warmup = built.warmup;
   }
-  return backfillVideos(base);
+  return finishProgram(base);
 }
 
 function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, promoDiscount, weeklySchedule, waiver }) {
@@ -2577,6 +2591,13 @@ function MainApp({ userId, onSignOut }) {
         // Retired segments are dropped from athletes who already had them saved,
         // since the cool-down lives on each client's own copy of the program.
         c.program.mobility = c.program.mobility.filter((s) => !RETIRED_MOBILITY.has(normalizeExerciseKey(s.name)));
+        // Same for the warm-up: every program now shares one, so an athlete
+        // still holding an older version gets it replaced a single time. Once
+        // stamped, a coach's own edits to that client's warm-up survive.
+        if ((c.program.warmupVersion || 0) < WARMUP_VERSION) {
+          c.program.warmup = defaultWarmup();
+          c.program.warmupVersion = WARMUP_VERSION;
+        }
         // Swap-pool and cross-variant copies of an exercise were saved without
         // the video attached to the original, so an existing athlete is swept
         // on load rather than having to rebuild their program.
@@ -4877,11 +4898,11 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     }
     onUpdateProgram(newProgram);
   };
-  const setWarmupVideo = (itemId, url) => {
+  const setWarmupVideo = (itemId, url, field = "videoUrl") => {
     const newProgram = JSON.parse(JSON.stringify(client.program));
     for (const block of newProgram.warmup) {
       const item = block.items.find((i) => i.id === itemId);
-      if (item) item.videoUrl = url;
+      if (item) item[field] = url;
     }
     onUpdateProgram(newProgram);
   };
@@ -5014,7 +5035,14 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                 <div style={{ flex: 1 }}>
                   <div className="warmup-item-name">{item.name}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{item.detail}</div>
-                  <VideoLinkBlock canEdit={isCoach} url={item.videoUrl || lookupVideo(item.name)} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")} />
+                  <VideoLinkBlock canEdit={isCoach} url={item.videoUrl || lookupVideo(item.name)} onSave={(url) => setWarmupVideo(item.id, url)} onDelete={() => setWarmupVideo(item.id, "")}
+                    label={item.videoUrl2 !== undefined ? "Demo 1" : undefined} />
+                  {item.videoUrl2 !== undefined && (
+                    <VideoLinkBlock canEdit={isCoach} url={item.videoUrl2} onSave={(url) => setWarmupVideo(item.id, url, "videoUrl2")} onDelete={() => setWarmupVideo(item.id, "", "videoUrl2")} label="Demo 2" />
+                  )}
+                  {item.videoUrl3 !== undefined && (
+                    <VideoLinkBlock canEdit={isCoach} url={item.videoUrl3} onSave={(url) => setWarmupVideo(item.id, url, "videoUrl3")} onDelete={() => setWarmupVideo(item.id, "", "videoUrl3")} label="Demo 3" />
+                  )}
                 </div>
               </div>
             ))}
