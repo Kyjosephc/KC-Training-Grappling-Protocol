@@ -712,14 +712,15 @@ const VIDEO_LIBRARY = {
   "box jumps": "https://www.youtube.com/shorts/bCNpPn5b3Y4",
   "bulldog circuit": "https://www.youtube.com/watch?v=JuQcNsyMolY",
   "child's pose with lateral reach": "https://www.youtube.com/watch?v=5uQ2Xuc3LiE",
-  "couch stretch": "https://www.youtube.com/shorts/TIJu5aWPke0",
+  "couch stretch": "https://www.youtube.com/watch?v=QiKl5UoiG5c",
   "deep squat hold": "https://www.youtube.com/shorts/LPa3LKlQ7eU",
   "figure-4 / pigeon stretch": "https://www.youtube.com/shorts/pjmR5Kacu1w",
   "heel walks": "https://www.youtube.com/shorts/h4V7X5ZDnU0",
   "heel to toe walks": "https://www.youtube.com/shorts/d1fpuaq6RVg",
   "open book thoracic rotation": "https://www.youtube.com/shorts/SKapoHxQxuk",
-  "overhead lat and shoulder stretch": "https://www.youtube.com/shorts/_q_Y5jElgrU",
+  "overhead lat and shoulder stretch": "https://www.youtube.com/shorts/1L0PB5KrIt8",
   "straddle hamstring and adductor hold": "https://www.youtube.com/shorts/oH53L8OMTCk",
+  "wrist flexor and extensor stretch": "https://www.youtube.com/shorts/fJzrvpYbkVA",
   "toe walks": "https://www.youtube.com/watch?v=3d2S7a3D9YY",
   "barbell good morning": "https://www.youtube.com/shorts/5DonmXxz6Qk",
   "bent over barbell row": "https://www.youtube.com/watch?v=bm0_q9bR_HA",
@@ -1496,8 +1497,13 @@ function defaultWarmup() {
   ];
 }
 
+// Segments pulled from the cool-down. Each client carries their own copy of the
+// program, so dropping one from the default is not enough on its own — these are
+// filtered out on load as well.
+const RETIRED_MOBILITY = new Set(["neck mobility flow", "closing body scan"]);
+
 function defaultMobility() {
-  // Fifteen minutes, ordered the way the evidence supports.
+  // Thirteen minutes, ordered the way the evidence supports.
   //
   // Breathing comes first, while heart rate is still high — that's when
   // shifting out of sympathetic drive is worth the most. Six breaths a minute
@@ -1519,9 +1525,7 @@ function defaultMobility() {
     { id: uid(), name: "Straddle Hamstring and Adductor Hold", seconds: 90, type: "stretch", detail: "Long hold. Hinge from the hips and relax a little deeper on each exhale. Adductor strain is one of the most common injuries in grappling, so this range is worth keeping.", videoUrl: "" },
     { id: uid(), name: "Open Book Thoracic Rotation (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, slow controlled rotation, follow the top hand with your eyes. Rotation you don't have in the mid-back gets taken from the lower back instead.", videoUrl: "" },
     { id: uid(), name: "Overhead Lat and Shoulder Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, hand on the rack or a bar, side-bend away to lengthen the lat.", videoUrl: "" },
-    { id: uid(), name: "Wrist Flexor and Extensor Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side. Palm down and fingers back for the flexors, then palm up and fingers down for the extensors. Gripping a gi, hanging, and heavy carries all load the forearms hard, and almost nobody gives them anything back.", videoUrl: "" },
-    { id: uid(), name: "Neck Mobility Flow", seconds: 60, type: "stretch", detail: "Slow flexion, extension, and side to side — no forcing, stay pain-free the whole way. If anything pinches or refers down an arm, stop there.", videoUrl: "" },
-    { id: uid(), name: "Closing Body Scan", seconds: 60, type: "breath", detail: "Keep the same five-in, five-out rhythm and run your attention from head to feet. Note anything that felt tight or off today — that's information worth bringing to your next check-in.", videoUrl: "" },
+    { id: uid(), name: "Wrist Flexor and Extensor Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side. Palm down and fingers back for the flexors, then palm up and fingers down for the extensors. Gripping a gi, hanging, and heavy carries all load the forearms hard, and almost nobody gives them anything back.", videoUrl: "https://www.youtube.com/shorts/fJzrvpYbkVA", videoUrl2: "https://www.youtube.com/watch?v=yj7QdBxvHzQ" },
   ];
 }
 
@@ -2564,6 +2568,9 @@ function MainApp({ userId, onSignOut }) {
           return;
         }
         if (!c.program.mobility) c.program.mobility = defaultMobility();
+        // Retired segments are dropped from athletes who already had them saved,
+        // since the cool-down lives on each client's own copy of the program.
+        c.program.mobility = c.program.mobility.filter((s) => !RETIRED_MOBILITY.has(normalizeExerciseKey(s.name)));
         // Swap-pool and cross-variant copies of an exercise were saved without
         // the video attached to the original, so an existing athlete is swept
         // on load rather than having to rebuild their program.
@@ -5325,10 +5332,10 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
     }, 1000);
   };
 
-  const setSegmentVideo = (segId, url) => {
+  const setSegmentVideo = (segId, url, field = "videoUrl") => {
     const newProgram = JSON.parse(JSON.stringify(client.program));
     const seg = (newProgram.mobility || []).find((s) => s.id === segId);
-    if (seg) seg.videoUrl = url;
+    if (seg) seg[field] = url;
     onUpdateProgram(newProgram);
   };
 
@@ -5358,7 +5365,13 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
         <h3 className="log-exercise-name" style={{ fontSize: 20, marginTop: 6, marginBottom: 6 }}>{seg.name}</h3>
         {seg.detail && <p className="muted" style={{ marginBottom: 10 }}>{seg.detail}</p>}
-        <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><VideoLinkBlock canEdit={isCoach} url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")} /></div>
+        <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <VideoLinkBlock canEdit={isCoach} url={seg.videoUrl || lookupVideo(seg.name)} onSave={(url) => setSegmentVideo(seg.id, url)} onDelete={() => setSegmentVideo(seg.id, "")}
+            label={seg.videoUrl2 !== undefined ? "Demo 1" : undefined} />
+          {seg.videoUrl2 !== undefined && (
+            <VideoLinkBlock canEdit={isCoach} url={seg.videoUrl2} onSave={(url) => setSegmentVideo(seg.id, url, "videoUrl2")} onDelete={() => setSegmentVideo(seg.id, "", "videoUrl2")} label="Demo 2" />
+          )}
+        </div>
         <div className="mobility-timer">{mins}:{String(secs).padStart(2, "0")}</div>
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           <button className="btn-primary" style={{ flex: 1 }} onClick={toggleRunning}>{running ? "Pause" : "Start"}</button>
