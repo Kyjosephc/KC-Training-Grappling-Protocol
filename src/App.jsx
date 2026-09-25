@@ -1078,7 +1078,7 @@ const conjugateProgram = {
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Towel Hang (two towels over the bar)", sets: 3, reps: "20 to 30 seconds", load: "bodyweight, one towel in each hand", rir: 3, rest: "90 seconds", purpose: "The gi-specific version of a dead hang, and the single biggest gap this program had. Gi grip is cloth, not steel — a four-finger hold on fabric under a sustained pull, which is a genuinely different demand from a crush grip on a smooth bar. This is the closest gym analogue to holding a sleeve against someone trying to strip it.", cues: "Two towels to start, one in each hand. Shoulders active, not hanging dead off the joint. Progress by adding time first, then by moving to a single towel held in both hands. Stop the set when your grip starts sliding rather than fighting the last second — you are training the hold, not the failure.", quality: "Grip" }),
+              ex({ name: "Towel Hang (two towels over the bar)", sets: 3, reps: "20 to 30 seconds", load: "bodyweight, one towel in each hand", rir: 3, rest: "90 seconds", purpose: "The gi-specific version of a dead hang, and the single biggest gap this program had. Gi grip is cloth, not steel — a four-finger hold on fabric under a sustained pull, which is a genuinely different demand from a crush grip on a smooth bar. This is the closest gym analogue to holding a sleeve against someone trying to strip it.", cues: "Two towels to start, one in each hand. Shoulders active, not hanging dead off the joint. Progress by adding time first, then by moving to a single towel held in both hands. Stop the set when your grip starts sliding rather than fighting the last second — you are training the hold, not the failure.", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/R57zGkwfbo8" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
@@ -1736,9 +1736,89 @@ function sequenceForFreshness(program) {
   return program;
 }
 
+
+// Attaching a video to an exercise attaches it to one definition, but the same
+// movement appears again in the rotating swap pools and in the other two program
+// variants, and those copies went out blank — so the swap options, which is
+// exactly when someone most needs to see the lift, had no demo. The fix is one
+// registry harvested from all three variants: add a video anywhere and every
+// copy of that movement picks it up, whichever program the athlete is on.
+let VIDEO_REGISTRY = null;
+let HARVESTING = false;
+
+function eachExerciseIn(program, fn) {
+  if (!program) return;
+  (program.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((s) => (s.exercises || []).forEach(fn))));
+  Object.values(program.conjugate || {}).forEach((pool) => { if (Array.isArray(pool)) pool.forEach((i) => { if (i && i.name) fn(i); }); });
+  (program.warmup || []).forEach((b) => (b.items || []).forEach(fn));
+  (program.mobility || []).forEach(fn);
+}
+
+const hasVideo = (u) => typeof u === "string" && u.trim().length > 0;
+
+function harvestVideos(program, into) {
+  eachExerciseIn(program, (e) => {
+    if (!e || !e.name) return;
+    const k = normalizeExerciseKey(e.name);
+    if (!into.has(k)) into.set(k, {});
+    const slot = into.get(k);
+    // First one wins, so the order A, B, C is what decides ties. Every movement
+    // in the program currently resolves to a single URL, so this only matters
+    // if a future edit gives one movement two different demos.
+    if (hasVideo(e.videoUrl) && !slot.videoUrl) slot.videoUrl = e.videoUrl.trim();
+    if (hasVideo(e.videoUrl2) && !slot.videoUrl2) slot.videoUrl2 = e.videoUrl2.trim();
+  });
+  return into;
+}
+
+function videoRegistry() {
+  if (VIDEO_REGISTRY) return VIDEO_REGISTRY;
+  const reg = new Map();
+  // Guarded so the builds done to harvest do not themselves try to backfill.
+  HARVESTING = true;
+  try {
+    ["A", "B", "C"].forEach((v) => harvestVideos(buildProgramVariant(v), reg));
+    // VIDEO_LIBRARY is the hand-curated list resolveExercise already falls back
+    // to at runtime. Folding it in here means the stored program carries the
+    // same links the screen would have shown anyway, so a swap pill and an
+    // exported program agree with the session view.
+    Object.entries(VIDEO_LIBRARY).forEach(([k, url]) => {
+      if (!reg.has(k)) reg.set(k, {});
+      if (!reg.get(k).videoUrl) reg.get(k).videoUrl = url;
+    });
+  } catch {
+    // A failure here costs videos, never the program itself.
+  } finally {
+    HARVESTING = false;
+  }
+  VIDEO_REGISTRY = reg;
+  return reg;
+}
+
+function backfillVideos(program) {
+  if (!program || HARVESTING) return program;
+  // A coach can attach a video to one athlete's program, so that athlete's own
+  // copy is harvested first and wins over the shared registry.
+  const own = harvestVideos(program, new Map());
+  const shared = videoRegistry();
+  eachExerciseIn(program, (e) => {
+    if (!e || !e.name) return;
+    const k = normalizeExerciseKey(e.name);
+    const mine = own.get(k) || {};
+    const theirs = shared.get(k) || {};
+    const url = mine.videoUrl || theirs.videoUrl;
+    const url2 = mine.videoUrl2 || theirs.videoUrl2;
+    if (!hasVideo(e.videoUrl) && url) e.videoUrl = url;
+    // videoUrl2 is only filled where the exercise already opted into a second
+    // demo slot, so a one-video movement does not sprout an empty second field.
+    if (e.videoUrl2 !== undefined && !hasVideo(e.videoUrl2) && url2) e.videoUrl2 = url2;
+  });
+  return program;
+}
+
 function buildProgramVariant(variant) {
   if (variant === "C") {
-    return sequenceForFreshness(buildTwoDayHybridContent());
+    return backfillVideos(sequenceForFreshness(buildTwoDayHybridContent()));
   }
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
@@ -1774,7 +1854,7 @@ function buildProgramVariant(variant) {
     base.phases = built.phases;
     base.warmup = built.warmup;
   }
-  return base;
+  return backfillVideos(base);
 }
 
 function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, promoDiscount, weeklySchedule, waiver }) {
@@ -2484,6 +2564,10 @@ function MainApp({ userId, onSignOut }) {
           return;
         }
         if (!c.program.mobility) c.program.mobility = defaultMobility();
+        // Swap-pool and cross-variant copies of an exercise were saved without
+        // the video attached to the original, so an existing athlete is swept
+        // on load rather than having to rebuild their program.
+        backfillVideos(c.program);
 
         // Check-ins saved before the colour field existed are scored once and
         // written back, so every screen that reads a colour finds one.
