@@ -421,6 +421,9 @@ function weeklyVolumeSeries(client) {
 // Human-readable label for each rotating exercise pool. Falls back to "Max Effort Upper"
 // only for the two known Max Effort pools; anything else (durability, core, conditioning
 // pools, or a pool added later) gets its own real label instead of being mislabeled.
+// From this week on, the conditioning slot draws from the match-specific pool
+// instead of the general one.
+const MATCH_SPECIFIC_FROM_WEEK = 9;
 const ROTATING_POOL_LABELS = {
   meLowerPool: "Max Effort Lower",
   meUpperPool: "Max Effort Upper",
@@ -428,6 +431,7 @@ const ROTATING_POOL_LABELS = {
   wristPool: "Wrist & Grip Durability",
   coreAntiPool: "Anti-Rotation Core",
   conditioningIntervalPool: "Conditioning",
+  matchSpecificPool: "Competition-Specific Conditioning",
 };
 function poolLabelFor(rotatingPool) {
   return ROTATING_POOL_LABELS[rotatingPool] || "Rotating Exercise";
@@ -437,19 +441,36 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
   const blockNumber = opts.blockNumber || 1;
   const excludedExercises = opts.excludedExercises || [];
   if (e.rotatingPool && program.conjugate?.[e.rotatingPool]) {
-    const fullPool = program.conjugate[e.rotatingPool];
+    // The final block is competition-specific, so general conditioning gives way
+    // to work that rehearses the event itself — a match-length round and a
+    // multi-match day. Doing it here rather than in each program's phase data
+    // means all three programs get it from the one place.
+    const poolKey = (e.rotatingPool === "conditioningIntervalPool"
+      && weekNumber >= MATCH_SPECIFIC_FROM_WEEK
+      && (program.conjugate.matchSpecificPool || []).length)
+      ? "matchSpecificPool" : e.rotatingPool;
+    const fullPool = program.conjugate[poolKey];
     // Skip anything the athlete has flagged to avoid, unless that would empty the pool.
     const filteredPool = fullPool.filter((item) => !excludedExercises.includes(item.name));
     const pool = filteredPool.length ? filteredPool : fullPool;
-    const rotW = program.conjugate.meRotationWeeks || 2;
+    // The lift pools rotate every two weeks so an athlete meets a lift twice and
+    // can progress it. Conditioning rotates weekly instead: there are four
+    // general pieces and only three training weeks a block, so a two-week
+    // rotation left whole energy systems untrained — Program B never saw the
+    // grip work at all, and the match-length round never came up anywhere.
+    const isConditioningPool = poolKey === "conditioningIntervalPool" || poolKey === "matchSpecificPool";
+    const rotW = isConditioningPool ? 1 : (program.conjugate.meRotationWeeks || 2);
+    // Deload weeks carry their own fixed easy session, so counting them would
+    // silently eat a slot in the rotation. This counts training weeks only.
+    const rotWeek = isConditioningPool ? weekNumber - Math.floor(weekNumber / 4) : weekNumber;
     // Folding blockNumber into the offset means block 2 doesn't start the rotation at the
     // exact same spot as block 1 — without this, every restart replayed an identical sequence.
-    const idx = (Math.floor((weekNumber - 1) / rotW) + (blockNumber - 1)) % pool.length;
+    const idx = (Math.floor((rotWeek - 1) / rotW) + (blockNumber - 1)) % pool.length;
     const chosen = pool[idx];
     return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
       rir: chosen.rir !== undefined ? chosen.rir : e.rir,
-      poolLabel: poolLabelFor(e.rotatingPool) };
+      poolLabel: poolLabelFor(poolKey) };
   }
   // The phase text promises the effort climbs across a block. Without this the
   // athlete saw the identical target in week 1 and week 3. Capped at one rep in
@@ -985,9 +1006,22 @@ const hipPool = [
   { name: "Hip Abduction Machine", notes: "Direct, loaded hip abductor and glute medius strength — the frontal-plane counterpart to the Copenhagen Plank, protective for single-leg stability, sprawling, and scrambling under fatigue", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/S_FGYHNHJ_c" },
   { name: "Hip Adduction Machine", notes: "Direct, loaded adductor strength through a full range of motion — a machine-based complement to the Copenhagen Plank for groin and guard-retention durability", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/BmMmt-c9aNM" },
 ];
+// Block 3 is the competition-specific block, so its conditioning stops being
+// general and starts rehearsing the event. Everything before this trains the
+// qualities a match needs; nothing before this trains the match. The longest
+// hard effort anywhere else in the program is three minutes — an IBJJF match is
+// five at white belt and ten at black — and nothing anywhere rehearses producing
+// again after an hour's rest, which is what a medal actually comes down to.
+const matchSpecificPool = [
+  { rir: 1, name: "Assault Bike or Treadmill — Match-Duration Round", notes: "One continuous effort the length of a real match. Every other piece of conditioning in this program is shorter than the thing you are training for, and holding output for eight minutes is a different skill from holding it for three", reps: "1 round of 6 to 8 minutes continuous at 85 to 88 percent of your max heart rate", cues: "Pace it. The mistake everyone makes here is starting at interval pace and falling apart at four minutes, which trains nothing except how to fail. Settle into an output you believe you can hold to the end, and hold it. The check that you paced it right is that the last minute is your hardest effort and not your slowest — if you are fading badly by the halfway point, take ten percent off next time. Match the round length to your belt: six minutes at white and blue, eight at brown and black." },
+  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Two hard rounds separated by a long rest, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "2 rounds of 6 minutes hard, 20 minutes easy or complete rest between rounds", cues: "Treat these as two separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full twenty minutes. Walk, sit down, eat something, do what you would actually do between matches. The second round is the one that matters: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
+  { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson's aerobic power protocol, kept in the specific block because raising the aerobic ceiling still pays right up to competition — and because it is the closest thing here to the repeated hard exchanges inside a single round", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds." },
+];
+
 const conditioningIntervalPool = [
   { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "30 to 40 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time. The test is that you could hold a full conversation the whole way through without gasping — if you can only manage short sentences, you are going too fast for what this session trains. If you have a heart rate monitor, 130 to 150 beats per minute is the band; the talk test comes first and the number is just the check. This is meant to feel almost boring. That's correct.\n\nDo this one at the end of today's session, and then do one or two more like it across the rest of the week, off your lifting days — a brisk walk, an easy bike, a ruck with the dog. That is the part that actually builds the base, and it costs you no gym time and no recovery. One session a week will not do it; three easy ones will." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate, not off how hard it feels. You are aiming to be at 88 to 92 percent of your max heart rate by about the ninety-second mark and to hold it there to the end of the round — hard and honest, but deliberately below what you could manage for a single round, because you have to do it four times. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds, easy movement or complete rest." },
+  { rir: 2, name: "Assault Bike + Gi Grip — Repeat Effort Under Fatigue", notes: "Grip and conditioning are trained all through this program and never in the same place, which is not how a gi match works — your hands fail while your heart rate is high, not while you are fresh. This puts the two demands together, which is the only way to train the thing that actually gives out", reps: "5 rounds of 60 seconds hard on the bike straight into a 30 second hard grip hold, 90 seconds easy between rounds", cues: "Go straight from the bike to the hold with no pause — the whole point is that the grip work starts while you are already breathing hard. Use two towels over the pull-up bar, a gi sleeve, or a heavy dumbbell in each hand; whichever you use, hold it for the full 30 seconds or until your hand genuinely opens, not until it starts to burn. The burn is the session. If you can hold comfortably for 30 seconds, go heavier or move to one towel. Expect the last two rounds to be much harder than the first two — that is the adaptation, not a sign you paced it wrong." },
   { rir: 3, name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
 ];
 
@@ -1057,7 +1091,7 @@ const conjugateProgram = {
     "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 130 to 150 beats per minute, with the talk test as the primary gate), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used sparingly rather than every week, since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, a landmine attachment, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
-  conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, hipPool, meRotationWeeks: 2 },
+  conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, matchSpecificPool, hipPool, meRotationWeeks: 2 },
   warmup: defaultWarmup(),
   mobility: defaultMobility(),
 
@@ -1248,7 +1282,7 @@ const conjugateProgram = {
               ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Adductor strength and durability. Adductor strain is one of the most common injuries in grappling and the peak block is when mat intensity is highest — this is exactly the wrong time to stop training it.", quality: "Durability" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", load: "hard but repeatable — you have to do it four times", rir: 2, rest: "none", purpose: "The highest-value conditioning in the program, in the block that most needs it. You maintain an aerobic quality by cutting volume and holding intensity, not by cutting both — eight easy minutes maintains nothing. This is also the closest thing in the program to what a hard round actually demands.", cues: "Shorter than the base-phase sessions but not easier — that is the point. You hold onto an aerobic quality by cutting volume and keeping intensity, not by cutting both. Pace it off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds. No heart rate monitor? Three or four words at a time, not a sentence, and you are at that point by ninety seconds. If you are competing this week, skip this session entirely: nothing you do in here five days out makes you fitter, and plenty makes you slower.", quality: "Conditioning" }),
+              ex({ name: matchSpecificPool[0].name, rotatingPool: "matchSpecificPool", sets: 1, reps: matchSpecificPool[0].reps, load: "", rir: 1, rest: "none", purpose: "The competition-specific block. Conditioning stops being general here and starts rehearsing the event — a round the length of a real match, a second round after a long rest the way a competition day actually runs, and aerobic power to keep raising the ceiling. Rotates every 2 weeks.", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1370,7 +1404,7 @@ function buildProgramCContent() {
           ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Suitcase Carry (each side)", { sets: 3, reps: "30 meters each side", rpe: 9 }),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", sets: 1, reps: "25 to 30 minutes, continuous, easy pace", load: "heart rate held at 130 to 150 beats per minute — conversational the whole way", rir: 7, rest: "none", purpose: "Builds the aerobic base everything else sits on top of — how fast you recover between rounds, between scrambles, and between sets. This block is where that foundation gets laid, so the harder conditioning in later blocks has something to build on.", cues: "This has to feel genuinely easy or it isn't doing its job. You should be able to hold a full conversation the entire time. If you're breathing hard, you've drifted out of the zone that actually builds this quality and into one that just costs you recovery for tomorrow's mat time. It's meant to feel almost boring — that's correct.", quality: "Conditioning" }),
+          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Rotates weekly through aerobic base, aerobic power, repeat-effort tempo and grip work under fatigue, so every energy system gets trained across the block rather than the same one three weeks running.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1406,7 +1440,7 @@ function buildProgramCContent() {
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: "Assault Bike or Treadmill — Repeated-Effort Tempo", sets: 1, reps: "10 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", load: "hard but controlled — well past comfortable, short of an all-out sprint", rir: 3, rest: "none", purpose: "Jamieson's extensive tempo method — repeat-effort capacity, which is the same quality this block's strength-endurance work is building in the weight room. It trains the ability to fire off another hard scramble, shot or transition without a full rest first, which is exactly what a real match asks for round after round.", cues: "Your breathing should climb during each 15-second effort and only partly settle during the 45 seconds of recovery. That incomplete recovery is the whole point — it's the same pattern as the gap between exchanges in a live round. If you feel fully recovered before the next effort starts, you aren't pushing hard enough on the work.", quality: "Conditioning" }),
+          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Rotates weekly through aerobic base, aerobic power, repeat-effort tempo and grip work under fatigue, so every energy system gets trained across the block rather than the same one three weeks running.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1447,7 +1481,7 @@ function buildProgramCContent() {
           ssSingle(5, "High Plank Kettlebell Pull-Through", { sets: 2, reps: "8 each side", rpe: 8 }, "Contralateral Stability"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: "Assault Bike or Treadmill — Aerobic Power Intervals", sets: 1, reps: "3 rounds of 2 to 3 minutes at 90 percent maximum effort, equal time easy between each round", load: "88 to 92 percent of your max heart rate — pace this off heart rate, not off how hard it feels", rir: 1, rest: "none", purpose: "The concurrent aerobic work this block is named for. Jamieson's aerobic power protocol raises the ceiling on the aerobic system, and the work-to-rest pattern mirrors a real exchange on the mat rather than one long grind.", cues: "Deliberately only three rounds. This block already carries the heaviest session of the program and you're doing speed and power work on top of your mat time — three honest rounds is a real stimulus without turning this into a second workout. Each round should be close to all you can hold for its full length. Take the whole recovery between rounds so you can bring genuine effort to the next one instead of just surviving it.", quality: "Conditioning" }),
+          ex({ name: matchSpecificPool[0].name, rotatingPool: "matchSpecificPool", sets: 1, reps: matchSpecificPool[0].reps, load: "", rir: 1, rest: "none", purpose: "The competition-specific block. Conditioning stops being general here and starts rehearsing the event — a round the length of a real match, a second round after a long rest the way a competition day actually runs, and aerobic power to keep raising the ceiling. Rotates every 2 weeks.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1492,7 +1526,7 @@ function buildProgramCContent() {
 // Raise, Activate, Mobilise, Potentiate — so each phase feeds the next rather
 // than being a pile of drills. Bumping WARMUP_VERSION replaces it for athletes
 // who already have the old one saved against their program.
-const WARMUP_VERSION = 2;
+const WARMUP_VERSION = 3;
 
 function defaultWarmup() {
   return [
@@ -1515,8 +1549,6 @@ function defaultWarmup() {
       { id: uid(), name: "Ankle Rocks (knee-to-wall)", detail: "30 seconds. Heel stays down, drive the knee forward over the toes. Ankle range is what lets you squat and land properly, and it is the first thing that stiffens up.", videoUrl: "https://www.youtube.com/shorts/I-Hgtc2e2fU" },
       { id: uid(), name: "Heel Walks", detail: "A short pass. Toes pulled up, walk on the heels.", videoUrl: "https://www.youtube.com/shorts/h4V7X5ZDnU0" },
       { id: uid(), name: "Toe Walks", detail: "A short pass. Up on the toes, tall through the ankles.", videoUrl: "https://www.youtube.com/watch?v=3d2S7a3D9YY" },
-      { id: uid(), name: "Heel to Toe Walks", detail: "A short pass. Roll heel to toe deliberately, one foot directly in front of the other.", videoUrl: "https://www.youtube.com/shorts/d1fpuaq6RVg" },
-      { id: uid(), name: "Pogo Hops", detail: "10 quick reps to finish the ankle work. Short ground contacts, stiff ankles, barely bend the knees. Think bouncing, not jumping.", videoUrl: "https://www.youtube.com/shorts/L_khHgMz9uU" },
       { id: uid(), name: "Rack Pec Opener", detail: "15 seconds at low, mid and high arm positions, both sides. Forearm on the upright, rotate away. The three heights hit the three lines of the chest — one arm position will not reach all of them. Keep each hold short; this is opening, not stretching for range.", videoUrl: "https://www.youtube.com/shorts/PQJ4tDLrf4Q" },
     ]},
     { id: uid(), block: "Potentiate", duration: "1 minute", items: [
@@ -1562,7 +1594,7 @@ function blankProgram(name) {
   return {
     id: uid(), name: name || "Custom Program", sport: "", sessionsPerWeek: 3,
     coachNote: "", methodology: "", philosophy: "",
-    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], coreAntiPool: [], conditioningIntervalPool: [], hipPool: [], meRotationWeeks: 2 },
+    conjugate: { meLowerPool: [], meUpperPool: [], wristPool: [], coreAntiPool: [], conditioningIntervalPool: [], matchSpecificPool: [], hipPool: [], meRotationWeeks: 2 },
     warmup: defaultWarmup(),
     mobility: defaultMobility(),
     phases: [{ id: uid(), name: "Phase 1", weekStart: 1, weekEnd: 4, objective: "", intensityNote: "",
@@ -1715,7 +1747,7 @@ function buildTwoDayHybridContent() {
       "Same conjugate foundation as Program A — Max Effort and Dynamic Effort work, rotating exercise pools so nothing goes stale — restructured for two sessions instead of three: Day 1 pairs a Max Effort Lower lift with Dynamic Effort Upper speed work, Day 2 pairs Max Effort Upper with Dynamic Effort Lower and closes with that week's one conditioning session, since there's no third day to host it separately. Durability, hip, and core work is trimmed to what fits in two sessions without turning either one into a two-hour workout — less total volume than Program A, on purpose, to match the lower session count, with extras dropped even further in the final phase before a competition the same way Program A does.",
     philosophy:
       "Two days a week, every week, beats three days a week that quietly turns into one. This program exists to make the absolute most of exactly two sessions — nothing here assumes a third day shows up, and nothing gets left half-finished waiting for one.",
-    conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, hipPool, meRotationWeeks: 2 },
+    conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, matchSpecificPool, hipPool, meRotationWeeks: 2 },
     warmup: defaultWarmup(),
     mobility: defaultMobility(),
     phases: [
@@ -2370,7 +2402,7 @@ function parseConditioning(repsText) {
     let recovery = "", restSecs = 0;
     if (/equal time/i.test(t)) { recovery = work; restSecs = workSecs; }
     else {
-      const r = t.match(/(\d+)\s*(minutes?|seconds?)\s*(?:easy\s*)?recovery/i);
+      const r = t.match(/(\d+)\s*(minutes?|seconds?)\s*(?:easy\s*)?(?:recovery|(?:or complete rest\s*)?between)/i);
       if (r) { recovery = `${r[1]} ${/^m/i.test(r[2]) ? "min" : "sec"}`; restSecs = Number(r[1]) * (/^m/i.test(r[2]) ? 60 : 1); }
     }
     const rounds = Number(m[1]);
@@ -2386,11 +2418,21 @@ function parseConditioning(repsText) {
 // The effort target, stated once and plainly, with the check that does not need
 // a heart rate monitor — most athletes training in a normal gym do not have one.
 function conditioningEffort(target) {
-  const s = `${target.load || ""} ${target.reps || ""}`.toLowerCase();
-  if (/88 to 92|90 percent|max heart rate/.test(s))
-    return { label: "88–92% of max heart rate", tone: "hard", test: "Three or four words at a time, not a full sentence." };
-  if (/hard but controlled|hard effort|hard but repeatable/.test(s))
+  // The cues are read too: when a piece comes out of a rotating pool its load
+  // field is empty, and the wording that says how hard it is meant to be — "not
+  // an all-out sprint" — lives in the coaching text rather than the load.
+  const s = `${target.load || ""} ${target.reps || ""} ${target.cues || ""}`.toLowerCase();
+  // Order matters. Most of these prescriptions mention "easy" somewhere — it is
+  // usually the recovery between rounds — so the work has to be read first, and
+  // the author's own wording ("hard but controlled") beats any generic guess.
+  if (/hard but controlled|hard but repeatable|not an all-out sprint/.test(s))
     return { label: "Hard but controlled", tone: "medium", test: "Well past comfortable, short of an all-out sprint." };
+  if (/85 to 88/.test(s))
+    return { label: "85\u201388% of max heart rate", tone: "hard", test: "Hard, but a pace you believe you can hold to the very end." };
+  if (/88 to 92|90 percent|max heart rate/.test(s))
+    return { label: "88\u201392% of max heart rate", tone: "hard", test: "Three or four words at a time, not a full sentence." };
+  if (/minutes hard|seconds hard|hard on the bike|hard effort/.test(s))
+    return { label: "Hard \u2014 round pace", tone: "hard", test: "The effort you would bring to a real round." };
   if (/easy|conversational|130 to 150/.test(s))
     return { label: "Easy and conversational", tone: "easy", test: "You could hold a full conversation the whole way through." };
   return null;
@@ -2406,6 +2448,12 @@ function conditioningBrief(name) {
     return "Trains firing off another scramble before you have fully recovered. That gap between exchanges is the thing most conditioning skips.";
   if (/aerobic base|zone 2|easy aerobic|aerobic maintenance/.test(n))
     return "Builds the engine you recover with — between rounds, between scrambles, between sets. It is meant to feel almost boring.";
+  if (/match-duration/.test(n))
+    return "One round the length of a real match. Everything else in here is shorter than what you are training for — holding output for eight minutes is its own skill.";
+  if (/multi-match/.test(n))
+    return "Two hard rounds with a long rest between, which is the shape of a competition day. Nobody loses the first match — they lose the third.";
+  if (/gi grip|under fatigue/.test(n))
+    return "Grip and conditioning in the same place, because in a gi your hands fail while your heart rate is high — never while you are fresh.";
   return null;
 }
 
