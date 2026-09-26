@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import {
-  Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy,
-  Users, Plus, ChevronRight, ChevronLeft, Check, Timer, ArrowLeft, Pencil, Trash2,
-  Scale, ListChecks, Info, Settings as SettingsIcon, Sun, Moon, X, Calendar, RotateCcw, Calculator, ListOrdered, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign
-} from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Users, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -349,13 +345,14 @@ function pluralizeMilestoneName(rawName, count) {
   return `${count} ${main}${tail}${paren}`;
 }
 // The first 5 milestones are 50,000 pounds apart; every one after that is 100,000
-// pounds apart, so the full climb to all 300 takes noticeably longer than an
-// object-weight-derived scale would. Each threshold still gets a fun real-world
+// pounds apart. The ladder stops at 150 — 14,750,000 pounds — which is already
+// something like a decade of hard training; the 150 rungs above it were weight no
+// athlete was ever going to move. Each threshold still gets a fun real-world
 // comparison — whichever base object (at 1 to 5 of it) lands closest to that exact
 // number, so the name shown next to a milestone stays consistent with its weight.
 function generateMilestones() {
   const thresholds = [];
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 150; i++) {
     thresholds.push(i < 5 ? 50000 * (i + 1) : 250000 + 100000 * (i - 4));
   }
   let prevKey = null;
@@ -918,9 +915,6 @@ function exerciseUnitLabel(name, repsText) {
   const u = exerciseUnit(name, repsText);
   return u === "seconds" ? "Seconds" : u === "minutes" ? "Minutes" : u === "meters" ? "Meters" : "Reps";
 }
-function isTimedExercise(name) {
-  return exerciseUnit(name) === "seconds";
-}
 // Whether an exercise takes an external load at all — false for sprints, shuttles, band work,
 // and unweighted conditioning drills, so the logging grid can skip the Weight input for them.
 function needsWeight(name) {
@@ -1088,7 +1082,7 @@ const conjugateProgram = {
   coachNote:
     "I've spent years studying the training philosophies of Westside Barbell, Phil Daru, Joel Jamieson, Marv Marinovich, Doctor Edythe Heus, Dane Miller, Josh Settlage, and other coaches who train elite strength and combat athletes, and merged that study with my own coaching experience to build this all-in-one program for grapplers who want to be the strongest, most durable version of themselves on the mat. Technique decides a match between two athletes of different skill levels. But when two athletes are matched in technique, the stronger, more explosive, more durable athlete wins that exchange the overwhelming majority of the time. That gap — physical advantage between technically equal grapplers — is what this program exists to close.",
   methodology:
-    "Structure. A condensed conjugate system — a Max Effort lift paired with Dynamic Effort speed work — in the Westside tradition, adapted for grapplers the way coaches like Phil Daru and Josh Settlage build combat-sport programs: main lifts kept in an efficient 3-to-6 rep range so you get stronger without carrying size you have to cut, jumps paired with squats and pulls, and only as much volume as you can actually recover from given your mat time.\n\nConditioning. Built on Joel Jamieson's energy-system model rather than random hard work. An aerobic base first, because that is what you recover between rounds with. Repeat-effort tempo for the gap between exchanges. Aerobic power to raise the ceiling. Then, in the final block, rounds the length of a real match and a multi-match day, because the qualities are not the same thing as the event.\n\nDurability. Reactive neuromuscular work in the Gray Cook and Michael Voight tradition, tendon loading from Cal Dietz's triphasic method, and dedicated work for the neck, ankles, wrists, shoulders, adductors and knees — the joints grappling actually punishes.\n\nFatigue. Nothing here is fixed. Every session scales to your daily check-in and to how hard you have been rolling, and tells you when it has. The best-written program is the one you can recover from.\n\nEvidence. Most of this is established coaching practice rather than heavily lab-tested protocol, and it is built on principles that do carry strong evidence — progressive overload and autoregulation. Where the research is thin, the app says so rather than dressing it up.",
+    "Structure. A condensed conjugate system — a Max Effort lift paired with Dynamic Effort speed work — in the Westside tradition, adapted for grapplers the way coaches like Phil Daru and Josh Settlage build combat-sport programs: main lifts kept in an efficient 3-to-6 rep range so you get stronger without carrying size you have to cut, jumps paired with squats and pulls, and only as much volume as you can actually recover from given your mat time.\n\nConditioning. Built on Joel Jamieson's energy-system model rather than random hard work. An aerobic base first, because that is what you recover between rounds with. Repeat-effort tempo for the gap between exchanges. Aerobic power to raise the ceiling. Then, in the final block, rounds the length of a real match and a multi-match day, because the qualities are not the same thing as the event.\n\nDurability. Reactive neuromuscular work in the Gray Cook and Michael Voight tradition, tendon loading from Cal Dietz's triphasic method, and dedicated work for the neck, ankles, wrists, shoulders, adductors and knees — the joints grappling actually punishes.\n\nFatigue. Nothing here is fixed. Every session scales to your daily check-in and to how hard you have been rolling, and tells you when it has. The best-written program is the one you can recover from.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
   conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, matchSpecificPool, hipPool, meRotationWeeks: 2 },
@@ -1958,30 +1952,59 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
 // own belt colour and stays sharp at any size. The rank bar is dropped below
 // about 26px, where it stops being a detail and becomes noise.
 const BELT_EMBLEM_COLORS = {
-  White: "#eef0f3", Grey: "#9aa1aa", Yellow: "#e6c22e", Orange: "#e2872c",
-  Green: "#3f9d5a", Blue: "#2f6fd0", Purple: "#7d4cc0", Brown: "#6d4a2f", Black: "#333744",
+  White: "#f1f3f6", Grey: "#9aa1aa", Yellow: "#e8c33a", Orange: "#e2872c",
+  Green: "#3f9d5a", Blue: "#2f6fd0", Purple: "#7d4cc0", Brown: "#6d4a2f", Black: "#3a3f4d",
 };
 
 function BeltEmblem({ level, size = 30, title }) {
-  const fill = BELT_EMBLEM_COLORS[level] || BELT_EMBLEM_COLORS.White;
-  const detail = size >= 26;
-  const label = title === null ? undefined : (title || `${level || "White"} belt`);
+  const lvl = BELT_EMBLEM_COLORS[level] ? level : "White";
+  const fill = BELT_EMBLEM_COLORS[lvl];
+  // A black belt wears a red rank bar; every other belt wears a black one.
+  const bar = lvl === "Black" ? "#c4172a" : "#17191e";
+  const stitching = size >= 34;
+  const label = title === null ? undefined : (title || `${lvl} belt`);
   return (
-    <svg viewBox="0 0 64 40" width={size} height={Math.round((size * 40) / 64)} fill="none"
-      stroke="#0a0b0d" strokeWidth="1.5" strokeLinejoin="round"
+    <svg viewBox="0 0 64 36" width={size} height={Math.round((size * 36) / 64)} fill="none"
       role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}
       style={{ display: "block", flexShrink: 0 }}>
-      <polygon points="1,8 26,12 26,18 1,14" fill={fill} />
-      <polygon points="63,8 38,12 38,18 63,14" fill={fill} />
-      <polygon points="27,17 20,37 26,38.5 31.5,18.5" fill={fill} />
-      <polygon points="37,17 44,37 38,38.5 32.5,18.5" fill={fill} />
-      <polygon points="26,6 38,6 38,19 26,19" fill={fill} />
-      {detail && (
-        <>
-          <polygon points="21.9,30 27.6,31.3 26.2,36.4 20.5,35.1" fill="#101216" stroke="#0a0b0d" strokeWidth="1" />
-          <line x1="23.6" y1="30.5" x2="22.3" y2="35.4" stroke="#eef0f3" strokeWidth="1" />
-          <line x1="25.7" y1="31" x2="24.4" y2="35.9" stroke="#eef0f3" strokeWidth="1" />
-        </>
+      {/* Back to front: the two hanging ends, then the belt across the waist,
+          then the knot over the middle of it. Nothing sticks up above the knot —
+          that was what made earlier drafts read as a little figure. */}
+      <g stroke="rgba(0,0,0,.5)" strokeWidth="1.1" strokeLinejoin="round" strokeLinecap="round">
+        <polygon points="26.9,18 31.7,18 30.8,33.8 26,33.4" fill={fill} />
+        <polygon points="32.3,18 37.1,18 38,33.4 33.2,33.8" fill={fill} />
+        <path d="M1.5 11 Q12 10.2 24.6 9.6 L24.6 19.6 Q12 20 1.5 20.8 Z" fill={fill} />
+        <path d="M62.5 11 Q52 10.2 39.4 9.6 L39.4 19.6 Q52 20 62.5 20.8 Z" fill={fill} />
+        <path d="M24.4 7.4 Q32 6 39.6 7.4 L40.1 21.8 Q32 23.4 23.9 21.8 Z" fill={fill} />
+      </g>
+      {/* Light from the upper left. Plain black and white over the fill, so one
+          set of shading reads correctly on a white belt and on a black one. */}
+      <g stroke="none">
+        <path d="M1.5 17.1 Q12 16.6 24.6 16.1 L24.6 19.6 Q12 20 1.5 20.8 Z" fill="#000" opacity=".22" />
+        <path d="M62.5 17.1 Q52 16.6 39.4 16.1 L39.4 19.6 Q52 20 62.5 20.8 Z" fill="#000" opacity=".22" />
+        <path d="M1.5 11 Q12 10.2 24.6 9.6 L24.6 12.4 Q12 13 1.5 13.8 Z" fill="#fff" opacity=".15" />
+        <path d="M62.5 11 Q52 10.2 39.4 9.6 L39.4 12.4 Q52 13 62.5 13.8 Z" fill="#fff" opacity=".15" />
+        <polygon points="26.9,18 28.5,18 27.6,33.5 26,33.4" fill="#fff" opacity=".12" />
+        <polygon points="30.2,18 31.7,18 30.8,33.8 29.3,33.7" fill="#000" opacity=".2" />
+        <polygon points="32.3,18 33.8,18 34.7,33.8 33.2,33.8" fill="#fff" opacity=".1" />
+        <polygon points="35.6,18 37.1,18 38,33.4 36.5,33.5" fill="#000" opacity=".2" />
+        {/* the knot: highlight up top, shadow underneath, and the fold down its middle */}
+        <path d="M24.4 7.4 Q32 6 39.6 7.4 L39.7 10.8 Q32 9.4 24.3 10.8 Z" fill="#fff" opacity=".16" />
+        <path d="M24 18.5 Q32 20 40 18.5 L40.1 21.8 Q32 23.4 23.9 21.8 Z" fill="#000" opacity=".26" />
+        <polygon points="31.2,6.5 32.4,6.4 32.9,22.9 31.7,23" fill="#000" opacity=".16" />
+        <polygon points="32.4,6.4 33.3,6.45 33.8,22.85 32.9,22.9" fill="#fff" opacity=".1" />
+      </g>
+      {/* Rank bar, wrapped around the near end. */}
+      <polygon points="26.37,27 31.19,27 30.9,32 26.08,32" fill={bar}
+        stroke="rgba(0,0,0,.5)" strokeWidth="1" strokeLinejoin="round" />
+      <polygon points="26.37,27 27.5,27 27.22,32 26.08,32" fill="#fff" opacity=".1" stroke="none" />
+      {stitching && (
+        <g stroke="#000" strokeOpacity=".24" strokeWidth=".7" fill="none" strokeLinecap="round">
+          <path d="M3 12.2 Q13 11.7 23.9 11.2" />
+          <path d="M3 14.6 Q13 14.1 23.9 13.6" />
+          <path d="M61 12.2 Q51 11.7 40.1 11.2" />
+          <path d="M61 14.6 Q51 14.1 40.1 13.6" />
+        </g>
       )}
     </svg>
   );
@@ -4748,6 +4771,7 @@ function findRecentPR(client) {
 }
 
 function AccomplishmentsPage({ client, onClose }) {
+  const [showAllMilestones, setShowAllMilestones] = useState(false);
   const { total, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const volumeSeries = useMemo(() => weeklyVolumeSeries(client), [client]);
   // Sessions and weeks, not tonnage. Neck holds, carries, sprints and every
@@ -4807,7 +4831,7 @@ function AccomplishmentsPage({ client, onClose }) {
         </Card>
       )}
       <p className="muted" style={{ marginBottom: 14, fontSize: 12 }}>These are fun, rounded real-world comparisons — not scientific measurements — just a way to see how much work you've actually put in.</p>
-      {LIFT_MILESTONES.map((m, idx) => {
+      {LIFT_MILESTONES.slice(0, showAllMilestones ? LIFT_MILESTONES.length : Math.min(LIFT_MILESTONES.length, Object.keys(achievedDates).length + 15)).map((m, idx) => {
         const achieved = achievedDates[idx] !== undefined;
         const prevWeight = idx === 0 ? 0 : LIFT_MILESTONES[idx - 1].weight;
         const pct = achieved ? 100 : Math.max(0, Math.min(100, Math.round(((total - prevWeight) / (m.weight - prevWeight)) * 100)));
@@ -4823,6 +4847,11 @@ function AccomplishmentsPage({ client, onClose }) {
           </div>
         );
       })}
+      {!showAllMilestones && Object.keys(achievedDates).length + 15 < LIFT_MILESTONES.length && (
+        <button className="btn-ghost" style={{ width: "100%", marginTop: 6 }} onClick={() => setShowAllMilestones(true)}>
+          Show the rest of the ladder — {LIFT_MILESTONES.length - (Object.keys(achievedDates).length + 15)} more
+        </button>
+      )}
     </ModalShell>
   );
 }
@@ -6713,12 +6742,10 @@ function GlobalStyle() {
       * { box-sizing: border-box; }
       .scroll-area { flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
       .pad { padding: 16px; }
-      .brand-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 26px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 4px; line-height: 1.05; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
       .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
       .brand-lockup-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 30px; letter-spacing: 0.2em; line-height: 1; color: var(--text); text-indent: 0.2em; }
       .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
-      .logo-block .brand-title { font-size: 32px; margin-bottom: 0; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.active { border-color: var(--accent); }
@@ -6727,7 +6754,7 @@ function GlobalStyle() {
       .topbar > .brand-block { grid-area: brand; }
       .topbar > .topbar-avatar-wrap { grid-area: avatar; }
       .topbar-avatar-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
-      .topbar-belt { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); pointer-events: none;
+      .topbar-belt { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); pointer-events: none;
         filter: drop-shadow(0 1px 2px rgba(0,0,0,0.65)); }
       .topbar-icons { grid-area: icons; display: flex; gap: 6px; align-items: center; padding-bottom: 2px; min-width: 0; }
       .topbar-icon-group { display: contents; }
@@ -6782,9 +6809,6 @@ function GlobalStyle() {
       .hero-select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
       .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
-      .hero-quote { font-size: 13px; color: var(--accent); font-style: italic; line-height: 1.55; padding: 0; margin-bottom: 4px; }
-      .hero-quote b { font-style: italic; font-weight: 700; }
-      .hero-quote-attr { font-size: 13px; color: var(--text-dim); margin-bottom: 18px; }
       .mood-row-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
@@ -6863,7 +6887,6 @@ function GlobalStyle() {
       .icon-btn-badged { position: relative; overflow: visible; }
       .icon-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #ffffff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); line-height: 1; }
       .signup-review-card { background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
-      .payment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
       .pill-paid { background: var(--green); color: var(--bg); }
       .pill-unpaid { background: var(--amber); color: #000000; }
       .pill-alert { background: var(--red); color: #ffffff; }
@@ -6874,7 +6897,6 @@ function GlobalStyle() {
       .error-box { background: color-mix(in srgb, var(--red) 14%, transparent); border: 1px solid var(--red); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .success-box { background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid var(--green); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
-      .day-nav-row { display: flex; align-items: center; gap: 8px; }
       .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
       .day-nav-btn:disabled { opacity: 0.55; cursor: default; }
       .jump-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; max-height: 240px; overflow-y: auto; }
@@ -6888,8 +6910,6 @@ function GlobalStyle() {
       .day-intent-preview { font-size: 13px; color: var(--text-dim); font-style: italic; margin-bottom: 8px; }
       .section-preview-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
       .preview-toggle { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 8px; }
-      .section-preview-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
-      .section-preview-row:last-child { border-bottom: none; }
       .section-preview-ex-row { font-size: 13px; color: var(--text); padding: 3px 0 3px 8px; border-left: 2px solid var(--border); margin-left: 2px; }
       .section-subheading { font-size: 12px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
       .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px 18px; font-weight: 800; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
@@ -6992,8 +7012,6 @@ function GlobalStyle() {
       .set-grid-row input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
       .set-grid-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .set-grid-row input:disabled, .set-grid-row input[readonly] { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
-      .set-done { background: var(--card); border: 1px solid var(--border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
-      .set-done.done { background: var(--green); color: #fff; border-color: var(--green); }
       .notes-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px; font-size: 14px; font-family: inherit; resize: vertical; }
       .finish-summary { display: flex; flex-direction: column; gap: 12px; align-items: stretch; padding-top: 10px; }
       .finish-stat { text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
