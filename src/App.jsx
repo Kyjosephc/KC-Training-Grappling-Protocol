@@ -1220,6 +1220,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, rotated every 2 weeks through three variations", quality: "Core" }),
+              ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Anti-extension and loaded trunk flexion — resisting being straightened out is what guard retention and defending a stack actually are, and it is the one trunk quality the anti-rotation work above does not touch. Doubles as grip time on the bar.", cues: "No swinging. Start with knees to chest and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -1280,6 +1281,7 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, rotated every 2 weeks through three variations", quality: "Core" }),
+              ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Anti-extension and loaded trunk flexion — resisting being straightened out is what guard retention and defending a stack actually are, and it is the one trunk quality the anti-rotation work above does not touch. Doubles as grip time on the bar.", cues: "No swinging. Start with knees to chest and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -1513,6 +1515,7 @@ function buildProgramCContent() {
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Single Leg Romanian Deadlift", { sets: 3, reps: "6 each side", tempo: "2/0/1", rpe: 8 }, "Side Plank", { sets: 3, reps: "20 seconds each side", rpe: 7 }),
           ...ssPair(2, "Weighted Push-Ups", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Weighted Scarecrows", { sets: 3, reps: "8, controlled", rpe: 7 }),
+          ssSingle(9, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", rpe: 6 }, "Core"),
           ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Suitcase Carry (each side)", { sets: 3, reps: "30 meters each side", rpe: 9 }),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -1550,6 +1553,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
+          ssSingle(5, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
           ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
@@ -1581,7 +1585,7 @@ function buildProgramCContent() {
           ssSingle(3, "Renegade Row", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7 }, "Durability"),
           ssSingle(5, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 6 }, "Core"),
-          ssSingle(6, "Pallof Press (Anti-Rotation)", { sets: 2, reps: "10 each side", rpe: 7 }, "Contralateral Stability"),
+          ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
       ]},
       { name: "Day 3", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
@@ -1800,11 +1804,11 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
             // Dropped in the peak block, the same way Program A drops it: a true
             // max-effort pull followed by heavy eccentric hinge work is the wrong
             // combination for the week mat intensity is highest.
-            ...(trim ? [] : [ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: dePct <= 50 ? "8" : "6", load: dePct <= 50 ? "moderate — leave the last rep comfortably in the tank" : "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week and has no other hamstring or hip-hinge work — loading the hamstring long and slow under control is the best-evidenced protection against the strain that maximal sprinting otherwise invites.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" })]),
+            ex({ name: "Barbell Romanian Deadlift", sets: trim ? 2 : 3, reps: dePct <= 50 ? "8" : "6", load: dePct <= 50 ? "moderate — leave the last rep comfortably in the tank" : "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week and has no other hamstring or hip-hinge work — loading the hamstring long and slow under control is the best-evidenced protection against the strain that maximal sprinting otherwise invites.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
           ]},
-          { id: uid(), type: "power", name: trim ? "Dynamic Effort Upper" : "Dynamic Effort Upper + Rotational Power", exercises: [
+          { id: uid(), type: "power", name: "Dynamic Effort Upper + Rotational Power", exercises: [
             deBench(dePct),
-            ...(trim ? [] : [ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles", quality: "Rotational Power" })]),
+            ex({ name: "Landmine Rotational Press (each side)", sets: trim ? 2 : 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles. Kept in the peak block at reduced volume: it is the most competition-specific thing in the session and it costs almost nothing to keep.", quality: "Rotational Power" }),
           ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Heavy Farmer Carry", sets: 2, reps: "25 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk bracing under load — the only carry slot in a two-day week, so it stays heavy", quality: "Grip/Trunk" }),
@@ -1812,9 +1816,11 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
             ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure", quality: "Durability" }),
             ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
           ]},
-          ...(trim ? [] : [{ id: uid(), type: "arms_core", name: "Core", exercises: [
-            ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 2, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: coreAntiPool[0].notes, quality: "Core" }),
-          ]}]),
+          { id: uid(), type: "arms_core", name: "Core", exercises: [
+            trim
+              ? ex({ name: "Heavy Pallof Press Hold (each side)", sets: 2, reps: "15 to 20 seconds per side", load: "genuinely heavy", rir: 2, rest: "60 seconds", purpose: "Anti-rotation under real load. Fixed rather than rotated in the peak block: the rotation would otherwise land on a carry or a plate lift here, and resisting rotation is the trunk quality closest to what a match actually asks for. Two sets, isometric, almost no fatigue cost.", cues: "Stand side-on to the cable, press the handle straight out from your chest and hold. Do not let the ribs or hips turn toward the machine. If your torso rotates, the weight is too heavy.", quality: "Core" })
+              : ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 2, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: coreAntiPool[0].notes, quality: "Core" }),
+          ]},
         ]},
       { id: uid(), label: "2", name: "Max Effort Upper + Dynamic Effort Lower + Conditioning",
         intent: "Sprints first while you're completely fresh, then max effort on the press, the week's pulling work, explosive lower body work, and the week's one conditioning session to finish. Shoulder activation and neck work stay on Day 1 to keep this day, with its long conditioning finisher, clear of the two-hour mark.",
@@ -1829,6 +1835,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [ deSquat(dePct) ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+            ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "The only anti-extension work in a two-day week, and the one trunk quality the carries and anti-rotation holds do not touch. Resisting being straightened out is what guard retention and defending a stack actually are. It sits here because the bar is already out for the dead hang.", cues: "No swinging. Knees to chest first, and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
             ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
