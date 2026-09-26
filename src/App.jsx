@@ -3986,7 +3986,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <p className="muted" style={{ marginBottom: 10 }}>
         {(client?.sessionsCompleted || 0)} sessions logged since {client?.createdAt ? fmtDate(client.createdAt) : "you started"}
         {client?.createdAt ? (() => {
-          const months = Math.round((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30));
+          const months = Math.round((Date.now() - new Date(client.createdAt + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24 * 30));
           return months >= 1 ? ` (roughly ${months} month${months === 1 ? "" : "s"})` : "";
         })() : ""}.
         {" "}After several months of accumulated training, a deeper deload tends to pay off more than the standard one. Turning this on doesn't change your everyday lifting — only deload weeks, which go a further 10 percent lighter with an extra rep in reserve on every set.
@@ -4072,13 +4072,16 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 // the athletes actually agreed to.
 function downloadWaiverRecord(records) {
   const generated = new Date();
-  const signed = records.filter((r) => r.full && r.full.waiver && r.full.waiver.at);
-  const unsigned = records.filter((r) => !(r.full && r.full.waiver && r.full.waiver.at));
+  const loadable = records.filter((r) => !r.loadFailed);
+  const unreadable = records.filter((r) => r.loadFailed);
+  const signed = loadable.filter((r) => r.full && r.full.waiver && r.full.waiver.at);
+  const unsigned = loadable.filter((r) => !(r.full && r.full.waiver && r.full.waiver.at));
   const lines = [];
   lines.push("STRENGTH MATRIX — LIABILITY WAIVER RECORD");
   lines.push("Generated " + generated.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
   lines.push("");
-  lines.push("Athletes who have accepted: " + signed.length + " of " + records.length);
+  lines.push("Athletes who have accepted: " + signed.length + " of " + loadable.length);
+  if (unreadable.length) lines.push("Records that could not be read at generation: " + unreadable.length + " (see the end of this document)");
   lines.push("");
   lines.push("ACCEPTED");
   lines.push("-".repeat(60));
@@ -4100,6 +4103,16 @@ function downloadWaiverRecord(records) {
     lines.push("NOT YET ACCEPTED");
     lines.push("-".repeat(60));
     unsigned.forEach((r) => lines.push(r.name + (r.pending ? "  (signed up, profile not set up)" : "")));
+    lines.push("");
+  }
+  if (unreadable.length) {
+    lines.push("COULD NOT BE READ");
+    lines.push("-".repeat(60));
+    lines.push("These records failed to load when this document was generated, so");
+    lines.push("their waiver status is unknown. They are NOT a record of refusal.");
+    lines.push("Generate this again on a good connection before relying on it.");
+    lines.push("");
+    unreadable.forEach((r) => lines.push(r.name));
     lines.push("");
   }
   lines.push("");
@@ -4136,7 +4149,12 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ownList = await Promise.all(clients.map(async (c) => ({ id: c.id, name: c.name, full: await getClient(userId, c.id), ownerId: userId })));
+      const ownList = await Promise.all(clients.map(async (c) => {
+        const got = await getClient(userId, c.id);
+        // A failed read is not an empty client. Keep them apart, or the coach is
+        // shown "Unpaid, no waiver" for someone who is paid and has signed.
+        return { id: c.id, name: c.name, full: got === LOAD_FAILED ? null : got, loadFailed: got === LOAD_FAILED, ownerId: userId };
+      }));
       let linkedList = [];
       // If this is the coach's own account, also pull in every client who signed up
       // for their own account and got auto-linked to this coach — those clients' data
@@ -4151,8 +4169,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
               continue;
             }
             for (const c of clientProfiles) {
-              const full = await getClient(link.client_user_id, c.id);
-              linkedList.push({ id: c.id, name: c.name || link.client_email, full, ownerId: link.client_user_id });
+              const got = await getClient(link.client_user_id, c.id);
+              linkedList.push({ id: c.id, name: c.name || link.client_email,
+                full: got === LOAD_FAILED ? null : got, loadFailed: got === LOAD_FAILED, ownerId: link.client_user_id });
             }
           }
         } catch {}
@@ -4168,8 +4187,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const markReviewed = async (ownerId) => {
     if (!ownerId || ownerId === userId) return;
     const next = Array.from(new Set([...(reviewed || []), ownerId]));
+    const saved = await kvSet(userId, REVIEWED_SIGNUPS_KEY, next);
+    if (saved && saved.ok === false) return;
     setReviewed(next);
-    await kvSet(userId, REVIEWED_SIGNUPS_KEY, next);
     if (onSignupsReviewed) onSignupsReviewed();
   };
 
@@ -4187,11 +4207,12 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
     }
     full = fresh;
     const updated = { ...full, paid: !full.paid };
-    if (id === activeId && ownerId === userId) {
-      await onPersistActive(updated);
-    } else {
-      await setClient(ownerId, id, updated);
-    }
+    const saved = (id === activeId && ownerId === userId)
+      ? await onPersistActive(updated)
+      : await setClient(ownerId, id, updated);
+    // Do not flip the pill on a write that did not land — kvSet has already
+    // shown its own toast, and a wrong "Paid" here is worse than no change.
+    if (saved && saved.ok === false) { setBusyId(null); return; }
     setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId ? { ...r, full: updated } : r)));
     await markReviewed(ownerId);
     setBusyId(null);
@@ -4265,7 +4286,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     <div className="muted" style={{ fontSize: 12.5 }}>{r.pending ? "Signed up — hasn't started their program yet" : full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
-                    <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>
+                    {r.loadFailed
+                      ? <span className="pill pill-alert">Couldn't load</span>
+                      : <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>}
                     <span className={`pill ${full?.waiver?.at ? "pill-paid" : "pill-alert"}`}>{full?.waiver?.at ? "Waiver signed" : "No waiver"}</span>
                   </div>
                 </div>
@@ -4299,7 +4322,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                 <button
                   className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
                   style={{ marginTop: 10 }}
-                  disabled={busyId === r.id || !full}
+                  disabled={busyId === r.id || !full || r.loadFailed}
                   onClick={() => togglePaid(r.id, full, r.ownerId)}
                 >
                   {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
@@ -4731,7 +4754,7 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   );
 }
 function SliderRow({ label, hint, value, max, onChange }) {
-  return <div className="slider-row"><div className="slider-label"><span>{label}{hint ? <span className="slider-hint"> {hint}</span> : null}</span><span className="slider-value">{value}</span></div><input type="range" min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} /></div>;
+  return <div className="slider-row"><div className="slider-label"><span>{label}{hint ? <span className="slider-hint"> {hint}</span> : null}</span><span className="slider-value">{value}</span></div><input type="range" aria-label={label} min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} /></div>;
 }
 
 /* ============================== SHARED SESSION UI ============================== */
