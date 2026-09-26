@@ -3166,7 +3166,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
         )}
       </button>
       <div className="topbar-icons">
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="topbar-icon-group">
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
           {isCoach && (
             <button className="icon-btn icon-btn-badged" onClick={onOpenCoachDashboard}
@@ -3178,8 +3178,8 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
           <button className="icon-btn" onClick={onOpenHelp} aria-label="Help and glossary"><HelpCircle size={20} /></button>
           <button className="icon-btn" onClick={onOpenCalculator} aria-label="One-Rep Max and Rate of Perceived Exertion calculator"><Calculator size={20} /></button>
         </div>
-        <div style={{ width: 1, background: "var(--border)", margin: "6px 2px" }} />
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="topbar-icon-divider" />
+        <div className="topbar-icon-group">
           <button className="icon-btn" onClick={onOpenPayment} aria-label="Payment information"><DollarSign size={20} /></button>
           <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings"><SettingsIcon size={20} /></button>
           <button className="icon-btn" onClick={onOpenClients} aria-label="Switch client"><Users size={20} /></button>
@@ -6604,8 +6604,10 @@ function GlobalStyle() {
       .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand avatar" "icons icons"; align-items: center; gap: 12px 10px; padding: 16px 16px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
       .topbar > .brand-block { grid-area: brand; }
       .topbar > .topbar-avatar-btn { grid-area: avatar; }
-      .topbar-icons { grid-area: icons; display: flex; gap: 6px; justify-content: flex-start; align-items: center; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-      .topbar-icons::-webkit-scrollbar { display: none; }
+      .topbar-icons { grid-area: icons; display: flex; gap: 6px; align-items: center; padding-bottom: 2px; min-width: 0; }
+      .topbar-icon-group { display: contents; }
+      .topbar-icon-divider { width: 1px; flex: 0 0 1px; align-self: stretch; background: var(--border); margin: 6px 2px; }
+      .topbar-icons .icon-btn { flex: 1 1 0; width: auto; min-width: 0; max-width: 46px; }
       .topbar-avatar-btn { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0 auto; flex-shrink: 0; }
       .topbar-avatar-img { width: 100%; height: 100%; object-fit: cover; }
       .topbar-avatar-fallback { font-size: 16px; font-weight: 700; color: var(--text-dim); }
@@ -6642,7 +6644,7 @@ function GlobalStyle() {
       .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .nav-btn { flex: 1; min-width: 0; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 10px; font-size: 11.5px; line-height: 1.1; white-space: nowrap; cursor: pointer; position: relative; }
       .nav-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-      @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } }
+      @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } .topbar { padding-left: 10px; padding-right: 10px; } .topbar-icons { gap: 6px; } }
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
       .stat-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
