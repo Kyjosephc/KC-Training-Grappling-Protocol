@@ -4966,7 +4966,10 @@ function findRecentPR(client) {
   if (client.logs.length === 0) return null;
   const lastLog = client.logs[client.logs.length - 1];
   let top = null;
-  for (const e of lastLog.exercises) { const b = bestSetOf(e.sets); if (b && (!top || b.e1rm > top.e1rm)) top = { ...b, name: e.name, date: lastLog.date }; }
+  // A log written by an older build, or a partial write, can arrive without an
+  // exercises array. Unguarded, that threw during render and took the whole
+  // Today tab down for an athlete whose history is otherwise fine.
+  for (const e of (lastLog && Array.isArray(lastLog.exercises) ? lastLog.exercises : [])) { const b = bestSetOf(e.sets); if (b && (!top || b.e1rm > top.e1rm)) top = { ...b, name: e.name, date: lastLog.date }; }
   return top;
 }
 
@@ -5061,13 +5064,11 @@ function AccomplishmentsPage({ client, onClose }) {
 function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   // Check-ins saved before Sep 2026 carry energy/soreness and no readiness key at
   // all, which left the second slider blank and uncontrolled when one was reopened.
-  const [v, setV] = useState(() => ({
-    bjjHard: false,
-    ...(existing || {}),
-    sleep: Number(existing && existing.sleep) >= 0 ? Number(existing.sleep) : 3,
-    readiness: Number(existing && existing.readiness) >= 0 ? Number(existing.readiness)
-      : (Number(existing && existing.energy) >= 0 ? Number(existing.energy) : 3),
-  }));
+  const [v, setV] = useState(() => {
+    const e = existing || {};
+    const num = (x, fallback) => (Number.isFinite(Number(x)) ? Number(x) : fallback);
+    return { bjjHard: false, ...e, sleep: num(e.sleep, 3), readiness: num(e.readiness, num(e.energy, 3)) };
+  });
   const [weight, setWeight] = useState(existingWeight || "");
   const fields = [
     // Both rows run the same direction — higher is better on each — so a slider
