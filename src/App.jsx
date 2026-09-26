@@ -1953,6 +1953,40 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
   };
 }
 
+
+// A tied jiu-jitsu belt, drawn rather than imported, so it takes the athlete's
+// own belt colour and stays sharp at any size. The rank bar is dropped below
+// about 26px, where it stops being a detail and becomes noise.
+const BELT_EMBLEM_COLORS = {
+  White: "#eef0f3", Grey: "#9aa1aa", Yellow: "#e6c22e", Orange: "#e2872c",
+  Green: "#3f9d5a", Blue: "#2f6fd0", Purple: "#7d4cc0", Brown: "#6d4a2f", Black: "#333744",
+};
+
+function BeltEmblem({ level, size = 30, title }) {
+  const fill = BELT_EMBLEM_COLORS[level] || BELT_EMBLEM_COLORS.White;
+  const detail = size >= 26;
+  const label = title === null ? undefined : (title || `${level || "White"} belt`);
+  return (
+    <svg viewBox="0 0 64 40" width={size} height={Math.round((size * 40) / 64)} fill="none"
+      stroke="#0a0b0d" strokeWidth="1.5" strokeLinejoin="round"
+      role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true}
+      style={{ display: "block", flexShrink: 0 }}>
+      <polygon points="1,8 26,12 26,18 1,14" fill={fill} />
+      <polygon points="63,8 38,12 38,18 63,14" fill={fill} />
+      <polygon points="27,17 20,37 26,38.5 31.5,18.5" fill={fill} />
+      <polygon points="37,17 44,37 38,38.5 32.5,18.5" fill={fill} />
+      <polygon points="26,6 38,6 38,19 26,19" fill={fill} />
+      {detail && (
+        <>
+          <polygon points="21.9,30 27.6,31.3 26.2,36.4 20.5,35.1" fill="#101216" stroke="#0a0b0d" strokeWidth="1" />
+          <line x1="23.6" y1="30.5" x2="22.3" y2="35.4" stroke="#eef0f3" strokeWidth="1" />
+          <line x1="25.7" y1="31" x2="24.4" y2="35.9" stroke="#eef0f3" strokeWidth="1" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purple", "Brown", "Black"];
 const PROGRAM_VARIANT_LABELS = {
   A: "Program A — Condensed Conjugate",
@@ -3061,6 +3095,13 @@ function OnboardingScreen({ onSubmit }) {
         <LabeledInput label="Height — feet" type="number" min="0" max="8" value={heightFeet} onChange={setHeightFeet} />
         <LabeledInput label="Height — inches" type="number" min="0" max="11" value={heightInches} onChange={setHeightInches} />
       </div>
+      <div className="belt-preview">
+        <BeltEmblem level={beltLevel} size={54} />
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{beltLevel} belt</div>
+          <div className="muted" style={{ fontSize: 12 }}>This shows on your profile throughout the app.</div>
+        </div>
+      </div>
       <label className="labeled-input">
         <span>Brazilian Jiu-Jitsu belt level</span>
         <select className="select-input" value={beltLevel} onChange={(e) => setBeltLevel(e.target.value)}>
@@ -3169,13 +3210,18 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
           <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
         </div>
       </div>
-      <button className="topbar-avatar-btn" onClick={onOpenSettings} aria-label="Edit profile picture">
-        {client.profilePicture ? (
-          <img src={client.profilePicture} alt="" className="topbar-avatar-img" />
-        ) : (
-          <span className="topbar-avatar-fallback">{(client.name || "?").trim().charAt(0).toUpperCase()}</span>
-        )}
-      </button>
+      <div className="topbar-avatar-wrap">
+        <button className="topbar-avatar-btn" onClick={onOpenSettings} aria-label="Edit profile picture">
+          {client.profilePicture ? (
+            <img src={client.profilePicture} alt="" className="topbar-avatar-img" />
+          ) : (
+            <span className="topbar-avatar-fallback">{(client.name || "?").trim().charAt(0).toUpperCase()}</span>
+          )}
+        </button>
+        <span className="topbar-belt" title={`${client.beltLevel || "White"} belt`}>
+          <BeltEmblem level={client.beltLevel} size={30} />
+        </span>
+      </div>
       <div className="topbar-icons">
         <div className="topbar-icon-group">
           <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
@@ -3875,6 +3921,13 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </div>
       </div>
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Brazilian Jiu-Jitsu Belt Level</h3>
+      <div className="belt-preview">
+        <BeltEmblem level={belt} size={54} />
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{belt} belt</div>
+          <div className="muted" style={{ fontSize: 12 }}>Shown on your profile picture throughout the app.</div>
+        </div>
+      </div>
       <select className="select-input" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
         {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
@@ -4321,6 +4374,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
             return (
               <div key={rowKey} className="dash-row">
                 <button className="dash-row-head" onClick={() => setOpenRow(open ? null : rowKey)} aria-expanded={open}>
+                  {full && <BeltEmblem level={full.beltLevel} size={24} title={null} />}
                   <div className="dash-row-main">
                     <div className="dash-row-name">
                       {r.name}
@@ -6671,7 +6725,10 @@ function GlobalStyle() {
       .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
       .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand avatar" "icons icons"; align-items: center; gap: 12px 10px; padding: 16px 16px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
       .topbar > .brand-block { grid-area: brand; }
-      .topbar > .topbar-avatar-btn { grid-area: avatar; }
+      .topbar > .topbar-avatar-wrap { grid-area: avatar; }
+      .topbar-avatar-wrap { position: relative; width: 42px; height: 42px; flex-shrink: 0; }
+      .topbar-belt { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); pointer-events: none;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.65)); }
       .topbar-icons { grid-area: icons; display: flex; gap: 6px; align-items: center; padding-bottom: 2px; min-width: 0; }
       .topbar-icon-group { display: contents; }
       .topbar-icon-divider { width: 1px; flex: 0 0 1px; align-self: stretch; background: var(--border); margin: 6px 2px; }
@@ -6772,6 +6829,7 @@ function GlobalStyle() {
       .dash-chip.tone-red { color: var(--red); border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
       .dash-allclear { font-size: 13px; color: var(--green); border: 1px solid var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); border-radius: 10px; padding: 9px 12px; margin-bottom: 16px; }
       .dash-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+      .belt-preview { display: flex; align-items: center; gap: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
       .dash-row-head { width: 100%; background: none; border: none; color: var(--text); font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 60px; cursor: pointer; }
       .dash-row-main { flex: 1; min-width: 0; }
       .dash-row-name { font-weight: 700; font-size: 14.5px; }
