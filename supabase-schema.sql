@@ -18,35 +18,16 @@ create policy "Users manage their own data"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- 2) Roster snapshots: the opt-in summary a client shares with a coach's
---    roster code (see Settings -> "Share Progress With Your Coach" in the app).
---    Anyone signed in can read or write a snapshot if they know the code,
---    the same trust model as a class code -- treat it like one.
-create table if not exists roster_snapshots (
-  roster_code text not null,
-  client_id text not null,
-  snapshot jsonb not null,
-  updated_at timestamptz default now(),
-  primary key (roster_code, client_id)
-);
-
-alter table roster_snapshots enable row level security;
-
-create policy "Signed-in users can read roster snapshots"
-  on roster_snapshots for select
-  using (auth.role() = 'authenticated');
-
-create policy "Signed-in users can write roster snapshots"
-  on roster_snapshots for insert
-  with check (auth.role() = 'authenticated');
-
-create policy "Signed-in users can update roster snapshots"
-  on roster_snapshots for update
-  using (auth.role() = 'authenticated');
-
-create policy "Signed-in users can delete roster snapshots"
-  on roster_snapshots for delete
-  using (auth.role() = 'authenticated');
+-- 2) Roster snapshots: REMOVED.
+--
+--    This backed a "share progress with your coach via a roster code" feature
+--    that no longer exists — nothing in the app reads or writes this table. Its
+--    policies allowed any signed-in user to read, update and DELETE every row,
+--    which was tolerable for an opt-in class-code feature and is not something
+--    to leave lying around once the feature is gone.
+--
+--    On a project that already ran the old version of this file, drop it:
+--        drop table if exists roster_snapshots;
 
 -- ---------------------------------------------------------------------------
 -- client_links
