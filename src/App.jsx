@@ -870,6 +870,7 @@ const VIDEO_LIBRARY = {
   "plate lifts": "https://www.youtube.com/shorts/zF9ZkUYp7Rk",
   "pendlay row": "https://www.youtube.com/shorts/0PSfteHhUtg",
   "cable triceps pushdown": "https://www.youtube.com/shorts/Fmiob5b0EAk",
+  "inverse zottman curl": "https://www.youtube.com/shorts/FljBpJ5gQo0",
   "acceleration sprint": "https://www.youtube.com/shorts/7_-gaumnzWw",
   "neck bridge": "https://www.youtube.com/shorts/hxMolBuXmY0",
 };
@@ -1238,6 +1239,7 @@ const conjugateProgram = {
               ex({ name: "Heavy Landmine Anti-Rotation Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort, not light", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded rotation — grappling is a rotational sport, and this is the missing piece next to the rotational power work above: real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
+              ex({ name: "Inverse Zottman Curl", sets: 2, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2, rest: "60 seconds", purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.", cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -1299,6 +1301,7 @@ const conjugateProgram = {
               ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" , videoUrl: "https://www.youtube.com/watch?v=fx6lSVNvu-4" }),
             ]},
             { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
+              ex({ name: "Inverse Zottman Curl", sets: 2, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2, rest: "60 seconds", purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.", cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -1331,6 +1334,9 @@ const conjugateProgram = {
           intent: "Same — hard top set, minimal accessory. This late in the block, more volume doesn't make you stronger, it just makes you tired.",
           sections: [
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
+            { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
+              ex({ name: "Inverse Zottman Curl", sets: 2, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2, rest: "60 seconds", purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.", cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
+            ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
               ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Horizontal pulling, kept through the peak block at a reduced dose. Pressing volume does not drop here and neither should the thing balancing it — and this is the pattern you actually use to break posture and drag an arm.", cues: "Chest on the pad, pull to the bottom of your ribs, hold for a beat.", quality: "Pull" }),
@@ -1510,6 +1516,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
           ...ssPair(3, "Weighted Pull-Up", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
           ...ssPair(4, "Toes to Bar", { sets: 2, reps: "10", tempo: "3/0/1", rpe: 8 }, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }),
+          ssSingle(6, "Inverse Zottman Curl", { sets: 2, reps: "10 to 12", rpe: 7 }, "Arms"),
           ssSingle(5, "Rice Bucket Grip Drills", { sets: 2, reps: "20 seconds each direction", rpe: 6 }, "Grip"),
         ]},
       ]},
@@ -1555,6 +1562,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
+          ssSingle(6, "Inverse Zottman Curl", { sets: 2, reps: "10 to 12", rpe: 7 }, "Arms"),
           ssSingle(5, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -1587,6 +1595,7 @@ function buildProgramCContent() {
           ssSingle(3, "Renegade Row", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7 }, "Durability"),
           ssSingle(5, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 6 }, "Core"),
+          ssSingle(7, "Inverse Zottman Curl", { sets: 2, reps: "10 to 12", rpe: 7 }, "Arms"),
           ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
       ]},
@@ -1837,6 +1846,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [ deSquat(dePct) ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+            ex({ name: "Inverse Zottman Curl", sets: 2, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2, rest: "60 seconds", purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.", cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
             ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "The only anti-extension work in a two-day week, and the one trunk quality the carries and anti-rotation holds do not touch. Resisting being straightened out is what guard retention and defending a stack actually are. It sits here because the bar is already out for the dead hang.", cues: "No swinging. Knees to chest first, and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
