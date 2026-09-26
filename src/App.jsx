@@ -758,7 +758,7 @@ const VIDEO_LIBRARY = {
   "cable pull-apart": "https://www.youtube.com/shorts/Ol-QWheu9Yg",
   "multi-planar lunge matrix": "https://www.youtube.com/shorts/6hiVTg5rD7Y",
   "cable diagonal chop": "https://www.youtube.com/shorts/8OZImYISmSg",
-  "glute bridge": "https://www.youtube.com/shorts/mSuDY5J0Fwo",
+  "glute bridge": "https://www.youtube.com/shorts/qB_bC7-CQjI",
   "supine hamstring single leg glute bridge": "https://www.youtube.com/watch?v=sNIePOcTVTs",
   "bodyweight lateral squat walk": "https://www.youtube.com/shorts/vIEmbHOSY2U",
   "dead bug": "https://www.youtube.com/shorts/DqLL45uk2Tk",
@@ -1140,9 +1140,6 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
       { id: uid(), label: "1", name: "Max Effort Lower — Deload",
         intent: "Stay light on purpose. This is recovery, not a second max-effort day — leave real reps in the tank on every set.",
         sections: [
-          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-            ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief movement preparation only", quality: "Neuromuscular" }),
-          ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "4-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
@@ -1152,9 +1149,6 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
       { id: uid(), label: "2", name: "Max Effort Upper — Deload",
         intent: "Same idea upstairs — moderate weight, clean technique, plenty of reps left in reserve.",
         sections: [
-          { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-            ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief shoulder preparation only", quality: "Neuromuscular" }),
-          ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 3, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
@@ -1199,10 +1193,6 @@ const conjugateProgram = {
         { id: uid(), label: "1", name: "Max Effort Lower + Durability",
           intent: "True max effort on the main lift — build to an honest heavy top set, then stop. Everything else today is light preparation and tissue work, not a second workout.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Single-Leg Balance Reach", sets: 2, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Reactive neuromuscular training for ankle and knee stability before loading the lift", quality: "Neuromuscular" }),
-              ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility" , videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "8 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
@@ -1218,9 +1208,6 @@ const conjugateProgram = {
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
           intent: "Same approach on the press — one hard top set, then shoulder-health, pulling, grip, and core work. Don't chase extra volume this early in the block.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before heavy pressing", quality: "Neuromuscular" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
               ex({ name: "Weighted Pull-Up", sets: 4, reps: "5", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength, grappling transfer", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
@@ -1266,9 +1253,6 @@ const conjugateProgram = {
         { id: uid(), label: "1", name: "Max Effort Lower + Durability",
           intent: "This is where lower body strength gets built — push the top set, but keep the extras minimal. Grappling volume doesn't change, so recovery capacity is the limiting factor, not ambition.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Single-Leg Balance Reach", sets: 2, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Reactive neuromuscular training for ankle and knee stability", quality: "Neuromuscular" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is the best-evidenced protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
@@ -1284,9 +1268,6 @@ const conjugateProgram = {
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
           intent: "Same logic upstairs — hard top set, short accessory list. If grappling was rough this week, this is the day to trim first.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Scapular Push-Up", sets: 2, reps: "10", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Serratus activation before pressing", quality: "Neuromuscular" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meUpperBlock(),
               ex({ name: "Weighted Pull-Up", sets: 4, reps: "4", load: "added weight", rir: 2, rest: "2 to 3 minutes", purpose: "Pulling strength maintenance", quality: "Accessory" , videoUrl: "https://www.youtube.com/shorts/pYhflsmHAy4" }),
@@ -1332,9 +1313,6 @@ const conjugateProgram = {
         { id: uid(), label: "1", name: "Max Effort Lower",
           intent: "One hard, clean top set. No lingering — get in, get strong, get out. Freshness for grappling outranks extra sets right now.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief preparation only — freshness is the priority", quality: "Neuromuscular" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "6", load: "moderate — well short of what you used in the earlier blocks", rir: 4, rest: "90 seconds", tempo: "3/0/1", purpose: "Two light sets, kept in on purpose. Maximal sprinting stays in every week of this block, and sprinting is where hamstrings tear — dropping the only hinge work in the weeks the mat is hardest is exactly the wrong time to drop it. This is a maintenance dose, not training.", cues: "Push the hips back, bar close, three full seconds down. Nothing heavy — you are keeping the tissue used to being loaded long, not building anything this close in.", quality: "Posterior Chain" }),
@@ -1348,9 +1326,6 @@ const conjugateProgram = {
         { id: uid(), label: "2", name: "Max Effort Upper",
           intent: "Same — hard top set, minimal accessory. This late in the block, more volume doesn't make you stronger, it just makes you tired.",
           sections: [
-            { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
-              ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief shoulder preparation only", quality: "Neuromuscular" }),
-            ]},
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
@@ -1663,32 +1638,25 @@ function buildProgramCContent() {
 // Raise, Activate, Mobilise, Potentiate — so each phase feeds the next rather
 // than being a pile of drills. Bumping WARMUP_VERSION replaces it for athletes
 // who already have the old one saved against their program.
-const WARMUP_VERSION = 3;
+const WARMUP_VERSION = 4;
 
 function defaultWarmup() {
   return [
-    { id: uid(), block: "Raise", duration: "4 to 5 minutes", items: [
+    { id: uid(), block: "Raise", duration: "3 minutes", items: [
       { id: uid(), name: "Assault Bike", detail: "3 minutes. Easy for the first minute, moderate for the second, then add three or four 5-second surges. Drive the arms through the handles rather than letting them get pushed around — that is the half of you a treadmill never warms up. The cue is temperature, not the clock: you want to be lightly sweating before you touch a bar. If you finish this breathing hard, you went too hard.", videoUrl: "" },
-      { id: uid(), name: "Foam Roller Circuit", detail: "About 30 seconds per area, roughly 90 seconds total. Keep moving rather than parking on a tender spot, and do it now while the tissue is warm — rolling cold is less comfortable and does less. This is a warm-up, not a massage.", videoUrl: "https://www.youtube.com/shorts/pH0rGQ5qwL8", videoUrl2: "https://www.youtube.com/shorts/hnWNTEntonc", videoUrl3: "https://www.youtube.com/shorts/bomnVey6IrA" },
     ]},
     { id: uid(), block: "Activate", duration: "3 minutes", items: [
       { id: uid(), name: "Banded Lateral Step", detail: "30 seconds each direction. Band above the knees, small athletic stance, stay low — no bobbing up and down between steps.", videoUrl: "https://www.youtube.com/watch?v=RW4ZvH22l48" },
-      { id: uid(), name: "Banded Sumo Steps", detail: "30 seconds each direction. Toes slightly out, drive the knees against the band the whole way.", videoUrl: "https://www.youtube.com/shorts/MeCwofJYAzo" },
-      { id: uid(), name: "Single Leg Glute Bridge", detail: "8 reps a side. Ribs down, squeeze at the top for a beat. If you feel it in your hamstring cramping, you are pushing through the heel too far forward.", videoUrl: "https://www.youtube.com/shorts/mSuDY5J0Fwo" },
+      { id: uid(), name: "Single Leg Glute Bridge", detail: "8 reps a side. Ribs down, squeeze at the top for a beat. If you feel it in your hamstring cramping, you are pushing through the heel too far forward.", videoUrl: "https://www.youtube.com/shorts/qB_bC7-CQjI" },
       { id: uid(), name: "Band Pull-Apart", detail: "15 reps. Light band, straight arms, pull to the chest and squeeze the shoulder blades together.", videoUrl: "https://www.youtube.com/shorts/SuvO4TBwSu4" },
-      { id: uid(), name: "Overhead Band Pass", detail: "15 reps. Wide grip to start — go only as narrow as you can without the shoulders shrugging or the ribs flaring. Narrower is not better here.", videoUrl: "https://www.youtube.com/shorts/07lFW_Ulz6E" },
       { id: uid(), name: "Band External Rotation at 90/90", detail: "12 reps a side, light band. Elbow stays pinned at shoulder height. This is the cuff work that holds the shoulder centred under everything you are about to press — light and controlled, not loaded.", videoUrl: "https://www.youtube.com/shorts/PTi9pfttH64" },
     ]},
-    { id: uid(), block: "Mobilise", duration: "4 to 5 minutes", items: [
+    { id: uid(), block: "Mobilise", duration: "3 minutes", items: [
       { id: uid(), name: "World's Greatest Stretch", detail: "3 reps a side. Hip flexor, adductor and thoracic rotation in one movement — move through it rather than holding.", videoUrl: "https://www.youtube.com/watch?v=-CiWQ2IvY34" },
       { id: uid(), name: "Leg Swings, front-to-back and lateral", detail: "10 reps each direction, each leg. Start small and let the range grow — do not throw the first one.", videoUrl: "https://www.youtube.com/shorts/wF10oYsLUw0" },
-      { id: uid(), name: "Thoracic Rotations (quadruped)", detail: "6 reps a side. Hand behind the head, rotate from the mid-back and follow the elbow with your eyes. Rotation you do not have here gets taken from your lower back instead.", videoUrl: "https://www.youtube.com/shorts/Lfn-Fv_xmmQ" },
       { id: uid(), name: "Ankle Rocks (knee-to-wall)", detail: "30 seconds. Heel stays down, drive the knee forward over the toes. Ankle range is what lets you squat and land properly, and it is the first thing that stiffens up.", videoUrl: "https://www.youtube.com/shorts/I-Hgtc2e2fU" },
-      { id: uid(), name: "Heel Walks", detail: "A short pass. Toes pulled up, walk on the heels.", videoUrl: "https://www.youtube.com/shorts/h4V7X5ZDnU0" },
-      { id: uid(), name: "Toe Walks", detail: "A short pass. Up on the toes, tall through the ankles.", videoUrl: "https://www.youtube.com/watch?v=3d2S7a3D9YY" },
-      { id: uid(), name: "Rack Pec Opener", detail: "15 seconds at low, mid and high arm positions, both sides. Forearm on the upright, rotate away. The three heights hit the three lines of the chest — one arm position will not reach all of them. Keep each hold short; this is opening, not stretching for range.", videoUrl: "https://www.youtube.com/shorts/PQJ4tDLrf4Q" },
     ]},
-    { id: uid(), block: "Potentiate", duration: "1 minute", items: [
+    { id: uid(), block: "Potentiate", duration: "1 to 2 minutes", items: [
       { id: uid(), name: "Box Jumps", detail: "3 reps. Step down off the box every single rep — never jump down. Jumping down roughly doubles the landing force for no added benefit and is the most common way people hurt an Achilles or patellar tendon on this.", videoUrl: "https://www.youtube.com/shorts/bCNpPn5b3Y4" },
       { id: uid(), name: "Broad Jumps", detail: "3 reps. Stick the landing and reset fully between each one. Three good jumps prime you; ten leave you worse off for the session. Land soft with the knees tracking over the toes.", videoUrl: "https://www.youtube.com/shorts/v0yrBWA3eEs" },
     ]},
@@ -1825,8 +1793,6 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
         intent: "Two qualities in one session, since there's only two days a week to work with — a true max effort on the lower body lift while you're fresh, then fast speed work on the upper body press once the main lift is done.",
         sections: [
           { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
-            ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief ankle and knee stability preparation before loading the lift", quality: "Neuromuscular" }),
-            ex({ name: "Scapular Push-Up", sets: 1, reps: "10", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Activates the serratus anterior, primes shoulder blade control before this session's Dynamic Effort press", quality: "Neuromuscular" }),
             ex({ name: "Lateral Shuffle", sets: 2, reps: "10 meters", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Primes lateral hip stability and change-of-direction patterning relevant to scrambles", quality: "Agility", videoUrl: "https://www.youtube.com/shorts/nqLsCj7pgbw" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [
