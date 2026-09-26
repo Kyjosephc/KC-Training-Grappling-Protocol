@@ -1088,7 +1088,7 @@ const conjugateProgram = {
   coachNote:
     "I've spent years studying the training philosophies of Westside Barbell, Phil Daru, Joel Jamieson, Marv Marinovich, Doctor Edythe Heus, Dane Miller, Josh Settlage, and other coaches who train elite strength and combat athletes, and merged that study with my own coaching experience to build this all-in-one program for grapplers who want to be the strongest, most durable version of themselves on the mat. Technique decides a match between two athletes of different skill levels. But when two athletes are matched in technique, the stronger, more explosive, more durable athlete wins that exchange the overwhelming majority of the time. That gap — physical advantage between technically equal grapplers — is what this program exists to close.",
   methodology:
-    "Structure: a condensed conjugate system (Max Effort and Dynamic Effort work) in the tradition of Westside Barbell, adapted for grappling the way coaches like Phil Daru and Josh Settlage (widely known as \"The Brazilian Jiu-Jitsu Strength Coach\") build combat-sport programs — Settlage's publicly stated approach keeps main lifts in an efficient 3-to-6 rep range to build strength without adding unnecessary size, pairs jump training with squat and deadlift work for explosiveness, and trains only as much volume as an athlete can actually recover from given their mat time, which is exactly the same governing principle behind this program's readiness-based auto-adjustment. Explosive strength work also draws on approaches associated with coaches like Dane Miller. Tissue preparation: warm-ups and select accessory work draw on fascia-focused, multi-planar movement principles associated with Marv Marinovich and Doctor Edythe Heus, and on Thomas Myers' Anatomy Trains myofascial-line concept, including loaded rotational work since grappling is a rotational sport. Neuromuscular and durability work: activation and durability blocks use reactive neuromuscular training principles associated with physical therapists Gray Cook and Michael Voight, and tendon-loading ideas associated with Cal Dietz's triphasic method, with dedicated coverage for the neck, ankles, wrists and elbows, shoulders, adductors, and knees. Conditioning: built around Joel Jamieson's actual combat-sport energy-system model rather than random high-intensity work — a genuine aerobic base as the foundation (heart rate held at 130 to 150 beats per minute, with the talk test as the primary gate), Jamieson's extensive tempo method for repeat-effort work capacity, and his real aerobic power interval protocol for raising VO2max (roughly 2 to 3 minute hard efforts at about 90 percent of max heart rate, equal time easy between rounds) — used sparingly rather than every week, since it's genuinely demanding and grappling itself already supplies plenty of high-intensity stimulus on its own. Equipment: every exercise in this program is built specifically around a squat rack, barbell and plates, a flat bench, dumbbells, a dip station, a cable machine, a trap bar, a landmine attachment, bands, an adjustable weighted vest, a pull-up bar, an assault bike, and a treadmill. There is no sled in this program — anywhere that kind of loaded, repeat-effort work would normally show up, it's replaced with heavy carries, loaded barbell or trap bar pulls, weighted-vest incline or backward treadmill walking, or assault bike intervals, which deliver a comparable training stimulus with the equipment actually on hand. Fatigue management: not every method appears in every session — Max Effort, Dynamic Effort, accessory work, plyometrics, conditioning, and postural or joint work rotate intelligently across the week and across phases rather than being crammed into one long workout, and volume is trimmed automatically as grappling training and life stress go up. All of this is Category D — established, well-known coaching practice rather than heavily research-tested systems in isolation — layered on general strength principles (progressive overload, autoregulation using reps in reserve) that carry stronger evidence (National Strength and Conditioning Association and American College of Sports Medicine position stands). Every session also adjusts automatically to your daily readiness check-in and to hard grappling training.",
+    "Structure. A condensed conjugate system — a Max Effort lift paired with Dynamic Effort speed work — in the Westside tradition, adapted for grapplers the way coaches like Phil Daru and Josh Settlage build combat-sport programs: main lifts kept in an efficient 3-to-6 rep range so you get stronger without carrying size you have to cut, jumps paired with squats and pulls, and only as much volume as you can actually recover from given your mat time.\n\nConditioning. Built on Joel Jamieson's energy-system model rather than random hard work. An aerobic base first, because that is what you recover between rounds with. Repeat-effort tempo for the gap between exchanges. Aerobic power to raise the ceiling. Then, in the final block, rounds the length of a real match and a multi-match day, because the qualities are not the same thing as the event.\n\nDurability. Reactive neuromuscular work in the Gray Cook and Michael Voight tradition, tendon loading from Cal Dietz's triphasic method, and dedicated work for the neck, ankles, wrists, shoulders, adductors and knees — the joints grappling actually punishes.\n\nFatigue. Nothing here is fixed. Every session scales to your daily check-in and to how hard you have been rolling, and tells you when it has. The best-written program is the one you can recover from.\n\nEvidence. Most of this is established coaching practice rather than heavily lab-tested protocol, and it is built on principles that do carry strong evidence — progressive overload and autoregulation. Where the research is thin, the app says so rather than dressing it up.",
   philosophy:
     "Brazilian Jiu-Jitsu and wrestling are the priority. This program exists to make you stronger, more explosive, and more durable without taking anything away from the mats. Max Effort work is genuinely hard — push it, that's where strength is earned. Everything else here (agility preparation, durability work, conditioning) is deliberately dosed, and it automatically trims itself when your readiness check-in reads Yellow or Red, or when you flag hard grappling training. When in doubt, the app already errs toward less strength and conditioning work, not more.",
   conjugate: { meLowerPool, meUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, matchSpecificPool, hipPool, meRotationWeeks: 2 },
@@ -3008,7 +3008,38 @@ function OnboardingScreen({ onSubmit }) {
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
       <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
-      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Set up your profile below to get started.</p>
+      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>The paperwork first, then your profile. It takes a minute and it only happens once.</p>
+
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Step 1 — Sign the liability waiver</h3>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+        This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
+        assumption of risk and release of liability before anything else — no profile is created and no program
+        is written until this is signed.
+      </p>
+      {waiver ? (
+        <div className="intent-box" style={{ marginBottom: 10 }}>
+          Signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
+          <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
+        </div>
+      ) : (
+        <button type="button" className="btn-primary wide" style={{ marginBottom: 10 }} onClick={() => setShowWaiver(true)}>
+          Read and sign the liability waiver
+        </button>
+      )}
+      <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowTerms(true)}>
+        Read our Terms &amp; Privacy
+      </button>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        Creating a profile means you agree to them. You can read both again any time in Settings.
+      </p>
+      {!waiver && (
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 18, fontStyle: "italic" }}>
+          Your profile setup appears here once the waiver is signed.
+        </p>
+      )}
+
+      {waiver && (<>
+      <h3 className="log-exercise-name" style={{ marginTop: 26, marginBottom: 6 }}>Step 2 — Your profile</h3>
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
         <div className="settings-avatar-preview">
@@ -3066,31 +3097,11 @@ function OnboardingScreen({ onSubmit }) {
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
       <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
-      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Before You Start</h3>
-      <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-        This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
-        assumption of risk and release of liability before a program can be created for you.
-      </p>
-      {waiver ? (
-        <div className="intent-box" style={{ marginBottom: 10 }}>
-          Signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
-          <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
-        </div>
-      ) : (
-        <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowWaiver(true)}>
-          Read and accept the liability waiver
-        </button>
-      )}
-      <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowTerms(true)}>
-        Read our Terms &amp; Privacy
-      </button>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-        Creating this profile means you agree to them. You can read them again any time in Settings.
-      </p>
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver })}>
         Get started
       </button>
+      </>)}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showWaiver && (
         <WaiverModal
@@ -4144,6 +4155,7 @@ function downloadWaiverRecord(records) {
 function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsReviewed, onClose }) {
   const [records, setRecords] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [openRow, setOpenRow] = useState(null);
   const [reviewed, setReviewed] = useState(null);
 
   useEffect(() => {
@@ -4270,7 +4282,25 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
           <button className="btn-ghost wide" style={{ marginBottom: 14 }} onClick={() => downloadWaiverRecord(records)}>
             <Download size={14} /> Download waiver record ({records.filter((r) => r.full?.waiver?.at).length} signed)
           </button>
-          <p className="muted" style={{ marginBottom: 14 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid and grandfathered in for good.</p>
+          <p className="muted" style={{ marginBottom: 6 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid.</p>
+
+          {(() => {
+            // A coach opening this wants one question answered first: who needs
+            // me today. Everything else can wait behind a tap.
+            const needsPay = records.filter((r) => r.full && !r.full.paid && !r.loadFailed).length;
+            const needsWaiver = records.filter((r) => r.full && !r.full.waiver?.at && !r.loadFailed).length;
+            const stale = records.filter((r) => r.full && daysSinceLastActivity(r.full) !== null && daysSinceLastActivity(r.full) >= 10).length;
+            const failed = records.filter((r) => r.loadFailed).length;
+            const chips = [
+              needsPay && { k: "pay", label: `${needsPay} unpaid`, tone: "amber" },
+              needsWaiver && { k: "waiver", label: `${needsWaiver} without a waiver`, tone: "red" },
+              stale && { k: "stale", label: `${stale} quiet 10+ days`, tone: "amber" },
+              failed && { k: "failed", label: `${failed} didn't load`, tone: "red" },
+            ].filter(Boolean);
+            if (!chips.length) return <div className="dash-allclear">Nothing needs you right now.</div>;
+            return <div className="dash-chips">{chips.map((ch) => <span key={ch.k} className={`dash-chip tone-${ch.tone}`}>{ch.label}</span>)}</div>;
+          })()}
+
           {records.map((r) => {
             const full = r.full;
             const perWeek = full?.program?.sessionsPerWeek || 3;
@@ -4278,55 +4308,75 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
             const recentPR = full?.prLog?.length ? [...full.prLog].sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
             const recentBW = full?.bodyweightLog?.length ? full.bodyweightLog[full.bodyweightLog.length - 1] : null;
             const recentReadiness = full ? Object.values(full.readiness || {}).sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
+            const quiet = full ? daysSinceLastActivity(full) : null;
+            const rowKey = `${r.ownerId}:${r.id || "pending"}`;
+            const open = openRow === rowKey;
+            const lastLine = r.pending
+              ? "Signed up — profile not set up yet"
+              : r.loadFailed
+                ? "Could not be read — check your connection"
+                : full
+                  ? `Week ${weekNumber} · ${quiet === null ? "not trained yet" : quiet === 0 ? "trained today" : quiet === 1 ? "trained yesterday" : `${quiet} days since training`}`
+                  : "No profile yet";
             return (
-              <div key={`${r.ownerId}:${r.id || "pending"}`} className="card">
-                <div className="payment-row">
-                  <div>
-                    <div className="card-title" style={{ marginBottom: 2 }}>{r.name}{r.ownerId !== userId && <span className="muted" style={{ fontWeight: 400, fontSize: 11.5 }}> · self sign-up</span>}</div>
-                    <div className="muted" style={{ fontSize: 12.5 }}>{r.pending ? "Signed up — hasn't started their program yet" : full ? `Week ${weekNumber} — Block ${full.blockNumber || 1}` : ""}</div>
+              <div key={rowKey} className="dash-row">
+                <button className="dash-row-head" onClick={() => setOpenRow(open ? null : rowKey)} aria-expanded={open}>
+                  <div className="dash-row-main">
+                    <div className="dash-row-name">
+                      {r.name}
+                      {r.ownerId !== userId && <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> · self sign-up</span>}
+                    </div>
+                    <div className="dash-row-sub">{lastLine}</div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+                  <div className="dash-row-pills">
                     {r.loadFailed
                       ? <span className="pill pill-alert">Couldn't load</span>
-                      : <span className={`pill ${full?.paid ? "pill-paid" : "pill-unpaid"}`}>{full?.paid ? "Paid" : "Unpaid"}</span>}
-                    <span className={`pill ${full?.waiver?.at ? "pill-paid" : "pill-alert"}`}>{full?.waiver?.at ? "Waiver signed" : "No waiver"}</span>
+                      : <>
+                          {!full?.waiver?.at && <span className="pill pill-alert">No waiver</span>}
+                          {!full?.paid && <span className="pill pill-unpaid">Unpaid</span>}
+                          {full?.paid && full?.waiver?.at && <span className="pill pill-paid">All set</span>}
+                        </>}
                   </div>
-                </div>
-                {full?.waiver?.at && (
-                  <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                    Signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)} · version {full.waiver.version || "unversioned"}
-                  </div>
-                )}
-                {full?.injuryAreas?.length > 0 && (
-                  <div className="adjust-box" style={{ marginTop: 10 }}>
-                    <strong>Program adjusting around:</strong> {INJURY_AREAS.filter((a) => full.injuryAreas.includes(a.key)).map((a) => a.label).join(", ")}
-                  </div>
-                )}
-                {full?.injuryNotes && (
-                  <div className="adjust-box" style={{ marginTop: 10 }}>Their note: {full.injuryNotes}</div>
-                )}
-                <div className="dash-grid" style={{ marginTop: 10 }}>
-                  <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${unitFor(recentPR.reps, recentPR.exerciseName)}` : "None yet"} wide />
-                  <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
-                  <DashStat
-                    label="Readiness"
-                    value={recentReadiness ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        <span className="hero-dot" style={{ background: readinessCopyFor(recentReadiness).color }} />
-                        {recentReadiness.color} — {fmtDate(recentReadiness.date)}
-                      </span>
-                    ) : "None yet"}
-                    wide
-                  />
-                </div>
-                <button
-                  className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
-                  style={{ marginTop: 10 }}
-                  disabled={busyId === r.id || !full || r.loadFailed}
-                  onClick={() => togglePaid(r.id, full, r.ownerId)}
-                >
-                  {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
+                  <ChevronRight size={17} className={open ? "chev-open" : ""} />
                 </button>
+
+                {open && (
+                  <div className="dash-row-body">
+                    {full?.waiver?.at && (
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                        Waiver signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)}
+                      </div>
+                    )}
+                    {full?.injuryAreas?.length > 0 && (
+                      <div className="adjust-box" style={{ marginBottom: 10 }}>
+                        <strong>Working around:</strong> {INJURY_AREAS.filter((a) => full.injuryAreas.includes(a.key)).map((a) => a.label).join(", ")}
+                      </div>
+                    )}
+                    {full?.injuryNotes && <div className="adjust-box" style={{ marginBottom: 10 }}>Their note: {full.injuryNotes}</div>}
+                    <div className="dash-grid">
+                      <DashStat label="Recent PR" value={recentPR ? `${recentPR.exerciseName} — ${recentPR.weight ? `${recentPR.weight} lb × ` : ""}${recentPR.reps} ${unitFor(recentPR.reps, recentPR.exerciseName)}` : "None yet"} wide />
+                      <DashStat label="Bodyweight" value={recentBW ? `${recentBW.weight} lb — ${fmtDate(recentBW.date)}` : "None yet"} wide />
+                      <DashStat
+                        label="Readiness"
+                        value={recentReadiness ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span className="hero-dot" style={{ background: readinessCopyFor(recentReadiness).color }} />
+                            {recentReadiness.color} — {fmtDate(recentReadiness.date)}
+                          </span>
+                        ) : "None yet"}
+                        wide
+                      />
+                    </div>
+                    <button
+                      className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
+                      style={{ marginTop: 10 }}
+                      disabled={busyId === r.id || !full || r.loadFailed}
+                      onClick={() => togglePaid(r.id, full, r.ownerId)}
+                    >
+                      {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -5636,6 +5686,24 @@ function ScheduleTab({ client }) {
   );
 }
 
+// A block of coaching text, split on blank lines, with a leading "Word." label
+// picked out so the sections are scannable rather than one slab of prose.
+function Prose({ text }) {
+  const paras = String(text || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return (
+    <>
+      {paras.map((p, i) => {
+        const m = p.match(/^([A-Z][A-Za-z ]{2,22})\.\s+(.*)$/s);
+        return (
+          <p key={i} className="muted" style={{ marginBottom: i === paras.length - 1 ? 0 : 12, lineHeight: 1.55 }}>
+            {m ? <><strong style={{ color: "var(--text)" }}>{m[1]}.</strong> {m[2]}</> : p}
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
 function ProgramTab({ client, isCoach, onPersist }) {
   const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
@@ -5666,9 +5734,9 @@ function ProgramTab({ client, isCoach, onPersist }) {
       {viewToggle}
       <div className="program-title">{client.program.name}</div>
 
-      {client.program.coachNote && <Card title="From the Coach"><p className="muted">{client.program.coachNote}</p></Card>}
-      {client.program.philosophy && <Card title="Effort Philosophy" right={<Info size={16} color="var(--text-dim)" />}><p className="muted">{client.program.philosophy}</p></Card>}
-      {client.program.methodology && <Card title="Methodology"><p className="muted">{client.program.methodology}</p></Card>}
+      {client.program.coachNote && <Card title="From the Coach"><Prose text={client.program.coachNote} /></Card>}
+      {client.program.philosophy && <Card title="Effort Philosophy" right={<Info size={16} color="var(--text-dim)" />}><Prose text={client.program.philosophy} /></Card>}
+      {client.program.methodology && <Card title="Methodology"><Prose text={client.program.methodology} /></Card>}
 
       <div className="program-actions">
         {isCoach && <button className="btn-ghost" onClick={() => setEditingWarmup(true)}><Pencil size={14} /> Edit warm-up</button>}
@@ -6697,6 +6765,19 @@ function GlobalStyle() {
       .cond-log-row { display: flex; align-items: center; gap: 10px; }
       .cond-log-row input { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--field-border); border-radius: 10px; color: var(--text); font-size: 16px; padding: 12px; min-height: 44px; }
       .cond-log-unit { font-size: 13px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+      /* ---- coach dashboard ---- */
+      .dash-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+      .dash-chip { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; border: 1px solid; }
+      .dash-chip.tone-amber { color: var(--amber); border-color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+      .dash-chip.tone-red { color: var(--red); border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+      .dash-allclear { font-size: 13px; color: var(--green); border: 1px solid var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); border-radius: 10px; padding: 9px 12px; margin-bottom: 16px; }
+      .dash-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+      .dash-row-head { width: 100%; background: none; border: none; color: var(--text); font-family: inherit; text-align: left; display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 60px; cursor: pointer; }
+      .dash-row-main { flex: 1; min-width: 0; }
+      .dash-row-name { font-weight: 700; font-size: 14.5px; }
+      .dash-row-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+      .dash-row-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
+      .dash-row-body { padding: 0 14px 14px; border-top: 1px solid var(--border); padding-top: 12px; }
       .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
       .hero-start-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
