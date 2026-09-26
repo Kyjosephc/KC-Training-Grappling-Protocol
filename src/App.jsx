@@ -172,6 +172,67 @@ function daysSinceLastActivity(client) {
   return Math.max(0, Math.round((now - lastDate) / (1000 * 60 * 60 * 24)));
 }
 
+// The check-in has asked about sleep every day since launch and never once used
+// the answer. Three rough nights in the last five is the point where it earns
+// saying something: often enough to matter, rare enough not to nag.
+function sleepAdvisory(client) {
+  const nights = Object.entries(client.readiness || {})
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .slice(0, 5)
+    .map(([, v]) => Number(v && v.sleep))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+  if (nights.length < 4) return null;
+  if (nights.filter((n) => n <= 2).length < 3) return null;
+  return "Your last few check-ins have sleep running low. Of everything this app measures, sleep is the one with the most leverage on how you recover and how quickly technique sticks — more than anything you could change in the gym this week. What reliably helps: the same bed and wake time every day, weekends included; a properly dark, cool room; and last caffeine by early afternoon. If sessions have been feeling harder than the numbers say they should, this is usually the reason.";
+}
+
+// There is no service worker here, so nothing tells an installed home-screen
+// copy that a newer build exists — it will keep running whatever index.html it
+// cached until the browser decides to revalidate, which on iOS can be days.
+// This asks the server directly, and lets the athlete choose when to take it.
+function useNewBuildAvailable() {
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    const el = document.querySelector('script[type="module"][src*="/assets/"]');
+    const current = el && el.getAttribute("src");
+    // No hashed bundle means the dev server, so there is nothing to compare against.
+    if (!current) return undefined;
+    let cancelled = false;
+    const check = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const res = await fetch(`/index.html?_=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const html = await res.text();
+        const m = html.match(/<script[^>]+src="(\/assets\/[^"]+\.js)"/);
+        if (m && m[1] !== current && !cancelled) setAvailable(true);
+      } catch {
+        // Offline, or the check failed. Not worth telling anyone about.
+      }
+    };
+    check();
+    const id = setInterval(check, 20 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, []);
+  return available;
+}
+function UpdateBanner() {
+  const available = useNewBuildAvailable();
+  const [dismissed, setDismissed] = useState(false);
+  if (!available || dismissed) return null;
+  return (
+    <div className="update-banner" role="status">
+      <span>A newer version of Strength Matrix is ready.</span>
+      <span className="update-banner-actions">
+        <button className="btn-primary" onClick={() => window.location.reload()}>Reload</button>
+        <button className="btn-ghost" onClick={() => setDismissed(true)}>Later</button>
+      </span>
+    </div>
+  );
+}
+
 function reengagementMessage(days) {
   if (days < 5) return null;
   if (days < 10) return `It's been ${days} days since your last session — jump back in today, even a short one counts.`;
@@ -2225,6 +2286,27 @@ function daysUntil(dateStr) {
 
 // Applied on top of the readiness adjustment, so a taper and a rough day stack
 // rather than one overwriting the other.
+// Competition day told the athlete to "warm up, breathe, and go compete" and
+// left them to work out what that meant on the one morning it mattered. Twelve
+// weeks of work funnels into this day and it was the only day with no plan.
+const COMPETITION_DAY_PROTOCOL = `Competition day. Nothing you do in a gym today makes you stronger, and plenty can make you slower. All of this is about arriving at your first match warm, and arriving at your last one still able to produce.
+
+Timing. Find out when you are actually on and work backwards. You want to finish warming up about ten minutes before you are called, not thirty — the point is to still be warm when it starts. Mat times slip constantly, so watch the bracket rather than the schedule, and be ready to stretch the warm-up out or run the last piece of it again.
+
+Raise. Start about thirty-five minutes out. Five minutes easy — bike, jog, skipping, shadow drilling, whatever the venue gives you — until you are breathing and genuinely warm. Same as every other session. Today is not the day to invent something.
+
+Mobilise. Five minutes of the movements you already know: hips, ankles, thoracic spine, shoulders. Nothing held long, nothing new, nothing that leaves you loose. You are opening range you already own.
+
+Sharpen. Three progressive efforts at roughly sixty, eighty and ninety percent, then two hard bursts of ten to fifteen seconds with a full minute between them. Sprints, hard drilling, takedown entries on a partner, or hard bike. This is the piece people skip, and it is the whole difference between a first match that feels like a warm-up and a first match you are actually in.
+
+Stay warm. Once you are sharp, stay sharp. Layers on, keep moving, a short burst every few minutes if the wait drags. Sitting down in a cold venue for twenty minutes undoes all of it.
+
+Between matches. Keep moving for the first few minutes rather than sitting straight down — easy movement clears the effort faster than stillness does. Then warm clothes, a drink, and something small to eat if there is more than an hour. Ten minutes before the next one, repeat the sharpen piece only: two progressive efforts and one short burst. You do not warm up from scratch twice.
+
+Fuel. Small and familiar, nothing new today. Something easy every hour or two rather than one big meal, and drink steadily across the day rather than all at once between matches.
+
+After. Ten minutes of easy movement before you leave, then food and sleep. If the day went well, the work that made it go well was done weeks ago. If it did not, that is information for the next block and not a verdict on you.`;
+
 function applyTaper(sections, daysOut) {
   if (daysOut == null || daysOut < 0 || daysOut > TAPER_DAYS) return { sections, taperNote: null };
 
@@ -2234,8 +2316,8 @@ function applyTaper(sections, daysOut) {
   if (daysOut === 0) {
     return {
       sections: sections.map((sec) => ({ ...sec, exercises: [], skipped: true,
-        skipNote: "Nothing today. Warm up, breathe, and go compete." })),
-      taperNote: "Competition day. Nothing in the gym today makes you better — warm up, breathe, and go compete.",
+        skipNote: "Nothing to train today — the plan for the day is written above." })),
+      taperNote: COMPETITION_DAY_PROTOCOL,
     };
   }
 
@@ -2987,6 +3069,7 @@ function MainApp({ userId, onSignOut }) {
 
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
+      {!logging && <UpdateBanner />}
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
@@ -4562,6 +4645,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const hasEverTrained = (client.logs?.length || 0) > 0 || (client.mobilityLogs?.length || 0) > 0;
   const daysInactive = useMemo(() => daysSinceLastActivity(client), [client]);
   const nudgeMessage = hasEverTrained ? reengagementMessage(daysInactive) : null;
+  const sleepNote = useMemo(() => sleepAdvisory(client), [client.readiness]);
 
   // These must stay above the completion branch below: hook order and count
   // have to be identical on every render of this component.
@@ -4599,6 +4683,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <span className="quote-hero-attr"><span className="quote-hero-dash" />{todaysMentalTip.author}</span>
       </button>
 
+      {isCurrent && sleepNote && (
+        <div className="nudge-card">
+          <div className="nudge-card-title">On your sleep</div>
+          <p className="muted" style={{ marginBottom: 0 }}>{sleepNote}</p>
+        </div>
+      )}
       {isCurrent && nudgeMessage && (
         <div className="nudge-card">
           <div className="nudge-card-title">Welcome back</div>
@@ -4732,7 +4822,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         )}
 
         {pos.day.intent && <div className="intent-box">{pos.day.intent}</div>}
-        {tapered.taperNote && <div className="intent-box">{tapered.taperNote}</div>}
+        {tapered.taperNote && <div className="intent-box"><Prose text={tapered.taperNote} /></div>}
         {adjustment.adjustedNote && <div className="adjust-box">{adjustment.adjustedNote}</div>}
 
         <button className="preview-toggle" onClick={() => setShowPreview((s) => !s)}>
@@ -5085,7 +5175,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const buildFreshEntries = useCallback(() => {
     const map = {};
     resolvedSections.forEach((sec) => {
-      map[sec.id] = sec.exercises.map((e) => ({ exerciseId: e.id, name: e.name, target: e, sets: Array.from({ length: e.sets || 3 }).map((_, setIdx) => ({ weight: "", reps: defaultRepsFor(e, setIdx), rir: defaultRirFor(e, setIdx), done: false })) }));
+      map[sec.id] = sec.exercises.map((e) => ({ exerciseId: e.id, name: e.name, target: e, sets: Array.from({ length: e.sets || 3 }).map((_, setIdx) => ({ weight: "", reps: defaultRepsFor(e, setIdx), rir: defaultRirFor(e, setIdx) })) }));
     });
     return map;
   }, [resolvedSections]);
@@ -5129,8 +5219,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
         entries[secId] = (entriesBySection[secId] || []).map((en) => ({
           exerciseId: en.exerciseId,
           sets: (en.sets || []).map((s) => {
-            if (String(s.weight || "").trim() || s.done) hasAnything = true;
-            return { weight: s.weight, reps: s.reps, rir: s.rir, done: s.done };
+            if (String(s.weight || "").trim()) hasAnything = true;
+            return { weight: s.weight, reps: s.reps, rir: s.rir };
           }),
         }));
       });
@@ -6948,6 +7038,9 @@ function GlobalStyle() {
       .nudge-card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; color: var(--accent); margin-bottom: 6px; }
       .adjust-box { background: color-mix(in srgb, var(--amber) 14%, transparent); border: 1px solid var(--amber); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .error-box { background: color-mix(in srgb, var(--red) 14%, transparent); border: 1px solid var(--red); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+      .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 14px; font-size: 13px; color: var(--text); }
+      .update-banner-actions { display: inline-flex; gap: 8px; flex-shrink: 0; }
+      .update-banner .btn-primary, .update-banner .btn-ghost { padding: 6px 12px; font-size: 13px; width: auto; }
       .success-box { background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid var(--green); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
       .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
