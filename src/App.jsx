@@ -236,7 +236,7 @@ function UpdateBanner() {
 function reengagementMessage(days) {
   if (days < 5) return null;
   if (days < 10) return `It's been ${days} days since your last session — jump back in today, even a short one counts.`;
-  if (days < 21) return `It's been ${days} days. No judgment — everything's saved exactly where you left it, and picking back up today is the whole move.`;
+  if (days <= 21) return `It's been ${days} days. No judgment — everything's saved exactly where you left it, and picking back up today is the whole move.`;
   return `It's been over ${Math.floor(days / 7)} weeks since your last session. Nothing is lost — restart whenever it works for you, today or any day.`;
 }
 
@@ -460,6 +460,12 @@ function milestoneProgress(client) {
   }
   return { total: cumulative, achievedDates };
 }
+function weekStartOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const wd = d.getDay();
+  d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd));
+  return toLocalDateStr(d);
+}
 function weeklyVolumeSeries(client) {
   const map = {};
   client.logs.forEach((log) => {
@@ -482,6 +488,13 @@ function weeklyVolumeSeries(client) {
 // From this week on, the conditioning slot draws from the match-specific pool
 // instead of the general one.
 const MATCH_SPECIFIC_FROM_WEEK = 9;
+// The methodology promises aerobic base, then repeat-effort tempo, then aerobic
+// power, then the match-specific block. A weekly rotation through the general
+// pool delivered none of that — it put 88 to 92 percent intervals in week 2 of a
+// phase whose own text says the conditioning should feel easy. Keyed by the
+// phase's first week; anything else falls back to the old rotation.
+// Pool order: 0 Zone 2, 1 aerobic power, 2 grip under fatigue, 3 repeat tempo.
+const CONDITIONING_BY_PHASE = { 1: [0, 0, 3], 5: [3, 1, 2] };
 const ROTATING_POOL_LABELS = {
   meLowerPool: "Max Effort Lower",
   meUpperPool: "Max Effort Upper",
@@ -517,17 +530,24 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     // rotation left whole energy systems untrained — Program B never saw the
     // grip work at all, and the match-length round never came up anywhere.
     const isConditioningPool = poolKey === "conditioningIntervalPool" || poolKey === "matchSpecificPool";
-    const rotW = isConditioningPool ? 1 : (program.conjugate.meRotationWeeks || 2);
+    const rotW = isConditioningPool ? 1 : Math.max(1, Math.floor(Number(program.conjugate.meRotationWeeks)) || 2);
     // Deload weeks carry their own fixed easy session, so counting them would
     // silently eat a slot in the rotation. This counts training weeks only.
     const rotWeek = isConditioningPool ? weekNumber - Math.floor(weekNumber / 4) : weekNumber;
     // Folding blockNumber into the offset means block 2 doesn't start the rotation at the
     // exact same spot as block 1 — without this, every restart replayed an identical sequence.
-    const idx = (Math.floor((rotWeek - 1) / rotW) + (blockNumber - 1)) % pool.length;
+    let idx = (Math.floor((rotWeek - 1) / rotW) + (blockNumber - 1)) % pool.length;
+    const plan = poolKey === "conditioningIntervalPool" && phase ? CONDITIONING_BY_PHASE[phase.weekStart] : null;
+    if (plan) idx = plan[Math.max(0, Math.min(plan.length - 1, weekNumber - phase.weekStart))] % pool.length;
     const chosen = pool[idx];
+    const capped = chosen.maxTriple
+      ? { perSetTargets: meTripleCapSets(), sets: 4, reps: "working sets of 3", rir: 1,
+          cues: "Work up in triples to one heavy top set. This lift stops at a triple on purpose — a true single on a loaded hinge is the one place in this rotation where the risk stops being worth the adaptation. Stop the set the moment your back rounds or the bar speed drops." }
+      : {};
     return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
       rir: chosen.rir !== undefined ? chosen.rir : e.rir,
+      ...capped,
       poolLabel: poolLabelFor(poolKey) };
   }
   // The phase text promises the effort climbs across a block. Without this the
@@ -1003,6 +1023,17 @@ function meWorkingSets() {
     { reps: 1, rir: 0, note: "Top single", pct1rm: 100 },
   ];
 }
+// A barbell good morning is the highest spinal-shear lift in the rotation, and a
+// true single on it is not worth what it costs. Lifts flagged maxTriple stop at a
+// heavy triple and still drive almost the same adaptation.
+function meTripleCapSets() {
+  return [
+    { reps: 3, rir: 4, note: "Warm-up", pct1rm: 65 },
+    { reps: 3, rir: 3, note: "Build", pct1rm: 75 },
+    { reps: 3, rir: 2, note: "Build", pct1rm: 82 },
+    { reps: 3, rir: 1, note: "Top triple", pct1rm: 88 },
+  ];
+}
 function meRetestSets() {
   // This is Week 12 — the week right before a brand new block starts. The goal here is not
   // to test anything: it's to walk into the new block's Week 1 completely recovered so those
@@ -1038,9 +1069,13 @@ const meLowerPool = [
   { name: "Box Squat (bench set to box height)", notes: "Sit back to the bench at parallel, pause, drive up. Rotated to avoid staleness.", videoUrl: "" },
   { name: "Front Squat", notes: "Upright torso, quad and trunk-bracing emphasis", videoUrl: "" },
   { name: "Anderson Squat (from pins)", notes: "Dead-stop squat starting from safety pins set just below parallel — builds strength without any stretch-reflex assistance, a genuine Westside staple", videoUrl: "" },
+  // Order matters: with a two-week rotation an athlete in their first block only
+  // ever reaches index 5, and indices 4 and 5 land on weeks 9 to 11. That used to
+  // be trap bar then good morning, which left the whole peak block hinge-only and
+  // put a true good-morning single seven days out from competing.
+  { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", maxTriple: true, videoUrl: "" },
   { name: "Zercher Squat", notes: "Heavy anterior-loaded trunk bracing — carries over to grappling posture under load", videoUrl: "" },
   { name: "Trap Bar Deadlift", notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single on your own", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
-  { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", videoUrl: "" },
 ];
 const meUpperPool = [
   { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "https://www.youtube.com/watch?v=FiQUzPtS90E" },
@@ -1197,7 +1232,7 @@ const conjugateProgram = {
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
-              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, alternated every 2 weeks between the two variations", quality: "Core" }),
+              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, rotated every 2 weeks through three variations", quality: "Core" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -1216,7 +1251,7 @@ const conjugateProgram = {
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation — triceps strength for framing and pushing off the mat", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system gets trained across the block", quality: "Conditioning" }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1263,7 +1298,7 @@ const conjugateProgram = {
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
-              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, alternated every 2 weeks between the two variations", quality: "Core" }),
+              ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, rotated every 2 weeks through three variations", quality: "Core" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -1282,7 +1317,7 @@ const conjugateProgram = {
               ex({ name: "Cable Triceps Pushdown", sets: 3, reps: "12", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Direct arm isolation", quality: "Arms", videoUrl: "https://www.youtube.com/shorts/Fmiob5b0EAk" }),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system actually gets trained across the block instead of the same stimulus every week", quality: "Conditioning" }),
+              ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
             ]},
           ]},
       ],
@@ -1290,8 +1325,8 @@ const conjugateProgram = {
     deloadWeekPhase(8, "the intensification phase"),
     {
       id: uid(), name: "Conjugate Peak / Compete Prep", weekStart: 9, weekEnd: 11,
-      objective: "Extra exercises are kept to a bare minimum here. The priority is a heavy, fresh Max Effort top set and fast Dynamic Effort work, all while your grappling training volume stays high.",
-      intensityNote: "Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max. No new exercises are introduced this late in the program.",
+      objective: "Accessory volume comes down and what stays is chosen for a reason — the priority is a heavy, fresh Max Effort top set and fast Dynamic Effort work while your grappling volume is at its highest. The lower-body day keeps two light Romanian Deadlifts because you are still sprinting every week.",
+      intensityNote: "Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max. A few movements appear for the first time in this block — neck curls, hanging leg raises and a standalone Pallof press — all of them low-fatigue work chosen because they cost nothing and protect something.",
       dePercent: "60 to 65%",
       days: [
         { id: uid(), label: "1", name: "Max Effort Lower",
@@ -1300,7 +1335,10 @@ const conjugateProgram = {
             { id: uid(), type: "agility", name: "Neuromuscular Activation & Agility", exercises: [
               ex({ name: "Single-Leg Balance Reach", sets: 1, reps: "5 reaches per leg", load: "bodyweight", rir: 6, rest: "45 seconds", purpose: "Brief preparation only — freshness is the priority", quality: "Neuromuscular" }),
             ]},
-            { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerBlock() ]},
+            { id: uid(), type: "strength", name: "Main Strength", exercises: [
+              meLowerBlock(),
+              ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "6", load: "moderate — well short of what you used in the earlier blocks", rir: 4, rest: "90 seconds", tempo: "3/0/1", purpose: "Two light sets, kept in on purpose. Maximal sprinting stays in every week of this block, and sprinting is where hamstrings tear — dropping the only hinge work in the weeks the mat is hardest is exactly the wrong time to drop it. This is a maintenance dose, not training.", cues: "Push the hips back, bar close, three full seconds down. Nothing heavy — you are keeping the tissue used to being loaded long, not building anything this close in.", quality: "Posterior Chain" }),
+            ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 2, reps: "20 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk maintenance, low volume for freshness", quality: "Grip/Trunk" }),
               ex({ name: "Neck Bridge (back only, hands assisting)", sets: 1, reps: "5, slow and controlled", load: "bodyweight, hands assisting as needed", rir: 5, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
@@ -1446,7 +1484,6 @@ const rpeProgramCues = {
   "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
   "4-Way Isometric Neck Holds": "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there.",
-  "Weighted Neck Bridge (front and back, light plate on chest, controlled)": "Only start this once the isometric holds from the earlier blocks feel easy. Begin with a five or ten pound plate on your chest and add nothing for the first two weeks. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Anything that pinches, tingles, or travels down an arm, stop the set and put the plate down.",
   "Neck Bridge (back only, hands assisting)": "Only start this once the 4-way isometric holds from the earlier block feel genuinely easy — if they don't, keep doing those instead and come back to this next block. Keep both hands on the mat taking part of your weight, and only reduce that once five reps feel like nothing. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Never bridge on a day your neck is already sore from training. Anything that pinches, tingles, or travels down an arm: stop the set, come off it, and tell your coach.",
   "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
@@ -1504,7 +1541,7 @@ function buildProgramCContent() {
           ...ssPair(3, "Seal Row", { sets: 3, reps: "8", tempo: "2/1/X", rpe: 8 }, "Suitcase Carry (each side)", { sets: 3, reps: "30 meters each side", rpe: 9 }),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Rotates weekly through aerobic base, aerobic power, repeat-effort tempo and grip work under fatigue, so every energy system gets trained across the block rather than the same one three weeks running.", quality: "Conditioning" }),
+          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1540,7 +1577,7 @@ function buildProgramCContent() {
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Rotates weekly through aerobic base, aerobic power, repeat-effort tempo and grip work under fatigue, so every energy system gets trained across the block rather than the same one three weeks running.", quality: "Conditioning" }),
+          ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
         ]},
       ]},
     ]
@@ -1558,7 +1595,7 @@ function buildProgramCContent() {
           ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max — heavy, but a weight you can genuinely stand up with", rpe: 7 }, "Yielding Strength"),
           ssSingle(5, "Ab Roll Out", { sets: 2, reps: "12", rpe: 7 }, "Trunk"),
-          ssSingle(6, "Weighted Neck Bridge (front and back, light plate on chest, controlled)", { sets: 2, reps: "6 per direction", rpe: 7 }, "Durability"),
+          ssSingle(6, "Neck Bridge (back only, hands assisting)", { sets: 2, reps: "5, slow and controlled", rpe: 6 }, "Durability"),
           ssSingle(7, "Plate Lifts (Around the World)", { sets: 2, reps: "10 each direction", rpe: 7 }, "Core"),
         ]},
       ]},
@@ -1828,7 +1865,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip, isometric strength", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
           ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
-            ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Rotates every 2 weeks through three modalities — easy aerobic base building, hard aerobic power intervals, and repeated-effort tempo work — so every energy system gets trained across the block even with just two sessions a week", quality: "Conditioning" }),
+            ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
           ]},
         ]},
     ],
@@ -2286,27 +2323,6 @@ function daysUntil(dateStr) {
 
 // Applied on top of the readiness adjustment, so a taper and a rough day stack
 // rather than one overwriting the other.
-// Competition day told the athlete to "warm up, breathe, and go compete" and
-// left them to work out what that meant on the one morning it mattered. Twelve
-// weeks of work funnels into this day and it was the only day with no plan.
-const COMPETITION_DAY_PROTOCOL = `Competition day. Nothing you do in a gym today makes you stronger, and plenty can make you slower. All of this is about arriving at your first match warm, and arriving at your last one still able to produce.
-
-Timing. Find out when you are actually on and work backwards. You want to finish warming up about ten minutes before you are called, not thirty — the point is to still be warm when it starts. Mat times slip constantly, so watch the bracket rather than the schedule, and be ready to stretch the warm-up out or run the last piece of it again.
-
-Raise. Start about thirty-five minutes out. Five minutes easy — bike, jog, skipping, shadow drilling, whatever the venue gives you — until you are breathing and genuinely warm. Same as every other session. Today is not the day to invent something.
-
-Mobilise. Five minutes of the movements you already know: hips, ankles, thoracic spine, shoulders. Nothing held long, nothing new, nothing that leaves you loose. You are opening range you already own.
-
-Sharpen. Three progressive efforts at roughly sixty, eighty and ninety percent, then two hard bursts of ten to fifteen seconds with a full minute between them. Sprints, hard drilling, takedown entries on a partner, or hard bike. This is the piece people skip, and it is the whole difference between a first match that feels like a warm-up and a first match you are actually in.
-
-Stay warm. Once you are sharp, stay sharp. Layers on, keep moving, a short burst every few minutes if the wait drags. Sitting down in a cold venue for twenty minutes undoes all of it.
-
-Between matches. Keep moving for the first few minutes rather than sitting straight down — easy movement clears the effort faster than stillness does. Then warm clothes, a drink, and something small to eat if there is more than an hour. Ten minutes before the next one, repeat the sharpen piece only: two progressive efforts and one short burst. You do not warm up from scratch twice.
-
-Fuel. Small and familiar, nothing new today. Something easy every hour or two rather than one big meal, and drink steadily across the day rather than all at once between matches.
-
-After. Ten minutes of easy movement before you leave, then food and sleep. If the day went well, the work that made it go well was done weeks ago. If it did not, that is information for the next block and not a verdict on you.`;
-
 function applyTaper(sections, daysOut) {
   if (daysOut == null || daysOut < 0 || daysOut > TAPER_DAYS) return { sections, taperNote: null };
 
@@ -2316,8 +2332,8 @@ function applyTaper(sections, daysOut) {
   if (daysOut === 0) {
     return {
       sections: sections.map((sec) => ({ ...sec, exercises: [], skipped: true,
-        skipNote: "Nothing to train today — the plan for the day is written above." })),
-      taperNote: COMPETITION_DAY_PROTOCOL,
+        skipNote: "Nothing today. Warm up, breathe, and go compete." })),
+      taperNote: "Competition day. Nothing in the gym today makes you better — warm up, breathe, and go compete.",
     };
   }
 
@@ -2799,8 +2815,10 @@ function MainApp({ userId, onSignOut }) {
   const refreshNewSignups = useCallback(async () => {
     if (!isCoach || !supabase || !userId) { setNewSignupCount(0); return; }
     try {
-      const { data: links } = await supabase.from("client_links").select("client_user_id").eq("coach_user_id", userId);
-      const reviewed = (await kvGet(userId, REVIEWED_SIGNUPS_KEY)) || [];
+      const { data: links, error } = await supabase.from("client_links").select("client_user_id").eq("coach_user_id", userId);
+      if (error) { setNewSignupCount(0); return; }
+      const rawRev = await kvGet(userId, REVIEWED_SIGNUPS_KEY);
+      const reviewed = (rawRev === LOAD_FAILED || !Array.isArray(rawRev)) ? [] : rawRev;
       setNewSignupCount((links || []).filter((l) => !reviewed.includes(l.client_user_id)).length);
     } catch {
       setNewSignupCount(0);
@@ -2816,20 +2834,25 @@ function MainApp({ userId, onSignOut }) {
   useEffect(() => {
     if (!supabase || !userId || !COACH_USER_ID || userId === COACH_USER_ID) return;
     (async () => {
+      const { data: authed } = await supabase.auth.getUser();
       const { error } = await supabase.from("client_links")
-        .upsert({ client_user_id: userId, coach_user_id: COACH_USER_ID }, { onConflict: "client_user_id" });
+        .upsert({ client_user_id: userId, coach_user_id: COACH_USER_ID, client_email: authed?.user?.email || null }, { onConflict: "client_user_id" });
       if (error) console.warn("coach link:", error.message);
     })();
   }, [userId]);
 
   const loadClientList = useCallback(async () => {
-    setLoadError(false);
+    // Deliberately not clearing loadError up front. `loaded` is already true from
+    // the failed attempt, so for the seconds this read takes the render would fall
+    // through to the onboarding screen — waiver and all — for an athlete with
+    // months of training sitting on the server.
     const list = await getClientList(userId);
     const settings = await getSettings(userId);
     setTheme(settings.theme || "dark");
     // A failed read stops here. Falling through would show an existing athlete
     // the onboarding screen and let them overwrite their own client list.
     if (list === LOAD_FAILED) { setLoadError(true); setLoaded(true); return; }
+    setLoadError(false);
     setClients(list || []);
     if (list && list.length) setActiveId(list[0].id);
     setLoaded(true);
@@ -2837,11 +2860,19 @@ function MainApp({ userId, onSignOut }) {
 
   useEffect(() => { loadClientList(); }, [loadClientList]);
 
+  // Which athlete is actually wanted right now. A record that arrives after the
+  // coach has moved on must not be shown and must not become the `client` that
+  // every save handler closes over — that is how a check-in or a whole logged
+  // session used to land on the previously selected athlete.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   const loadActiveClient = useCallback(async () => {
     if (!activeId) return;
+    const requestedId = activeId;
     setClientLoadError(false);
     {
       const c = await getClient(userId, activeId);
+      if (activeIdRef.current !== requestedId) return;
       if (c === LOAD_FAILED) { setClientLoadError(true); return; }
       let healedReadiness = false;
       if (c) {
@@ -2930,11 +2961,14 @@ function MainApp({ userId, onSignOut }) {
         }
         if (healed) await setClient(userId, c.id, c);
       }
+      if (activeIdRef.current !== requestedId) return;
       setClientState(c);
     }
   }, [activeId, userId]);
 
-  useEffect(() => { loadActiveClient(); }, [loadActiveClient]);
+  // Clear first: a stale athlete left on screen while the next one loads is a
+  // fully interactive screen wired to the wrong person's record.
+  useEffect(() => { setClientState(null); loadActiveClient(); }, [loadActiveClient]);
 
   const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
   // Holds the newest Personal Record list across taps that fire faster than a
@@ -2988,9 +3022,13 @@ function MainApp({ userId, onSignOut }) {
   };
   const deleteClient = async (id) => {
     const list = clients.filter((c) => c.id !== id);
+    // Write first, then update the screen. The old order claimed the delete had
+    // happened even when the write failed, and the athlete reappeared on reload.
+    const saved = await setClientList(userId, list);
+    if (saved && saved.ok === false) return;
+    await deleteClientStorage(userId, id);
     setClients(list);
-    await setClientList(userId, list);
-    if (activeId === id && list.length) setActiveId(list[0].id);
+    if (activeId === id) setActiveId(list.length ? list[0].id : null);
   };
   const resetAppData = async () => {
     for (const c of clients) await deleteClientStorage(userId, c.id);
@@ -4369,6 +4407,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const [busyId, setBusyId] = useState(null);
   const [openRow, setOpenRow] = useState(null);
   const [reviewed, setReviewed] = useState(null);
+  const [reviewedLoadFailed, setReviewedLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -4388,6 +4427,13 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
           const { data: links } = await supabase.from("client_links").select("client_user_id, client_email").eq("coach_user_id", userId);
           for (const link of links || []) {
             const clientProfiles = await getClientList(link.client_user_id);
+            // A Symbol is truthy and has no .length, so the old check fell through
+            // to the for-of below, threw, and was swallowed by the catch — taking
+            // every remaining linked athlete with it, silently.
+            if (clientProfiles === LOAD_FAILED) {
+              linkedList.push({ id: null, name: link.client_email || "Couldn't load", full: null, ownerId: link.client_user_id, loadFailed: true });
+              continue;
+            }
             if (!clientProfiles || clientProfiles.length === 0) {
               linkedList.push({ id: null, name: link.client_email || "New client", full: null, ownerId: link.client_user_id, pending: true });
               continue;
@@ -4400,8 +4446,12 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
           }
         } catch {}
       }
-      const rev = (await kvGet(userId, REVIEWED_SIGNUPS_KEY)) || [];
-      if (!cancelled) { setRecords([...ownList, ...linkedList]); setReviewed(rev); }
+      // Same Symbol trap: setting state to it made `reviewed.includes(...)` throw
+      // during render, which handed the coach the error boundary instead of a
+      // dashboard every time this one read timed out.
+      const rawRev = await kvGet(userId, REVIEWED_SIGNUPS_KEY);
+      const rev = (rawRev === LOAD_FAILED || !Array.isArray(rawRev)) ? [] : rawRev;
+      if (!cancelled) { setRecords([...ownList, ...linkedList]); setReviewed(rev); setReviewedLoadFailed(rawRev === LOAD_FAILED); }
     })();
     return () => { cancelled = true; };
   }, [clients, userId]);
@@ -4410,6 +4460,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   // payment counts as reviewing them, so that happens automatically below.
   const markReviewed = async (ownerId) => {
     if (!ownerId || ownerId === userId) return;
+    // The stored list never loaded, so writing one now would replace it with a
+    // single name and put every previously reviewed athlete back on the badge.
+    if (reviewedLoadFailed) { emitToast({ kind: "error", message: "Couldn't reach the server — reopen the dashboard and try again.", autoDismissMs: 6000 }); return; }
     const next = Array.from(new Set([...(reviewed || []), ownerId]));
     const saved = await kvSet(userId, REVIEWED_SIGNUPS_KEY, next);
     if (saved && saved.ok === false) return;
@@ -4858,7 +4911,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
             </div>
           ) : (
             <>
-              <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
+              {tapered.sections.every((s) => s.skipped) ? (
+                <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>No session to log today — see the note above.</div>
+              ) : (
+                <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
+              )}
               <div className="hero-secondary-row">
                 <button className="hero-secondary-btn" onClick={onStartMobility}>Start Recovery</button>
                 <button className="hero-secondary-btn" onClick={() => setShowPreview(true)}>See Full Plan</button>
@@ -5002,7 +5059,15 @@ function AccomplishmentsPage({ client, onClose }) {
 /* ============================== READINESS MODAL ============================== */
 
 function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
-  const [v, setV] = useState(existing || { sleep: 3, readiness: 3, bjjHard: false });
+  // Check-ins saved before Sep 2026 carry energy/soreness and no readiness key at
+  // all, which left the second slider blank and uncontrolled when one was reopened.
+  const [v, setV] = useState(() => ({
+    bjjHard: false,
+    ...(existing || {}),
+    sleep: Number(existing && existing.sleep) >= 0 ? Number(existing.sleep) : 3,
+    readiness: Number(existing && existing.readiness) >= 0 ? Number(existing.readiness)
+      : (Number(existing && existing.energy) >= 0 ? Number(existing.energy) : 3),
+  }));
   const [weight, setWeight] = useState(existingWeight || "");
   const fields = [
     // Both rows run the same direction — higher is better on each — so a slider
@@ -5169,7 +5234,17 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     setExCollapseOverride((prev) => ({ ...prev, [exerciseId]: !currentlyOpen }));
 
   const rawResolvedSections = useMemo(() => resolveDaySections(day, weekNumber, client.program, phase, false, resolveOptsFor(client)), [day, weekNumber, client.program, phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
-  const { sections: resolvedSections, adjustedNote } = useMemo(() => adjustSectionsForReadiness(rawResolvedSections, readinessToday), [rawResolvedSections, readinessToday]);
+  // The taper used to be applied in the Today preview only, so this screen — the
+  // one Start Workout opens and the athlete actually lifts from — handed back the
+  // full untapered session. On competition morning that meant a card saying to
+  // rest sitting above a live button that loaded a true one-rep-max attempt.
+  const daysToComp = daysUntil(client.competitionDate);
+  const { sections: resolvedSections, adjustedNote } = useMemo(() => {
+    const eased = adjustSectionsForReadiness(rawResolvedSections, readinessToday);
+    const tapered = applyTaper(eased.sections, daysToComp);
+    const notes = [eased.adjustedNote, tapered.taperNote].filter(Boolean);
+    return { sections: tapered.sections, adjustedNote: notes.length ? notes.join(" ") : null };
+  }, [rawResolvedSections, readinessToday, daysToComp]);
   const mainLift = primaryLiftName(day, weekNumber, client.program, phase, resolveOptsFor(client));
 
   const buildFreshEntries = useCallback(() => {
@@ -5795,10 +5870,16 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
   const toggleRunning = () => {
     if (running) { clearInterval(timerRef.current); setRunning(false); return; }
     setRunning(true);
-    timerRef.current = setInterval(() => {
-      setRemaining((r) => { if (r <= 1) { clearInterval(timerRef.current); goNext(); return 0; } return r - 1; });
-    }, 1000);
+    timerRef.current = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
   };
+
+  // Advancing from inside the setRemaining updater made that updater impure, and
+  // React double-invokes updaters — so a segment that ran down to zero jumped two
+  // places and a nine-segment cool-down quietly ended after five.
+  useEffect(() => {
+    if (!running || remaining > 0) return;
+    goNext();
+  }, [running, remaining, goNext]);
 
   const setSegmentVideo = (segId, url, field = "videoUrl") => {
     const newProgram = JSON.parse(JSON.stringify(client.program));
@@ -6551,8 +6632,13 @@ function ProgressTab({ client }) {
 
   // Weekly tonnage, so the page leads with training rather than bodyweight.
   const volumeData = weeklyVolumeSeries(client).slice(-12);
-  const thisWeekVolume = volumeData.length ? volumeData[volumeData.length - 1].volume : 0;
-  const priorWeeks = volumeData.slice(0, -1);
+  // weeklyVolumeSeries only contains weeks that have a log, so the last element
+  // is "the most recent week you trained", not "this week". After a fortnight off
+  // the tile read as a full week's tonnage next to a ring saying 0 of 3 sessions.
+  const thisWeekKey = weekStartOf(todayStr());
+  const thisWeekRow = volumeData.find((w) => w.date === thisWeekKey);
+  const thisWeekVolume = thisWeekRow ? thisWeekRow.volume : 0;
+  const priorWeeks = volumeData.filter((w) => w !== thisWeekRow);
   const avgVolume = priorWeeks.length ? priorWeeks.reduce((a, b) => a + b.volume, 0) / priorWeeks.length : 0;
   const volumeVsAvg = avgVolume > 0 ? Math.round((thisWeekVolume / avgVolume) * 100) : null;
   const latestReadiness = readinessEntries.length ? readinessEntries[readinessEntries.length - 1] : null;
