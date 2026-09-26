@@ -677,7 +677,9 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
         sets: isRamp ? 1 : warm + work,
         reps: isRamp ? "one top set of 3 to 5, well short of a max" : e.reps,
         rir: Math.max(e.rir || 0, 3),
-        cues: `${e.cues || ""} Today: no singles and no grinding. One controlled top set of 3 to 5 at roughly 70 percent, then move on. You flagged low readiness and this is the session respecting that.`.trim(),
+        cues: `${e.cues || ""} ${isRamp
+          ? "Today: no singles and no grinding. One controlled top set of 3 to 5 at roughly 70 percent, then move on."
+          : "Today: half the sets, and nothing taken close to failure. Keep the weight you would normally use, stop each set well short, and finish the session feeling like you could have done more."} You flagged low readiness and this is the session respecting that.`.trim(),
         perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, isRamp ? 1 : warm + work).map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 70) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 80 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
         pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 70) : e.pct1rmFlat,
         };
@@ -4761,7 +4763,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         ] : [
           { label: "Sleep", value: "—" },
           { label: "Readiness", value: "—" },
-          { label: "Soreness", value: "—" },
         ]}
       />
 
