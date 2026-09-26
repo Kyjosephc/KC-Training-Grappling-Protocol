@@ -4629,7 +4629,7 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
 
 /* ============================== TODAY TAB ============================== */
 
-const SECTION_LABELS = { agility: "Neuromuscular & Agility", strength: "Main Strength", power: "Dynamic Effort & Power", durability: "Durability & Tendon Health", conditioning: "Grappling Conditioning", arms_core: "Arms & Core Isolation" };
+const SECTION_LABELS = { agility: "Speed & Agility", strength: "Main Strength", power: "Dynamic Effort & Power", durability: "Durability & Tendon Health", conditioning: "Grappling Conditioning", arms_core: "Arms & Core Isolation" };
 
 function lastSessionFor(client, exerciseName) {
   for (let i = client.logs.length - 1; i >= 0; i--) {
