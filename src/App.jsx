@@ -494,7 +494,7 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
       : `${pct} of your ${maxLabel}, maximal bar speed`;
     return { ...e, load: loadText, perSetTargets };
   }
-  return e;
+  return withRampSets(e);
 }
 function resolveSectionExercises(section, weekNumber, program, phase, opts) {
   return section.exercises.map((e) => resolveExercise(e, weekNumber, program, phase, opts));
@@ -587,13 +587,17 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
         // A max-effort ramp collapses to a single controlled top set; everything
         // else just loses half its sets.
         const isRamp = /down to 1|top single|working sets/i.test(String(e.reps));
+        // Build-up sets survive a bad day — walking into a working weight cold is
+        // exactly the wrong thing to do when you already feel wrecked.
+        const warm = (e.perSetTargets || []).filter((t) => t.warmup).length;
+        const work = Math.max(1, Math.round(((e.sets || 3) - warm) * 0.5));
         return {
         ...e,
-        sets: isRamp ? 1 : Math.max(1, Math.round((e.sets || 3) * 0.5)),
+        sets: isRamp ? 1 : warm + work,
         reps: isRamp ? "one top set of 3 to 5, well short of a max" : e.reps,
         rir: Math.max(e.rir || 0, 3),
         cues: `${e.cues || ""} Today: no singles and no grinding. One controlled top set of 3 to 5 at roughly 70 percent, then move on. You flagged low readiness and this is the session respecting that.`.trim(),
-        perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, 1).map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 70) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 80 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
+        perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, isRamp ? 1 : warm + work).map((t) => ({ ...t, rir: Math.max(t.rir, 3), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 70) : t.pct1rm, note: t.pct1rm && t.pct1rm >= 80 ? "Capped — low readiness" : t.note })) : e.perSetTargets,
         pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 70) : e.pct1rmFlat,
         };
       });
@@ -605,7 +609,7 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
         ...e,
         sets: Math.max(1, Math.round((e.sets || 6) * 0.5)),
         cues: `${e.cues || ""} Today: half the usual sets. Speed work is worth nothing when you are this tired — stop early if it is not sharp.`.trim(),
-        perSetTargets: e.perSetTargets ? e.perSetTargets.map((t) => ({ ...t, pct1rm: t.pct1rm ? Math.min(t.pct1rm, 55) : t.pct1rm })) : e.perSetTargets,
+        perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, Math.max(1, Math.round((e.sets || 6) * 0.5))).map((t) => ({ ...t, pct1rm: t.pct1rm ? Math.min(t.pct1rm, 55) : t.pct1rm })) : e.perSetTargets,
         pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 55) : e.pct1rmFlat,
       }));
     }
@@ -1324,6 +1328,47 @@ function takesPercentTarget(name, reps) {
   if (!isLoadableReps(reps)) return false;
   if (!needsWeight(name)) return false;
   return !/\b(hold|plank|bridge|carry|grip|neck|pull-through|roll out)\b/i.test(name || "");
+}
+// A lift written as "4 sets of 6" with 80 percent printed next to it is an
+// invitation to put 80 percent on the bar for set one, cold. Real lifters build
+// up to a working weight; the sheet just never said so, because the coach writing
+// it took that as read. These are the build-up sets, written down. Holds, carries,
+// jumps, prehab and core work are left alone — there is nothing to ramp toward.
+const RAMP_QUALITIES = new Set(["Strength", "Accessory", "Posterior Chain", "Pull"]);
+const RAMP_SCHEMES = [
+  { minPct: 85, fractions: [0.5, 0.68, 0.85], reps: [5, 3, 2] },
+  { minPct: 72, fractions: [0.55, 0.78], reps: [5, 3] },
+  { minPct: 65, fractions: [0.6], reps: [5] },
+];
+function rampSetsFor(workPct) {
+  const scheme = RAMP_SCHEMES.find((s) => workPct >= s.minPct);
+  if (!scheme) return [];
+  return scheme.fractions.map((f, i) => ({
+    pct1rm: Math.round((workPct * f) / 5) * 5,
+    reps: scheme.reps[i],
+    rir: 6,
+    note: "Warm-up",
+    warmup: true,
+  }));
+}
+// Light shoulder and hip prehab carries a percentage target only because the
+// rep-and-effort maths hands one to everything. Nobody builds up to a Y, T, W
+// with five-pound plates, so these are left as written.
+const RAMP_EXCLUDED_NAMES = /\bY, T, W|abduction|adduction|face pull|external rotation|raise\b/i;
+function withRampSets(e) {
+  // Already ramped (every Max Effort lift is), or speed work, or nothing to ramp to.
+  if (e.perSetTargets || e.deWave || !e.pct1rmFlat) return e;
+  if (!RAMP_QUALITIES.has(e.quality) || !isLoadableReps(e.reps)) return e;
+  if (RAMP_EXCLUDED_NAMES.test(e.name || "")) return e;
+  // Only the lifts heavy enough to be worth building up to. A superset's second
+  // exercise is left alone below 80 percent — supersets are meant to flow.
+  if (e.quality !== "Strength" && e.pct1rmFlat < 80) return e;
+  const ramp = rampSetsFor(e.pct1rmFlat);
+  if (!ramp.length) return e;
+  const working = Array.from({ length: e.sets || 3 }, () => ({ pct1rm: e.pct1rmFlat, reps: e.reps, rir: e.rir }));
+  const plural = ramp.length === 1 ? "set is a build-up" : "sets are build-ups";
+  return { ...e, sets: ramp.length + working.length, perSetTargets: [...ramp, ...working],
+    cues: `${e.cues || ""} The first ${ramp.length === 1 ? "" : ramp.length + " "}${plural} — they are there so your first working set is not also your first rep of the day. Move through them briskly and do not count them as training.`.trim() };
 }
 // Program B was built from a coach's own written sheet, which carried the
 // technique knowledge in the coach's head rather than on the page. These are the
@@ -2210,9 +2255,17 @@ function applyTaper(sections, daysOut) {
         const isRamp = /down to 1|top single|working sets/i.test(String(e.reps));
         // An opener, and it gets lighter as the date closes in.
         const openerPct = daysOut >= 7 ? "90" : daysOut >= 4 ? "85" : "80";
+        // The build-ups stay through a taper at full count. A taper takes away
+        // working sets, never the sets that make the working set safe.
+        const warm = (e.perSetTargets || []).filter((t) => t.warmup).length;
+        const work = scale((e.sets || 3) - warm);
         return {
           ...e,
-          sets: isRamp ? 1 : scale(e.sets || 3),
+          sets: isRamp ? 1 : warm + work,
+          // A max-effort ramp is replaced by a single opener, so its per-set
+          // targets have to go with it — otherwise the screen said "opener at 90
+          // percent" while the set underneath still suggested the 70 percent triple.
+          perSetTargets: isRamp ? null : (e.perSetTargets ? e.perSetTargets.slice(0, warm + work) : e.perSetTargets),
           reps: isRamp ? `one crisp set of 2 to 3 at around ${openerPct} percent — an opener, not a max` : e.reps,
           rir: Math.max(Number(e.rir) || 0, daysOut >= 7 ? 2 : 3),
           cues: `${e.cues || ""} Taper, ${daysOut} day${daysOut === 1 ? "" : "s"} out: fewer sets, same weight on the bar, and nothing that leaves a mark. You are sharpening, not building — no session between now and the mat can make you stronger, and plenty can make you slower.`.trim(),
@@ -2222,7 +2275,7 @@ function applyTaper(sections, daysOut) {
     if (sec.type === "power") {
       // Speed work is the last thing to cut — it is what keeps you sharp — so it
       // holds a floor of two sets right up to the day before.
-      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: scale(e.sets || 6, 2), cues: `${e.cues || ""} Keep these — speed work is what keeps you sharp through a taper. Just fewer of them.`.trim() })) };
+      return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: scale(e.sets || 6, 2), perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, scale(e.sets || 6, 2)) : e.perSetTargets, cues: `${e.cues || ""} Keep these — speed work is what keeps you sharp through a taper. Just fewer of them.`.trim() })) };
     }
     if (sec.type === "durability") {
       return { ...sec, exercises: (sec.exercises || []).map((e) => ({ ...e, sets: scale(e.sets || 2) })) };
