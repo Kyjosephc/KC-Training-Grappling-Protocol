@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video, Flag, ShieldOff } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -32,6 +32,7 @@ const LOAD_FAILED = Symbol("load-failed");
 const CLIENT_LIST_KEY = "sc-app:client-list";
 const SETTINGS_KEY = "sc-app:settings";
 const REVIEWED_SIGNUPS_KEY = "sc-app:reviewed-signups";
+const COMMUNITY_PREFS_KEY = "sc-app:community-prefs";
 const clientKey = (id) => `sc-app:client:${id}`;
 
 /* ============================== SYNC STATUS / ERROR TOASTS ============================== */
@@ -167,22 +168,48 @@ async function fetchCommunityFeed() {
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
-async function fetchCommunityReactions() {
+async function fetchCommunityReactions(postIds) {
   if (!supabase) return LOAD_FAILED;
+  const ids = (postIds || []).slice(0, COMMUNITY_LIMIT);
+  if (!ids.length) return [];
   const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("community_reactions").select("post_id, user_id");
+    const { data, error } = await supabase.from("community_reactions")
+      .select("post_id, user_id").in("post_id", ids);
     if (error) throw error;
     return data || [];
   });
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
+// Generated here rather than by the database, for the reason in the next
+// function.
+function newId() {
+  try { if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID(); } catch {}
+  const b = new Uint8Array(16);
+  try { crypto.getRandomValues(b); } catch { for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256); }
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 async function createCommunityPost(post) {
   if (!supabase) return { ok: false };
+  // The id comes from here so that the insert is safe to retry. The ordinary
+  // bad-wifi failure is that the row commits and the reply is lost on the way
+  // back; with a database-generated id the retry posted a second copy. Now it
+  // collides on the primary key and we read back the one that already landed.
+  const row = { id: newId(), ...post };
   const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("community_posts").insert(post)
+    const { data, error } = await supabase.from("community_posts").insert(row)
       .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at").single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        const { data: already } = await supabase.from("community_posts")
+          .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at").eq("id", row.id).maybeSingle();
+        if (already) return already;
+      }
+      throw error;
+    }
     return data;
   });
   if (!outcome.ok) {
@@ -193,19 +220,40 @@ async function createCommunityPost(post) {
   return { ok: true, post: outcome.result };
 }
 
-// Hidden, never destroyed: a removal stays reviewable, and a reply never loses
-// the post it was answering.
-async function hideCommunityPost(id, byUserId) {
-  if (!supabase) return { ok: false };
+// The post row is hidden rather than destroyed, so a removal stays reviewable.
+// An uploaded clip is a different matter: leaving the file in a public bucket
+// made "it will disappear for everyone" untrue of the video, which is the part
+// someone deleting a clip of themselves actually cares about.
+async function deleteCommunityClip(url) {
+  if (!supabase || !isUploadedClip(url)) return;
+  const marker = `/${COMMUNITY_CLIP_BUCKET}/`;
+  const at = String(url).indexOf(marker);
+  if (at < 0) return;
+  const path = String(url).slice(at + marker.length).split("?")[0];
+  if (!path) return;
+  try { await supabase.storage.from(COMMUNITY_CLIP_BUCKET).remove([decodeURIComponent(path)]); } catch {}
+}
+
+async function hideCommunityPost(post, byUserId) {
+  if (!supabase || !post) return { ok: false };
+  const stamp = { deleted_at: new Date().toISOString(), deleted_by: byUserId };
   const outcome = await withRetry(async () => {
-    const { error } = await supabase.from("community_posts")
-      .update({ deleted_at: new Date().toISOString(), deleted_by: byUserId }).eq("id", id);
+    const { error } = await supabase.from("community_posts").update(stamp).eq("id", post.id);
     if (error) throw error;
+    // Replies are separate rows. Hiding only the parent left them live in the
+    // database, still counted by the unread badge, and rendered nowhere — so
+    // nobody could reach them to remove them, the coach included.
+    if (!post.parent_id) {
+      const { error: kidsErr } = await supabase.from("community_posts")
+        .update(stamp).eq("parent_id", post.id).is("deleted_at", null);
+      if (kidsErr) throw kidsErr;
+    }
   });
   if (!outcome.ok) {
     emitToast({ kind: "error", message: "Couldn't remove that post — check your connection.", autoDismissMs: 6000 });
     return { ok: false };
   }
+  deleteCommunityClip(post.video_url);
   return { ok: true };
 }
 
@@ -263,6 +311,62 @@ async function uploadCommunityClip(file, userId) {
   }
 }
 
+// Blocking and reporting. Removing posts one at a time was the only answer to
+// a member behaving badly, and a member who saw something upsetting had no
+// answer at all except leaving the group. Both are enforced in the policies,
+// not here — see supabase-community.sql.
+async function fetchCommunityBlocks() {
+  if (!supabase) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("community_blocks").select("user_id, user_name");
+    if (error) throw error;
+    return data || [];
+  });
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function setCommunityBlock(targetId, targetName, on) {
+  if (!supabase || !targetId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    if (on) {
+      const { error } = await supabase.from("community_blocks")
+        .upsert({ user_id: targetId, user_name: targetName || "Member" }, { onConflict: "user_id" });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("community_blocks").delete().eq("user_id", targetId);
+      if (error) throw error;
+    }
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: on ? "Couldn't block them — check your connection." : "Couldn't unblock them — check your connection.", autoDismissMs: 6000 });
+  }
+  return { ok: outcome.ok };
+}
+
+async function reportCommunityPost(postId, byUserId) {
+  if (!supabase || !postId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("community_reports")
+      .upsert({ post_id: postId, reporter_id: byUserId }, { onConflict: "post_id,reporter_id" });
+    if (error) throw error;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't send that report — check your connection.", autoDismissMs: 6000 });
+  }
+  return { ok: outcome.ok };
+}
+
+// Only the coach can read these; for everyone else the policy returns nothing,
+// which is the same as having nothing to show.
+async function fetchCommunityReports() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase.from("community_reports").select("post_id");
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
 function timeAgo(iso) {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
@@ -283,6 +387,14 @@ async function setClient(userId, id, data) { return kvSet(userId, clientKey(id),
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
 async function getSettings(userId) { const v = await kvGet(userId, SETTINGS_KEY); return (!v || v === LOAD_FAILED) ? { theme: "dark" } : v; }
 async function setSettings(userId, s) { return kvSet(userId, SETTINGS_KEY, s); }
+// Muted / left / last-read, kept apart from the client record on purpose: these
+// belong to the person, not to a training profile, and writing them must never
+// mean rewriting a whole training history.
+async function getCommunityPrefs(userId) {
+  const v = await kvGet(userId, COMMUNITY_PREFS_KEY);
+  return (!v || v === LOAD_FAILED) ? null : v;
+}
+async function setCommunityPrefs(userId, p) { return kvSet(userId, COMMUNITY_PREFS_KEY, p); }
 
 /* ============================== ID / MATH HELPERS ============================== */
 
@@ -2251,7 +2363,7 @@ const BELT_EMBLEM_COLORS = {
 };
 
 function BeltEmblem({ level, size = 30, title }) {
-  const lvl = BELT_EMBLEM_COLORS[level] ? level : "White";
+  const lvl = Object.prototype.hasOwnProperty.call(BELT_EMBLEM_COLORS, level) ? level : "White";
   const fill = BELT_EMBLEM_COLORS[lvl];
   // A black belt wears a red rank bar; every other belt wears a black one.
   const bar = lvl === "Black" ? "#c4172a" : "#17191e";
@@ -2886,12 +2998,13 @@ function ConditioningPlan({ target, name }) {
 // server-side to send it. That is a separate build, and deliberately not
 // pretended at here: telling someone they will be notified and then not
 // notifying them is worse than not offering it.
-function useCommunityUnread(client, userId, enabled) {
+function useCommunityUnread(prefs, userId, enabled) {
   const [count, setCount] = useState(0);
   const lastNotified = useRef(null);
-  const prefs = (client && client.community) || {};
-  const lastSeen = prefs.lastSeenAt || (client && client.createdAt) || "1970-01-01";
-  const muted = !!prefs.muted;
+  const seeded = useRef(false);
+  const p = prefs || {};
+  const lastSeen = p.lastSeenAt || "1970-01-01";
+  const muted = !!p.muted;
   useEffect(() => {
     if (!enabled || !supabase || !userId) { setCount(0); return undefined; }
     let cancelled = false;
@@ -2908,12 +3021,15 @@ function useCommunityUnread(client, userId, enabled) {
         if (error || cancelled || !data) return;
         setCount(data.length);
         const newest = data[0];
-        if (newest && !muted && lastNotified.current !== newest.id) {
-          const first = lastNotified.current === null;
+        // Seed on the very first check whatever came back, including nothing.
+        // Doing it only when there was a backlog meant the first genuinely new
+        // post of every session counted as backlog and was never announced.
+        const first = !seeded.current;
+        seeded.current = true;
+        if (first) { lastNotified.current = newest ? newest.id : null; return; }
+        if (newest && lastNotified.current !== newest.id) {
           lastNotified.current = newest.id;
-          // Don't fire for whatever was already waiting when the app opened —
-          // only for something that arrives while you have it open.
-          if (!first) notifyNewPost(newest);
+          if (!muted) notifyNewPost(newest);
         }
       } catch { /* offline; the badge just stays where it was */ }
     };
@@ -2924,6 +3040,20 @@ function useCommunityUnread(client, userId, enabled) {
     return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, [enabled, userId, lastSeen, muted]);
   return count;
+}
+
+// Construct one and immediately close it. On iOS this throws, which is the
+// only reliable way to know the permission you were just granted is useless.
+let notifyProbe = null;
+function canShowNotifications() {
+  if (notifyProbe !== null) return notifyProbe;
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
+    const n = new Notification("", { silent: true, tag: "strength-matrix-probe" });
+    try { n.close(); } catch {}
+    notifyProbe = true;
+  } catch { notifyProbe = false; }
+  return notifyProbe;
 }
 
 function notifyNewPost(post) {
@@ -2967,12 +3097,13 @@ function VideoEmbed({ url }) {
   );
 }
 
-function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply }) {
+function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged }) {
   const mine = post.author_id === userId;
   const hearts = reactedBy.length;
   const iReacted = reactedBy.includes(userId);
   return (
-    <article className="post-card">
+    <article className={`post-card${flagged ? " flagged" : ""}`}>
+      {flagged && <div className="post-flag">Reported by a member</div>}
       <header className="post-head">
         <BeltEmblem level={post.author_belt} size={26} title={null} />
         <div className="post-who">
@@ -2997,6 +3128,12 @@ function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply,
           <MessageCircle size={15} aria-hidden="true" />
           <span>{replies.length > 0 ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Reply"}</span>
         </button>
+        {!mine && !isCoach && onReport && (
+          <button className="post-act quiet" onClick={() => onReport(post)} disabled={reported}
+            aria-label={reported ? "You reported this post" : `Report ${post.author_name}'s post to the coach`}>
+            <Flag size={14} aria-hidden="true" /><span>{reported ? "Reported" : "Report"}</span>
+          </button>
+        )}
       </div>
       {replies.length > 0 && (
         <div className="post-replies">
@@ -3028,10 +3165,13 @@ function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply,
 // Upload control shared by both composers. Kept next to the paste-a-link field
 // rather than replacing it: a technique breakdown someone found is a link, a
 // clip of your own guard pass is a file, and both belong here.
-function ClipPicker({ userId, url, onUrl, disabled }) {
+function ClipPicker({ userId, url, onUrl, disabled, onBusy }) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
   const attached = isUploadedClip(url);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; if (onBusy) onBusy(false); }, []); // eslint-disable-line
+  const mark = (v) => { setBusy(v); if (onBusy) onBusy(v); };
   return (
     <div className="clip-picker">
       <input ref={inputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} aria-hidden="true"
@@ -3039,9 +3179,10 @@ function ClipPicker({ userId, url, onUrl, disabled }) {
           const file = e.target.files && e.target.files[0];
           e.target.value = "";
           if (!file) return;
-          setBusy(true);
+          mark(true);
           const res = await uploadCommunityClip(file, userId);
-          setBusy(false);
+          if (!alive.current) return;
+          mark(false);
           if (res.ok) onUrl(res.url);
         }} />
       {attached ? (
@@ -3066,7 +3207,8 @@ function ReplyComposer({ userId, onSend }) {
   const [vid, setVid] = useState("");
   const [busy, setBusy] = useState(false);
   const [showVideo, setShowVideo] = useState(false);
-  const can = text.trim().length > 0 || embedFor(vid);
+  const [uploading, setUploading] = useState(false);
+  const can = (text.trim().length > 0 || embedFor(vid)) && !uploading;
   return (
     <div className="reply-composer">
       <label className="sr-only" htmlFor="reply-text">Your reply</label>
@@ -3081,7 +3223,7 @@ function ReplyComposer({ userId, onSend }) {
                 placeholder="Paste a YouTube link" onChange={(e) => setVid(e.target.value)} />
             </>
           )}
-          <ClipPicker userId={userId} url={vid} onUrl={setVid} disabled={busy} />
+          <ClipPicker userId={userId} url={vid} onUrl={setVid} disabled={busy} onBusy={setUploading} />
         </>
       )}
       <div className="reply-row">
@@ -3099,36 +3241,50 @@ function ReplyComposer({ userId, onSend }) {
           if (ok) { setText(""); setVid(""); }
           setBusy(false);
         }}>
-        {busy ? "Sending…" : "Reply"}
+        {busy ? "Sending…" : uploading ? "Uploading…" : "Reply"}
       </button>
       </div>
     </div>
   );
 }
 
-function CommunityTab({ client, userId, isCoach, onPersist }) {
-  const prefs = client.community || {};
+function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const [posts, setPosts] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [posting, setPosting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [replyOpen, setReplyOpen] = useState(null);
   const [confirmHide, setConfirmHide] = useState(null);
-  const [notifyState, setNotifyState] = useState(
-    typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  const [alsoBlock, setAlsoBlock] = useState(false);
+  const [blocks, setBlocks] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [notifyState, setNotifyState] = useState(() => {
+    if (typeof Notification === "undefined") return "unsupported";
+    if (Notification.permission !== "granted") return Notification.permission;
+    return canShowNotifications() ? "granted" : "undeliverable";
+  });
 
-  const savePrefs = useCallback((patch) => {
-    onPersist({ ...client, community: { ...(client.community || {}), ...patch } });
-  }, [client, onPersist]);
+  const savePrefs = onPrefs;
 
+  // Bumped by every local change. A poll that started before your tap and
+  // lands after it is stale by definition, and applying it used to un-fill a
+  // heart you just pressed or briefly vanish a post you just made.
+  const mutations = useRef(0);
   const load = useCallback(async () => {
-    const [feed, reacts] = await Promise.all([fetchCommunityFeed(), fetchCommunityReactions()]);
+    const at = mutations.current;
+    const feed = await fetchCommunityFeed();
     if (feed === LOAD_FAILED) { setFailed(true); return; }
+    const reacts = await fetchCommunityReactions(feed.map((p) => p.id));
+    if (mutations.current !== at) return;
     setFailed(false);
     setPosts(feed);
     setReactions(reacts === LOAD_FAILED ? [] : reacts);
+    const bl = await fetchCommunityBlocks();
+    if (bl !== LOAD_FAILED) setBlocks(bl);
+    setReports(await fetchCommunityReports());
   }, []);
 
   useEffect(() => {
@@ -3149,10 +3305,16 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
   }, [posts, savePrefs]);
 
   // And again on the way out, so anything that arrived while you were sitting
-  // here reading does not come back as unread the moment you switch tabs.
+  // here reading does not come back as unread the moment you switch tabs. Only
+  // if the feed actually loaded: backing out of a feed that failed to load used
+  // to mark those posts read forever, and nobody ever saw them.
   const savePrefsRef = useRef(savePrefs);
+  const loadedRef = useRef(false);
   useEffect(() => { savePrefsRef.current = savePrefs; }, [savePrefs]);
-  useEffect(() => () => { savePrefsRef.current({ lastSeenAt: new Date().toISOString() }); }, []);
+  useEffect(() => { if (posts && posts.length) loadedRef.current = true; }, [posts]);
+  useEffect(() => () => {
+    if (loadedRef.current) savePrefsRef.current({ lastSeenAt: new Date().toISOString() });
+  }, []);
 
   const roots = useMemo(() => (posts || []).filter((p) => !p.parent_id), [posts]);
   const repliesFor = useMemo(() => {
@@ -3179,29 +3341,70 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
       video_url: vid || null,
       parent_id: parentId || null,
     };
+    mutations.current += 1;
     const res = await createCommunityPost(payload);
-    if (res.ok) setPosts((prev) => [res.post, ...(prev || [])]);
+    if (res.ok) {
+      mutations.current += 1;
+      // De-dupe against a poll that already picked it up.
+      setPosts((prev) => ((prev || []).some((p) => p.id === res.post.id) ? prev : [res.post, ...(prev || [])]));
+    }
     return res.ok;
   };
 
   const react = async (postId, on) => {
+    mutations.current += 1;
     setReactions((prev) => (on
-      ? [...prev, { post_id: postId, user_id: userId }]
+      ? [...prev.filter((r) => !(r.post_id === postId && r.user_id === userId)), { post_id: postId, user_id: userId }]
       : prev.filter((r) => !(r.post_id === postId && r.user_id === userId))));
     const res = await setCommunityReaction(postId, userId, on);
+    mutations.current += 1;
     if (!res.ok) load();
   };
 
   const hide = async (post) => {
-    const res = await hideCommunityPost(post.id, userId);
+    mutations.current += 1;
+    const res = await hideCommunityPost(post, userId);
+    mutations.current += 1;
     if (res.ok) setPosts((prev) => (prev || []).filter((p) => p.id !== post.id && p.parent_id !== post.id));
+    // Offered in the same breath as the removal, because that is the moment you
+    // know you want it — not later, from a settings screen you'd have to find.
+    if (res.ok && alsoBlock && post.author_id !== userId) {
+      const b = await setCommunityBlock(post.author_id, post.author_name, true);
+      if (b.ok) setBlocks((prev) => [...prev.filter((x) => x.user_id !== post.author_id),
+        { user_id: post.author_id, user_name: post.author_name }]);
+    }
+    setAlsoBlock(false);
     setConfirmHide(null);
   };
+
+  const unblock = async (row) => {
+    const res = await setCommunityBlock(row.user_id, row.user_name, false);
+    if (res.ok) setBlocks((prev) => prev.filter((x) => x.user_id !== row.user_id));
+  };
+
+  const report = async (post) => {
+    setReports((prev) => [...prev, { post_id: post.id }]);
+    const res = await reportCommunityPost(post.id, userId);
+    if (res.ok) {
+      emitToast({ kind: "success", message: "Sent to Kyle. He'll take a look.", autoDismissMs: 5000 });
+    } else {
+      setReports((prev) => prev.filter((r) => r.post_id !== post.id));
+    }
+  };
+
+  const iAmBlocked = blocks.some((b) => b.user_id === userId);
+  const reportedIds = useMemo(() => new Set(reports.map((r) => r.post_id)), [reports]);
 
   const askNotifications = async () => {
     if (typeof Notification === "undefined") return;
     try {
       const result = await Notification.requestPermission();
+      // Granting isn't the same as being able to deliver. iOS hands out the
+      // permission and then throws on the page-level constructor, because it
+      // only delivers through a service worker — which this app doesn't have.
+      // Finding that out here is the difference between an honest label and a
+      // switch that says "on" and never fires.
+      if (result === "granted" && !canShowNotifications()) { setNotifyState("undeliverable"); return; }
       setNotifyState(result);
       if (result === "granted") savePrefs({ muted: false });
     } catch { /* older Safari uses a callback form; nothing to do if it refuses */ }
@@ -3218,7 +3421,7 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
     );
   }
 
-  const canPost = body.trim().length > 0 || embedFor(videoUrl);
+  const canPost = (body.trim().length > 0 || embedFor(videoUrl)) && !uploading;
 
   return (
     <div className="tab-pad">
@@ -3238,11 +3441,13 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
             {prefs.muted ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}
             {prefs.muted ? "Notifications off" : "Notifications on"}
           </button>
-        ) : notifyState === "unsupported" || notifyState === "denied" ? (
+        ) : notifyState === "unsupported" || notifyState === "denied" || notifyState === "undeliverable" ? (
           <span className="pref-note">
             {notifyState === "denied"
               ? "Notifications are blocked for this site in your browser settings."
-              : "This browser can't show notifications."}
+              : notifyState === "undeliverable"
+                ? "This phone won't deliver notifications from the app — check the Group tab for new posts."
+                : "This browser can't show notifications."}
           </span>
         ) : (
           <button className="pref-btn" onClick={askNotifications}>
@@ -3259,6 +3464,11 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
         </p>
       )}
 
+      {iAmBlocked ? (
+        <div className="adjust-box" style={{ marginBottom: 12 }}>
+          You can read the group but can't post in it right now. Talk to Kyle if you think that's a mistake.
+        </div>
+      ) : (
       <div className="composer">
         <label className="sr-only" htmlFor="post-body">Write a post</label>
         <textarea id="post-body" className="composer-text" rows={3} value={body} maxLength={COMMUNITY_MAX_CHARS}
@@ -3273,7 +3483,7 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
             )}
           </>
         )}
-        <ClipPicker userId={userId} url={videoUrl} onUrl={setVideoUrl} disabled={posting} />
+        <ClipPicker userId={userId} url={videoUrl} onUrl={setVideoUrl} disabled={posting} onBusy={setUploading} />
         <div className="composer-row">
           <span className="muted" style={{ fontSize: 11.5 }}>{body.length}/{COMMUNITY_MAX_CHARS}</span>
           <button className="btn-primary" disabled={!canPost || posting}
@@ -3282,9 +3492,22 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
               const ok = await send(body.trim(), videoUrl.trim(), null);
               if (ok) { setBody(""); setVideoUrl(""); }
               setPosting(false);
-            }}>{posting ? "Posting…" : "Post"}</button>
+            }}>{posting ? "Posting…" : uploading ? "Uploading…" : "Post"}</button>
         </div>
       </div>
+      )}
+
+      {isCoach && blocks.length > 0 && (
+        <Card title={`Blocked from posting (${blocks.length})`}>
+          <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>They can still read the group. Their old posts stay unless you remove them.</p>
+          {blocks.map((b) => (
+            <div key={b.user_id} className="blocked-row">
+              <span>{b.user_name || "Member"}</span>
+              <button className="link-btn" onClick={() => unblock(b)}>Unblock</button>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {failed && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -3301,6 +3524,7 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
       <div className="feed" aria-live="polite">
         {roots.map((p) => (
           <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
+            onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
             reactedBy={reactedBy[p.id] || []} onReact={react}
             onReply={(parentId, text, vid) => send(text, vid, parentId)}
             onHide={(post) => setConfirmHide(post)}
@@ -3313,12 +3537,21 @@ function CommunityTab({ client, userId, isCoach, onPersist }) {
         <ModalShell onClose={() => setConfirmHide(null)} title="Remove this post?">
           <p className="muted">
             {confirmHide.author_id === userId
-              ? "It will disappear for everyone. This can't be undone from here."
-              : `This removes ${confirmHide.author_name}'s post for everyone. They won't be told.`}
+              ? "It disappears for everyone, and an uploaded clip is deleted with it. This can't be undone from here."
+              : `This removes ${confirmHide.author_name}'s post for everyone, and deletes any clip attached to it. They won't be told.`}
+            {!confirmHide.parent_id && (repliesFor[confirmHide.id] || []).length > 0
+              ? ` Its ${(repliesFor[confirmHide.id] || []).length === 1 ? "reply goes" : "replies go"} too.`
+              : ""}
           </p>
+          {isCoach && confirmHide.author_id !== userId && (
+            <label className="block-check">
+              <input type="checkbox" checked={alsoBlock} onChange={(e) => setAlsoBlock(e.target.checked)} />
+              <span><ShieldOff size={13} aria-hidden="true" /> Also stop {confirmHide.author_name} posting here</span>
+            </label>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button className="btn-primary" style={{ flex: 1 }} onClick={() => hide(confirmHide)}>Remove</button>
-            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={() => setConfirmHide(null)}>Cancel</button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={() => { setAlsoBlock(false); setConfirmHide(null); }}>Cancel</button>
           </div>
         </ModalShell>
       )}
@@ -3620,14 +3853,37 @@ function MainApp({ userId, onSignOut }) {
     await persistClient(updated);
   };
 
-  // Community is for paying athletes. This is a UI gate, not an enforced one —
-  // the policies let any linked athlete read the feed. The note at the bottom of
-  // supabase-community.sql says what enforcing it properly would take.
-  const communityOpen = !!(client && client.paid);
-  const communityLeft = !!(client && client.community && client.community.left);
+  // Community is for paying athletes — and always for the coach, who otherwise
+  // loses the only moderation tools in the product the moment his own record
+  // isn't marked paid. Still a UI gate, not an enforced one; the note at the
+  // bottom of supabase-community.sql says what enforcing it properly would take.
+  const communityOpen = isCoach || !!(client && client.paid);
+  // Prefs live in their own record rather than inside the client blob, so
+  // marking the feed read is a tiny write that can't clobber a training log.
+  const [communityPrefs, setCommunityPrefs_] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      if (!userId) return;
+      const stored = await getCommunityPrefs(userId);
+      if (dead) return;
+      // Carry across anything written under the old scheme, once.
+      const legacy = (client && client.community) || null;
+      setCommunityPrefs_(stored || legacy || {});
+    })();
+    return () => { dead = true; };
+  }, [userId]); // eslint-disable-line
+  const saveCommunityPrefs = useCallback((patch) => {
+    setCommunityPrefs_((cur) => {
+      const next = { ...(cur || {}), ...patch };
+      setCommunityPrefs(userId, next);
+      return next;
+    });
+  }, [userId]);
+  const communityLeft = !!(communityPrefs && communityPrefs.left);
   // Hooks run before the early returns below, so this one has to sit here and
   // cope with `client` still being null.
-  const communityUnread = useCommunityUnread(client, userId, communityOpen && !communityLeft);
+  const communityUnread = useCommunityUnread(communityPrefs, userId, communityOpen && !communityLeft && !!communityPrefs);
   const visibleTabs = useMemo(() => TABS.filter((t) => t.id !== "community" || communityOpen), [communityOpen]);
   // If the tab goes away underneath you — the coach unmarks a payment while you
   // are sitting on it — land somewhere real instead of on an empty screen with
@@ -3712,7 +3968,8 @@ function MainApp({ userId, onSignOut }) {
         {tab === "progress" && <ProgressTab client={client} />}
         {tab === "prs" && <PRsTab client={client} />}
         {tab === "community" && communityOpen && (
-          <CommunityTab client={client} userId={userId} isCoach={isCoach} onPersist={persistClient} />
+          <CommunityTab client={client} userId={userId} isCoach={isCoach}
+            prefs={communityPrefs || {}} onPrefs={saveCommunityPrefs} />
         )}
       </div>
       <BottomNav tab={tab} setTab={setTab} tabs={visibleTabs} unread={communityUnread} />
@@ -7631,6 +7888,13 @@ function GlobalStyle() {
       .clip-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
       .clip-chosen { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
       .clip-chosen .link-btn { font-weight: 500; color: var(--text-dim); }
+      .post-act.quiet { margin-left: auto; color: var(--text-dim); }
+      .post-act.quiet:disabled { opacity: .6; }
+      .post-card.flagged { border-color: var(--amber, #e0a33a); }
+      .post-flag { font-size: 11.5px; font-weight: 700; color: var(--amber, #e0a33a); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
+      .blocked-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+      .block-check { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: 13px; cursor: pointer; }
+      .block-check span { display: inline-flex; align-items: center; gap: 5px; }
       .reply-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
       .reply-row .link-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
       .reply-row .btn-primary { width: auto; margin-left: auto; padding: 7px 16px; }
