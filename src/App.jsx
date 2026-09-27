@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Users, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -125,6 +125,155 @@ async function kvDelete(userId, key) {
   if (outcome.ok) { markSynced(); return { ok: true }; }
   emitToast({ kind: "error", message: "Couldn't delete — check your connection.", retryLabel: "Retry", onRetry: () => kvDelete(userId, key) });
   return { ok: false };
+}
+
+/* ============================== COMMUNITY FEED ============================== */
+// The only place in this app where one person reads another person's rows.
+// Everything else is scoped to auth.uid(). Here every member reads every post,
+// so the policies in supabase-community.sql are the whole security boundary —
+// not this file.
+
+const COMMUNITY_LIMIT = 200;
+const COMMUNITY_POLL_MS = 25000;
+const COMMUNITY_MAX_CHARS = 1200;
+
+// Three shapes. A YouTube link plays inline. A video file — one somebody
+// uploaded here, or any direct .mp4 anywhere — plays inline too. Everything
+// else gets an honest card that opens in a new tab rather than pretending to
+// embed something it can't.
+function embedFor(url) {
+  const u = String(url || "").trim();
+  if (!u) return null;
+  if (!/^https?:\/\//i.test(u)) return null;
+  const yt = u.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if (yt) return { kind: "youtube", id: yt[1], href: u };
+  if (/\.(mp4|mov|m4v|webm)(\?|#|$)/i.test(u)) return { kind: "video", href: u };
+  let host = "";
+  try { host = new URL(u).hostname.replace(/^www\./, ""); } catch { host = ""; }
+  return { kind: "link", href: u, host };
+}
+
+async function fetchCommunityFeed() {
+  if (!supabase) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("community_posts")
+      .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(COMMUNITY_LIMIT);
+    if (error) throw error;
+    return data || [];
+  });
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function fetchCommunityReactions() {
+  if (!supabase) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("community_reactions").select("post_id, user_id");
+    if (error) throw error;
+    return data || [];
+  });
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function createCommunityPost(post) {
+  if (!supabase) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("community_posts").insert(post)
+      .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at").single();
+    if (error) throw error;
+    return data;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't post that — check your connection and try again.", autoDismissMs: 6000 });
+    return { ok: false };
+  }
+  markSynced();
+  return { ok: true, post: outcome.result };
+}
+
+// Hidden, never destroyed: a removal stays reviewable, and a reply never loses
+// the post it was answering.
+async function hideCommunityPost(id, byUserId) {
+  if (!supabase) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("community_posts")
+      .update({ deleted_at: new Date().toISOString(), deleted_by: byUserId }).eq("id", id);
+    if (error) throw error;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't remove that post — check your connection.", autoDismissMs: 6000 });
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
+async function setCommunityReaction(postId, userId, on) {
+  if (!supabase || !userId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    if (on) {
+      const { error } = await supabase.from("community_reactions")
+        .upsert({ post_id: postId, user_id: userId }, { onConflict: "post_id,user_id" });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("community_reactions")
+        .delete().eq("post_id", postId).eq("user_id", userId);
+      if (error) throw error;
+    }
+  });
+  return { ok: outcome.ok };
+}
+
+// Uploads for the clip you shot on your phone, which is most of what anyone
+// actually wants to share. The cap is stated in the UI before they pick a file
+// rather than discovered as a failure after a two-minute upload: raw phone
+// video is enormous, and free storage is not.
+const COMMUNITY_CLIP_BUCKET = "community-clips";
+const isUploadedClip = (url) => /\/storage\/v1\/object\/public\//.test(String(url || ""));
+const COMMUNITY_CLIP_MAX_BYTES = 50 * 1024 * 1024;
+
+async function uploadCommunityClip(file, userId) {
+  if (!supabase || !file || !userId) return { ok: false };
+  if (file.size > COMMUNITY_CLIP_MAX_BYTES) {
+    emitToast({ kind: "error", autoDismissMs: 9000,
+      message: "That clip is over 50 MB. Trim it shorter, or put it on YouTube as unlisted and paste the link." });
+    return { ok: false };
+  }
+  if (!/^video\//i.test(file.type || "")) {
+    emitToast({ kind: "error", autoDismissMs: 7000, message: "That isn't a video file. MP4 or MOV works best." });
+    return { ok: false };
+  }
+  const ext = (String(file.name || "").match(/\.([A-Za-z0-9]{2,5})$/) || [null, "mp4"])[1].toLowerCase();
+  // Foldered by uploader so the storage policy can check it, and named so two
+  // people uploading "IMG_0421.mov" never collide.
+  const path = `${userId}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  try {
+    const { error } = await supabase.storage.from(COMMUNITY_CLIP_BUCKET)
+      .upload(path, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "video/mp4" });
+    if (error) throw error;
+    const { data } = supabase.storage.from(COMMUNITY_CLIP_BUCKET).getPublicUrl(path);
+    if (!data || !data.publicUrl) throw new Error("no public url");
+    markSynced();
+    return { ok: true, url: data.publicUrl };
+  } catch {
+    emitToast({ kind: "error", autoDismissMs: 9000,
+      message: "Couldn't upload that clip. If it's a long one, put it on YouTube as unlisted and paste the link instead." });
+    return { ok: false };
+  }
+}
+
+function timeAgo(iso) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return fmtDate(String(iso).slice(0, 10));
 }
 
 async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST_KEY); return v === LOAD_FAILED ? LOAD_FAILED : (v || []); }
@@ -2728,15 +2877,465 @@ function ConditioningPlan({ target, name }) {
   );
 }
 
+// New-post count for the nav badge, and the thing that fires a notification.
+// Lives above the tab so it works whichever tab you are on.
+//
+// This is a poll, not a push. It can only notify while the app is actually
+// running — open, or backgrounded but not yet discarded. Real push, the kind
+// that wakes a closed phone, needs a service worker, VAPID keys and something
+// server-side to send it. That is a separate build, and deliberately not
+// pretended at here: telling someone they will be notified and then not
+// notifying them is worse than not offering it.
+function useCommunityUnread(client, userId, enabled) {
+  const [count, setCount] = useState(0);
+  const lastNotified = useRef(null);
+  const prefs = (client && client.community) || {};
+  const lastSeen = prefs.lastSeenAt || (client && client.createdAt) || "1970-01-01";
+  const muted = !!prefs.muted;
+  useEffect(() => {
+    if (!enabled || !supabase || !userId) { setCount(0); return undefined; }
+    let cancelled = false;
+    const check = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const { data, error } = await supabase.from("community_posts")
+          .select("id, author_name, body, video_url, created_at")
+          .is("deleted_at", null)
+          .gt("created_at", lastSeen)
+          .neq("author_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(30);
+        if (error || cancelled || !data) return;
+        setCount(data.length);
+        const newest = data[0];
+        if (newest && !muted && lastNotified.current !== newest.id) {
+          const first = lastNotified.current === null;
+          lastNotified.current = newest.id;
+          // Don't fire for whatever was already waiting when the app opened —
+          // only for something that arrives while you have it open.
+          if (!first) notifyNewPost(newest);
+        }
+      } catch { /* offline; the badge just stays where it was */ }
+    };
+    check();
+    const id = setInterval(check, COMMUNITY_POLL_MS);
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [enabled, userId, lastSeen, muted]);
+  return count;
+}
+
+function notifyNewPost(post) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    new Notification(`${post.author_name} posted in Community`, {
+      body: String(post.body || "").trim().slice(0, 140) || "Shared a video",
+      icon: "/icon-192.png",
+      tag: "strength-matrix-community",
+    });
+  } catch { /* Safari throws constructing these outside a service worker */ }
+}
+
+function VideoEmbed({ url }) {
+  const e = embedFor(url);
+  if (!e) return null;
+  if (e.kind === "video") {
+    // preload="metadata" so a feed of ten clips doesn't pull ten videos down
+    // over someone's phone data before they've tapped anything.
+    return (
+      <div className="post-video native">
+        <video src={e.href} controls playsInline preload="metadata" />
+      </div>
+    );
+  }
+  if (e.kind === "youtube") {
+    return (
+      <div className="post-video">
+        <iframe src={`https://www.youtube-nocookie.com/embed/${e.id}`} title="Shared video" loading="lazy"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+      </div>
+    );
+  }
+  return (
+    <a className="post-link" href={e.href} target="_blank" rel="noreferrer noopener">
+      <LinkIcon size={15} aria-hidden="true" />
+      <span className="post-link-text">{e.host || e.href}</span>
+      <span className="post-link-go">Open</span>
+    </a>
+  );
+}
+
+function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply }) {
+  const mine = post.author_id === userId;
+  const hearts = reactedBy.length;
+  const iReacted = reactedBy.includes(userId);
+  return (
+    <article className="post-card">
+      <header className="post-head">
+        <BeltEmblem level={post.author_belt} size={26} title={null} />
+        <div className="post-who">
+          <span className="post-name">{post.author_name}{mine ? " (you)" : ""}</span>
+          <span className="post-time">{timeAgo(post.created_at)}</span>
+        </div>
+        {(mine || isCoach) && (
+          <button className="post-remove" onClick={() => onHide(post)}
+            aria-label={mine ? "Delete your post" : `Remove ${post.author_name}'s post`}>
+            <Trash2 size={15} aria-hidden="true" />
+          </button>
+        )}
+      </header>
+      {post.body ? <p className="post-body">{post.body}</p> : null}
+      <VideoEmbed url={post.video_url} />
+      <div className="post-actions">
+        <button className={`post-act ${iReacted ? "on" : ""}`} onClick={() => onReact(post.id, !iReacted)}
+          aria-pressed={iReacted} aria-label={iReacted ? "Remove your like" : "Like this post"}>
+          <Heart size={15} aria-hidden="true" />{hearts > 0 ? <span>{hearts}</span> : null}
+        </button>
+        <button className="post-act" onClick={() => onToggleReply(post.id)} aria-expanded={replyOpen}>
+          <MessageCircle size={15} aria-hidden="true" />
+          <span>{replies.length > 0 ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Reply"}</span>
+        </button>
+      </div>
+      {replies.length > 0 && (
+        <div className="post-replies">
+          {replies.map((r) => (
+            <div className="reply" key={r.id}>
+              <BeltEmblem level={r.author_belt} size={20} title={null} />
+              <div className="reply-main">
+                <div className="reply-head">
+                  <span className="reply-name">{r.author_name}{r.author_id === userId ? " (you)" : ""}</span>
+                  <span className="post-time">{timeAgo(r.created_at)}</span>
+                  {(r.author_id === userId || isCoach) && (
+                    <button className="post-remove" onClick={() => onHide(r)} aria-label="Remove this reply">
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+                {r.body ? <p className="reply-body">{r.body}</p> : null}
+                <VideoEmbed url={r.video_url} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {replyOpen && <ReplyComposer userId={userId} onSend={(text, vid) => onReply(post.id, text, vid)} />}
+    </article>
+  );
+}
+
+// Upload control shared by both composers. Kept next to the paste-a-link field
+// rather than replacing it: a technique breakdown someone found is a link, a
+// clip of your own guard pass is a file, and both belong here.
+function ClipPicker({ userId, url, onUrl, disabled }) {
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+  const attached = isUploadedClip(url);
+  return (
+    <div className="clip-picker">
+      <input ref={inputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} aria-hidden="true"
+        onChange={async (e) => {
+          const file = e.target.files && e.target.files[0];
+          e.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          const res = await uploadCommunityClip(file, userId);
+          setBusy(false);
+          if (res.ok) onUrl(res.url);
+        }} />
+      {attached ? (
+        <span className="clip-chosen">
+          <Video size={14} aria-hidden="true" />Clip attached
+          <button type="button" className="link-btn" onClick={() => onUrl("")}>Remove</button>
+        </span>
+      ) : (
+        <button type="button" className="pref-btn" disabled={disabled || busy}
+          onClick={() => inputRef.current && inputRef.current.click()}>
+          <Video size={14} aria-hidden="true" />{busy ? "Uploading…" : "Upload your own clip"}
+        </button>
+      )}
+      {busy && <span className="clip-note">Keep the app open until it finishes.</span>}
+      {!attached && !busy && <span className="clip-note">Up to 50 MB — roughly 30 seconds from a phone.</span>}
+    </div>
+  );
+}
+
+function ReplyComposer({ userId, onSend }) {
+  const [text, setText] = useState("");
+  const [vid, setVid] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
+  const can = text.trim().length > 0 || embedFor(vid);
+  return (
+    <div className="reply-composer">
+      <label className="sr-only" htmlFor="reply-text">Your reply</label>
+      <textarea id="reply-text" className="composer-text" rows={2} value={text} maxLength={COMMUNITY_MAX_CHARS}
+        placeholder="Write a reply…" onChange={(e) => setText(e.target.value)} />
+      {showVideo && (
+        <>
+          {!isUploadedClip(vid) && (
+            <>
+              <label className="sr-only" htmlFor="reply-video">Video link for your reply</label>
+              <input id="reply-video" className="composer-url" value={vid} inputMode="url"
+                placeholder="Paste a YouTube link" onChange={(e) => setVid(e.target.value)} />
+            </>
+          )}
+          <ClipPicker userId={userId} url={vid} onUrl={setVid} disabled={busy} />
+        </>
+      )}
+      <div className="reply-row">
+      {!showVideo && (
+        <button type="button" className="link-btn" onClick={() => setShowVideo(true)}>
+          <Video size={13} aria-hidden="true" /> Add a video
+        </button>
+      )}
+      <button className="btn-primary" disabled={!can || busy}
+        onClick={async () => {
+          setBusy(true);
+          const ok = await onSend(text.trim(), vid.trim());
+          // Only clear on success. Losing what someone typed because the network
+          // dropped is the worst possible response to a failed send.
+          if (ok) { setText(""); setVid(""); }
+          setBusy(false);
+        }}>
+        {busy ? "Sending…" : "Reply"}
+      </button>
+      </div>
+    </div>
+  );
+}
+
+function CommunityTab({ client, userId, isCoach, onPersist }) {
+  const prefs = client.community || {};
+  const [posts, setPosts] = useState(null);
+  const [reactions, setReactions] = useState([]);
+  const [failed, setFailed] = useState(false);
+  const [body, setBody] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(null);
+  const [confirmHide, setConfirmHide] = useState(null);
+  const [notifyState, setNotifyState] = useState(
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+
+  const savePrefs = useCallback((patch) => {
+    onPersist({ ...client, community: { ...(client.community || {}), ...patch } });
+  }, [client, onPersist]);
+
+  const load = useCallback(async () => {
+    const [feed, reacts] = await Promise.all([fetchCommunityFeed(), fetchCommunityReactions()]);
+    if (feed === LOAD_FAILED) { setFailed(true); return; }
+    setFailed(false);
+    setPosts(feed);
+    setReactions(reacts === LOAD_FAILED ? [] : reacts);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(() => { if (document.visibilityState === "visible") load(); }, COMMUNITY_POLL_MS);
+    const onVis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [load]);
+
+  // Opening the tab is what marks the feed read. Written once per visit rather
+  // than on every poll, so it is not a save on a timer.
+  const markedRef = useRef(false);
+  useEffect(() => {
+    if (markedRef.current || !posts || !posts.length) return;
+    markedRef.current = true;
+    savePrefs({ lastSeenAt: new Date().toISOString() });
+  }, [posts, savePrefs]);
+
+  // And again on the way out, so anything that arrived while you were sitting
+  // here reading does not come back as unread the moment you switch tabs.
+  const savePrefsRef = useRef(savePrefs);
+  useEffect(() => { savePrefsRef.current = savePrefs; }, [savePrefs]);
+  useEffect(() => () => { savePrefsRef.current({ lastSeenAt: new Date().toISOString() }); }, []);
+
+  const roots = useMemo(() => (posts || []).filter((p) => !p.parent_id), [posts]);
+  const repliesFor = useMemo(() => {
+    const map = {};
+    (posts || []).forEach((p) => {
+      if (!p.parent_id) return;
+      (map[p.parent_id] = map[p.parent_id] || []).push(p);
+    });
+    Object.values(map).forEach((list) => list.sort((a, b) => (a.created_at < b.created_at ? -1 : 1)));
+    return map;
+  }, [posts]);
+  const reactedBy = useMemo(() => {
+    const map = {};
+    reactions.forEach((r) => { (map[r.post_id] = map[r.post_id] || []).push(r.user_id); });
+    return map;
+  }, [reactions]);
+
+  const send = async (text, vid, parentId) => {
+    const payload = {
+      author_id: userId,
+      author_name: (client.name || "Member").trim(),
+      author_belt: client.beltLevel || "White",
+      body: text || null,
+      video_url: vid || null,
+      parent_id: parentId || null,
+    };
+    const res = await createCommunityPost(payload);
+    if (res.ok) setPosts((prev) => [res.post, ...(prev || [])]);
+    return res.ok;
+  };
+
+  const react = async (postId, on) => {
+    setReactions((prev) => (on
+      ? [...prev, { post_id: postId, user_id: userId }]
+      : prev.filter((r) => !(r.post_id === postId && r.user_id === userId))));
+    const res = await setCommunityReaction(postId, userId, on);
+    if (!res.ok) load();
+  };
+
+  const hide = async (post) => {
+    const res = await hideCommunityPost(post.id, userId);
+    if (res.ok) setPosts((prev) => (prev || []).filter((p) => p.id !== post.id && p.parent_id !== post.id));
+    setConfirmHide(null);
+  };
+
+  const askNotifications = async () => {
+    if (typeof Notification === "undefined") return;
+    try {
+      const result = await Notification.requestPermission();
+      setNotifyState(result);
+      if (result === "granted") savePrefs({ muted: false });
+    } catch { /* older Safari uses a callback form; nothing to do if it refuses */ }
+  };
+
+  if (prefs.left) {
+    return (
+      <div className="tab-pad">
+        <Card title="You've left the community">
+          <p className="muted">You won't see posts or get notified. Nothing you posted was deleted — rejoin whenever you like and it will all still be there.</p>
+          <button className="btn-primary wide" style={{ marginTop: 12 }} onClick={() => savePrefs({ left: false })}>Rejoin the community</button>
+        </Card>
+      </div>
+    );
+  }
+
+  const canPost = body.trim().length > 0 || embedFor(videoUrl);
+
+  return (
+    <div className="tab-pad">
+      <div className="community-head">
+        <div>
+          <h2 className="program-title" style={{ margin: 0 }}>Community</h2>
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>
+            Everyone training with Kyle. Share a roll, a technique clip, a question — or just say how the week went.
+          </p>
+        </div>
+      </div>
+
+      <div className="community-prefs" role="group" aria-label="Community settings">
+        {notifyState === "granted" ? (
+          <button className={`pref-btn ${prefs.muted ? "" : "on"}`} onClick={() => savePrefs({ muted: !prefs.muted })}
+            aria-pressed={!prefs.muted}>
+            {prefs.muted ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}
+            {prefs.muted ? "Notifications off" : "Notifications on"}
+          </button>
+        ) : notifyState === "unsupported" || notifyState === "denied" ? (
+          <span className="pref-note">
+            {notifyState === "denied"
+              ? "Notifications are blocked for this site in your browser settings."
+              : "This browser can't show notifications."}
+          </span>
+        ) : (
+          <button className="pref-btn" onClick={askNotifications}>
+            <Bell size={14} aria-hidden="true" />Turn on notifications
+          </button>
+        )}
+        <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
+          <LogOut size={14} aria-hidden="true" />Leave
+        </button>
+      </div>
+      {notifyState === "granted" && !prefs.muted && (
+        <p className="muted community-fineprint">
+          You'll get a notification while the app is open or recently used. Waking a fully closed phone needs push, which isn't built yet.
+        </p>
+      )}
+
+      <div className="composer">
+        <label className="sr-only" htmlFor="post-body">Write a post</label>
+        <textarea id="post-body" className="composer-text" rows={3} value={body} maxLength={COMMUNITY_MAX_CHARS}
+          placeholder="Share something with the group…" onChange={(e) => setBody(e.target.value)} />
+        {!isUploadedClip(videoUrl) && (
+          <>
+            <label className="sr-only" htmlFor="post-video">Video link</label>
+            <input id="post-video" className="composer-url" value={videoUrl} inputMode="url"
+              placeholder="Paste a YouTube link (optional)" onChange={(e) => setVideoUrl(e.target.value)} />
+            {videoUrl.trim() && !embedFor(videoUrl) && (
+              <p className="composer-warn">That doesn't look like a link — it needs to start with https://</p>
+            )}
+          </>
+        )}
+        <ClipPicker userId={userId} url={videoUrl} onUrl={setVideoUrl} disabled={posting} />
+        <div className="composer-row">
+          <span className="muted" style={{ fontSize: 11.5 }}>{body.length}/{COMMUNITY_MAX_CHARS}</span>
+          <button className="btn-primary" disabled={!canPost || posting}
+            onClick={async () => {
+              setPosting(true);
+              const ok = await send(body.trim(), videoUrl.trim(), null);
+              if (ok) { setBody(""); setVideoUrl(""); }
+              setPosting(false);
+            }}>{posting ? "Posting…" : "Post"}</button>
+        </div>
+      </div>
+
+      {failed && (
+        <div className="adjust-box" style={{ marginBottom: 12 }}>
+          Couldn't load the feed. <button className="link-btn" onClick={load}>Try again</button>
+        </div>
+      )}
+      {posts === null && !failed && <p className="muted">Loading…</p>}
+      {posts !== null && roots.length === 0 && !failed && (
+        <Card title="Nothing here yet">
+          <p className="muted">Be the first. Post a clip you're working on, or a question about something that isn't clicking.</p>
+        </Card>
+      )}
+
+      <div className="feed" aria-live="polite">
+        {roots.map((p) => (
+          <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
+            reactedBy={reactedBy[p.id] || []} onReact={react}
+            onReply={(parentId, text, vid) => send(text, vid, parentId)}
+            onHide={(post) => setConfirmHide(post)}
+            replyOpen={replyOpen === p.id}
+            onToggleReply={(id) => setReplyOpen((cur) => (cur === id ? null : id))} />
+        ))}
+      </div>
+
+      {confirmHide && (
+        <ModalShell onClose={() => setConfirmHide(null)} title="Remove this post?">
+          <p className="muted">
+            {confirmHide.author_id === userId
+              ? "It will disappear for everyone. This can't be undone from here."
+              : `This removes ${confirmHide.author_name}'s post for everyone. They won't be told.`}
+          </p>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button className="btn-primary" style={{ flex: 1 }} onClick={() => hide(confirmHide)}>Remove</button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={() => setConfirmHide(null)}>Cancel</button>
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  );
+}
+
 /* ============================== APP SHELL ============================== */
 
 const TABS = [
   { id: "today", label: "Today", icon: Home },
   { id: "program", label: "Program", icon: CalendarDays },
   { id: "history", label: "History", icon: HistoryIcon },
-  { id: "bjj", label: "BJJ Notes", icon: BookOpen },
+  { id: "bjj", label: "Notes", icon: BookOpen },
   { id: "progress", label: "Progress", icon: TrendingUp },
   { id: "prs", label: "Records", icon: Trophy },
+  { id: "community", label: "Group", icon: MessageCircle },
 ];
 
 // A render error used to unmount the whole app and leave a blank screen, which
@@ -2793,7 +3392,6 @@ function MainApp({ userId, onSignOut }) {
   const [activeId, setActiveId] = useState(null);
   const [client, setClientState] = useState(null);
   const [tab, setTab] = useState("today");
-  const [showClients, setShowClients] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
@@ -3007,31 +3605,6 @@ function MainApp({ userId, onSignOut }) {
     setClients(list);
     setActiveId(id);
   };
-  const addClient = async (profile, useTemplate) => {
-    const id = uid();
-    const c = buildClient({ id, ...profile, useTemplate });
-    // If the record itself does not land, adding the name to the list would
-    // leave an entry pointing at nothing — and selecting it strands the app on
-    // a loading screen with no way back out.
-    const saved = await setClient(userId, id, c);
-    if (!saved || saved.ok === false) return;
-    const list = [...clients, { id, name: c.name }];
-    const listSaved = await setClientList(userId, list);
-    if (!listSaved || listSaved.ok === false) return;
-    setClients(list);
-    setActiveId(id);
-    setShowClients(false);
-  };
-  const deleteClient = async (id) => {
-    const list = clients.filter((c) => c.id !== id);
-    // Write first, then update the screen. The old order claimed the delete had
-    // happened even when the write failed, and the athlete reappeared on reload.
-    const saved = await setClientList(userId, list);
-    if (saved && saved.ok === false) return;
-    await deleteClientStorage(userId, id);
-    setClients(list);
-    if (activeId === id) setActiveId(list.length ? list[0].id : null);
-  };
   const resetAppData = async () => {
     for (const c of clients) await deleteClientStorage(userId, c.id);
     await setClientList(userId, []);
@@ -3046,6 +3619,22 @@ function MainApp({ userId, onSignOut }) {
     const updated = { ...client, program: buildProgramVariant(variant) };
     await persistClient(updated);
   };
+
+  // Community is for paying athletes. This is a UI gate, not an enforced one —
+  // the policies let any linked athlete read the feed. The note at the bottom of
+  // supabase-community.sql says what enforcing it properly would take.
+  const communityOpen = !!(client && client.paid);
+  const communityLeft = !!(client && client.community && client.community.left);
+  // Hooks run before the early returns below, so this one has to sit here and
+  // cope with `client` still being null.
+  const communityUnread = useCommunityUnread(client, userId, communityOpen && !communityLeft);
+  const visibleTabs = useMemo(() => TABS.filter((t) => t.id !== "community" || communityOpen), [communityOpen]);
+  // If the tab goes away underneath you — the coach unmarks a payment while you
+  // are sitting on it — land somewhere real instead of on an empty screen with
+  // no tab highlighted.
+  useEffect(() => {
+    if (!communityOpen) setTab((cur) => (cur === "community" ? "today" : cur));
+  }, [communityOpen]);
 
   if (!loaded) return <div className="app-shell" data-theme={theme}><LoadingState /><ToastHost /><GlobalStyle /></div>;
   if (loadError) return (
@@ -3110,7 +3699,7 @@ function MainApp({ userId, onSignOut }) {
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
       {!logging && <UpdateBanner />}
-      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenClients={() => setShowClients(true)} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
+      <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
@@ -3122,14 +3711,12 @@ function MainApp({ userId, onSignOut }) {
         {tab === "bjj" && <BJJNotesTab client={client} onPersist={persistClient} />}
         {tab === "progress" && <ProgressTab client={client} />}
         {tab === "prs" && <PRsTab client={client} />}
+        {tab === "community" && communityOpen && (
+          <CommunityTab client={client} userId={userId} isCoach={isCoach} onPersist={persistClient} />
+        )}
       </div>
-      <BottomNav tab={tab} setTab={setTab} />
+      <BottomNav tab={tab} setTab={setTab} tabs={visibleTabs} unread={communityUnread} />
       <ToastHost />
-      {showClients && (
-        <ClientsModal clients={clients} activeId={activeId}
-          onSelect={(id) => { setActiveId(id); setShowClients(false); }}
-          onAdd={addClient} onDelete={deleteClient} onClose={() => setShowClients(false)} />
-      )}
       {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
@@ -3400,7 +3987,7 @@ function BrandLockup() {
   );
 }
 
-function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
+function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPayment, onOpenCalculator, onOpenDashboard, onOpenHelp, onOpenCoachDashboard, onOpenShare }) {
   return (
     <div className="topbar">
       <div className="brand-block">
@@ -3438,7 +4025,6 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenClients, onOpenSett
         <div className="topbar-icon-group">
           <button className="icon-btn" onClick={onOpenPayment} aria-label="Payment information"><DollarSign size={20} /></button>
           <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings"><SettingsIcon size={20} /></button>
-          <button className="icon-btn" onClick={onOpenClients} aria-label="Switch client"><Users size={20} /></button>
         </div>
       </div>
     </div>
@@ -3932,14 +4518,17 @@ function OneRepMaxCalculator({ onClose }) {
   );
 }
 
-function BottomNav({ tab, setTab }) {
+function BottomNav({ tab, setTab, tabs, unread = 0 }) {
   return (
     <div className="bottom-nav">
-      {TABS.map((t) => {
+      {(tabs || TABS).map((t) => {
         const Icon = t.icon; const active = tab === t.id;
+        const badge = t.id === "community" && unread > 0 ? Math.min(unread, 99) : 0;
         return (
-          <button key={t.id} className={`nav-btn ${active ? "active" : ""}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`nav-btn ${active ? "active" : ""}`} onClick={() => setTab(t.id)}
+            aria-label={badge ? `${t.label}, ${unread} new` : undefined}>
             <Icon size={17} strokeWidth={active ? 2.4 : 1.8} /><span>{t.label}</span>
+            {badge ? <span className="nav-badge" aria-hidden="true">{badge}</span> : null}
           </button>
         );
       })}
@@ -6337,7 +6926,7 @@ function EditableLogBody({ log, client, onPersist }) {
         </div>
       ))}
       {log.notes && <div className="history-notes">"{log.notes}"</div>}
-      <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>Total volume {log.totalVolume.toLocaleString()} pounds — Rate of Perceived Exertion {log.avgRPE}{log.readinessColor ? ` — Readiness ${log.readinessColor}` : ""}</div>
+      <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>Total volume {(log.totalVolume || 0).toLocaleString()} pounds — Rate of Perceived Exertion {log.avgRPE}{log.readinessColor ? ` — Readiness ${log.readinessColor}` : ""}</div>
       <button className="btn-ghost" style={{ marginTop: 10 }} onClick={startEdit}><Pencil size={14} /> {saved ? "Saved — edit again" : "Fix a typo in this workout"}</button>
     </div>
   );
@@ -6345,32 +6934,10 @@ function EditableLogBody({ log, client, onPersist }) {
 
 function HistoryTab({ client, onPersist }) {
   const [openId, setOpenId] = useState(null);
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [visibleCount, setVisibleCount] = useState(20);
   const [search, setSearch] = useState("");
   const logs = [...client.logs].reverse();
   const mobilityLogs = [...(client.mobilityLogs || [])].reverse();
-
-  const now = new Date();
-  const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthLabel = viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  const dateStr = (d) => `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-  const logsByDate = useMemo(() => {
-    const map = {};
-    client.logs.forEach((l) => { (map[l.date] = map[l.date] || []).push(l); });
-    return map;
-  }, [client.logs]);
-  const mobilityByDate = useMemo(() => {
-    const map = {};
-    (client.mobilityLogs || []).forEach((m) => { (map[m.date] = map[m.date] || []).push(m); });
-    return map;
-  }, [client.mobilityLogs]);
 
   // Match on exercise name so someone can find every session they squatted in
   // without scrolling a year of cards.
@@ -6380,12 +6947,7 @@ function HistoryTab({ client, onPersist }) {
     return logs.filter((l) => (l.exercises || []).some((e) => (e.name || "").toLowerCase().includes(q)));
   }, [logs, search]);
 
-  const cells = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
-  const selectedLogs = selectedDate ? (logsByDate[selectedDate] || []) : [];
-  const selectedMobility = selectedDate ? (mobilityByDate[selectedDate] || []) : [];
 
   return (
     <div className="pad">
@@ -6405,58 +6967,6 @@ function HistoryTab({ client, onPersist }) {
           <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>Edit this any time in Settings.</p>
         </Card>
       )}
-      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>Pick any date on the calendar to jump straight to that workout, or scroll the full list below. Nothing is ever deleted — but you can fix a typo'd weight or rep any time.</p>
-
-      <div className="cal-header">
-        <button className="day-nav-btn" onClick={() => { setMonthOffset((o) => o - 1); setSelectedDate(null); }}><ChevronLeft size={16} /></button>
-        <div className="program-title" style={{ margin: 0, fontSize: 18 }}>{monthLabel}</div>
-        <button className="day-nav-btn" onClick={() => { setMonthOffset((o) => o + 1); setSelectedDate(null); }}><ChevronRight size={16} /></button>
-      </div>
-      <div className="cal-grid cal-grid-header">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => <div key={d} className="cal-day-label">{d}</div>)}
-      </div>
-      <div className="cal-grid">
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} className="cal-cell empty" />;
-          const ds = dateStr(d);
-          const hasLog = !!logsByDate[ds];
-          const hasMobility = !!mobilityByDate[ds];
-          const isSelected = selectedDate === ds;
-          const isToday = ds === todayStr();
-          return (
-            <button key={i} className={`cal-cell ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`} onClick={() => setSelectedDate(isSelected ? null : ds)}>
-              <span>{d}</span>
-              {(hasLog || hasMobility) && (
-                <span className="cal-dot-row">
-                  {hasLog && <span className="cal-dot workout" />}
-                  {hasMobility && <span className="cal-dot mobility" />}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {selectedDate && (
-        <div style={{ marginTop: 18, marginBottom: 8 }}>
-          <div className="program-title" style={{ fontSize: 16, marginBottom: 10 }}>{fmtDate(selectedDate)}</div>
-          {selectedLogs.length === 0 && selectedMobility.length === 0 && <p className="muted">No workouts or recovery sessions logged this date.</p>}
-          {selectedLogs.map((log) => (
-            <div key={log.id} className="history-card">
-              <div className="history-body" style={{ borderTop: "none", padding: 14 }}>
-                <EditableLogBody log={log} client={client} onPersist={onPersist} />
-              </div>
-            </div>
-          ))}
-          {selectedMobility.map((m) => (
-            <div key={m.id} className="history-card"><div className="history-body" style={{ borderTop: "none", padding: 14 }}>
-              <div className="history-date">Recovery & Mobility — {Math.round(m.totalSeconds / 60)} minutes</div>
-              {m.notes && <div className="history-notes">"{m.notes}"</div>}
-            </div></div>
-          ))}
-        </div>
-      )}
-
       <div className="program-title" style={{ fontSize: 18, marginTop: 24, marginBottom: 8 }}>Full History</div>
       {logs.length > 0 && (
         <input
@@ -6483,7 +6993,7 @@ function HistoryTab({ client, onPersist }) {
             <div key={log.id} className="history-card">
               <button className="history-head" onClick={() => setOpenId(openId === log.id ? null : log.id)}>
                 <div><div className="history-date">{fmtDate(log.date)}</div><div className="muted">Week {log.weekNumber} — Day {log.dayLabel}</div></div>
-                <div className="history-meta"><span>{log.totalVolume.toLocaleString()} pounds</span><ChevronRight size={16} className={openId === log.id ? "chev-open" : ""} /></div>
+                <div className="history-meta"><span>{(log.totalVolume || 0).toLocaleString()} pounds</span><ChevronRight size={16} className={openId === log.id ? "chev-open" : ""} /></div>
               </button>
               {openId === log.id && (
                 <div className="history-body">
@@ -6545,6 +7055,7 @@ function BJJNotesTab({ client, onPersist }) {
 
   return (
     <div className="pad">
+      <h2 className="program-title" style={{ margin: "0 0 4px" }}>BJJ Notes</h2>
       <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. These notes are for you — your coach's dashboard doesn't display them.</p>
 
       {!adding && <button className="btn-primary wide" onClick={startAdd}>+ Add Today's Notes</button>}
@@ -6823,49 +7334,6 @@ function PRsTab({ client }) {
 
 /* ============================== CLIENTS MODAL ============================== */
 
-function ClientsModal({ clients, activeId, onSelect, onAdd, onDelete, onClose }) {
-  const [adding, setAdding] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [weight, setWeight] = useState("");
-  const [heightFeet, setHeightFeet] = useState("");
-  const [heightInches, setHeightInches] = useState("");
-  const [template, setTemplate] = useState("bjj");
-  const [injuryNotes, setInjuryNotes] = useState("");
-  const canCreate = firstName.trim() && lastName.trim();
-
-  return (
-    <ModalShell onClose={onClose} title="Athletes / Clients">
-      {clients.map((c) => (
-        <div key={c.id} className="client-row">
-          <button className={`client-select ${c.id === activeId ? "active" : ""}`} onClick={() => onSelect(c.id)}>{c.name}</button>
-          {clients.length > 1 && <button className="icon-btn small" onClick={() => onDelete(c.id)} aria-label={`Delete ${c.name}`}><Trash2 size={14} /></button>}
-        </div>
-      ))}
-      {!adding ? <button className="btn-ghost wide" style={{ marginTop: 14 }} onClick={() => setAdding(true)}><Plus size={16} /> Add athlete</button> : (
-        <div className="add-client-form">
-          <LabeledInput label="First name" value={firstName} onChange={setFirstName} />
-          <LabeledInput label="Last name" value={lastName} onChange={setLastName} />
-          <LabeledInput label="Bodyweight (pounds)" type="number" step="0.1" inputMode="decimal" min="1" max="600" value={weight} onChange={setWeight} />
-          <div className="edit-ex-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <LabeledInput label="Height — feet" type="number" min="0" max="8" value={heightFeet} onChange={setHeightFeet} />
-            <LabeledInput label="Height — inches" type="number" min="0" max="11" value={heightInches} onChange={setHeightInches} />
-          </div>
-          <div className="radio-group">
-            <label className={`radio-pill ${template === "bjj" ? "active" : ""}`}><input type="radio" checked={template === "bjj"} onChange={() => setTemplate("bjj")} />Conjugate Brazilian Jiu-Jitsu / Wrestling template</label>
-            <label className={`radio-pill ${template === "blank" ? "active" : ""}`}><input type="radio" checked={template === "blank"} onChange={() => setTemplate("blank")} />Blank — build custom</label>
-          </div>
-          <LabeledInput label="Anything to work around? (optional)" value={injuryNotes} onChange={setInjuryNotes} />
-          <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canCreate}
-            onClick={() => {
-              onAdd({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, injuryNotes }, template === "bjj");
-              setFirstName(""); setLastName(""); setWeight(""); setHeightFeet(""); setHeightInches(""); setInjuryNotes(""); setAdding(false);
-            }}>Create athlete</button>
-        </div>
-      )}
-    </ModalShell>
-  );
-}
 
 /* ============================== SHARED UI ============================== */
 
@@ -7129,10 +7597,60 @@ function GlobalStyle() {
       .update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 14px; font-size: 13px; color: var(--text); }
       .update-banner-actions { display: inline-flex; gap: 8px; flex-shrink: 0; }
       .update-banner .btn-primary, .update-banner .btn-ghost { padding: 6px 12px; font-size: 13px; width: auto; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+      .tab-pad { padding: 14px 14px 4px; }
+      .community-head { margin-bottom: 12px; }
+      .community-prefs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+      .pref-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); color: var(--text-dim); border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+      .pref-btn.on { color: var(--accent); border-color: var(--accent); }
+      .pref-btn.quiet { margin-left: auto; }
+      .pref-note { font-size: 12px; color: var(--text-dim); }
+      .community-fineprint { font-size: 11.5px; margin: -2px 0 10px; line-height: 1.45; }
+      .composer { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 16px; }
+      .composer-text, .composer-url { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); padding: 10px; font: inherit; font-size: 14px; resize: vertical; }
+      .composer-url { margin-top: 8px; font-size: 13px; }
+      .composer-text:focus, .composer-url:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+      .composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+      .composer-row .btn-primary { width: auto; padding: 8px 18px; }
+      .composer-warn { font-size: 12px; color: var(--yellow, #e6c33a); margin: 6px 0 0; }
+      .feed { display: flex; flex-direction: column; gap: 12px; }
+      .post-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+      .post-head { display: flex; align-items: center; gap: 9px; }
+      .post-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+      .post-name { font-size: 13.5px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .post-time { font-size: 11.5px; color: var(--text-dim); }
+      .post-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 6px; border-radius: 7px; flex-shrink: 0; }
+      .post-body { font-size: 14px; line-height: 1.5; color: var(--text); margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .post-video { position: relative; width: 100%; padding-top: 56.25%; margin-top: 10px; border-radius: 10px; overflow: hidden; background: #000; }
+      .post-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+      /* An uploaded clip is usually shot vertically, so it sizes to its own
+         aspect ratio inside a height cap rather than being forced into 16:9. */
+      .post-video.native { padding-top: 0; }
+      .post-video.native video { display: block; width: 100%; max-height: 68vh; background: #000; }
+      .clip-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+      .clip-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+      .clip-chosen { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+      .clip-chosen .link-btn { font-weight: 500; color: var(--text-dim); }
+      .reply-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+      .reply-row .link-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }
+      .reply-row .btn-primary { width: auto; margin-left: auto; padding: 7px 16px; }
+      .post-link { display: flex; align-items: center; gap: 8px; margin-top: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; color: var(--text); text-decoration: none; font-size: 13px; }
+      .post-link-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .post-link-go { color: var(--accent); font-weight: 700; font-size: 12px; flex-shrink: 0; }
+      .post-actions { display: flex; gap: 8px; margin-top: 10px; }
+      .post-act { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim); padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+      .post-act.on { color: var(--accent); border-color: var(--accent); }
+      .post-replies { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+      .reply { display: flex; gap: 8px; }
+      .reply-main { flex: 1; min-width: 0; }
+      .reply-head { display: flex; align-items: center; gap: 7px; }
+      .reply-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
+      .reply-body { font-size: 13.5px; line-height: 1.45; color: var(--text); margin: 3px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .reply-composer { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+      .reply-composer .btn-primary { width: auto; padding: 7px 16px; margin-top: 8px; }
+      .nav-badge { position: absolute; top: 2px; left: 50%; margin-left: 2px; min-width: 15px; height: 15px; border-radius: 999px; background: var(--accent); color: #04211c; font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
       .success-box { background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid var(--green); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
       .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
-      .day-nav-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; flex-shrink: 0; }
-      .day-nav-btn:disabled { opacity: 0.55; cursor: default; }
       .jump-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; max-height: 240px; overflow-y: auto; }
       .jump-week-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--border); }
       .jump-week-row:last-child { border-bottom: none; }
@@ -7326,31 +7844,6 @@ function GlobalStyle() {
       .radio-pill:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
       .mobility-type-tag { display: inline-block; font-size: 12px; letter-spacing: 0.04em; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 10px; }
       .mobility-timer { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 48px; color: var(--accent); }
-      .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-      .schedule-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-      .schedule-row:last-of-type { border-bottom: none; }
-      .schedule-day { width: 76px; flex-shrink: 0; font-weight: 700; font-size: 12.5px; padding-top: 1px; }
-      .schedule-detail { font-size: 13px; color: var(--text); line-height: 1.5; }
-      .schedule-detail.off { color: var(--text-dim); font-style: italic; }
-      .schedule-editor { margin-bottom: 4px; }
-      .schedule-edit-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
-      .schedule-edit-row:last-child { border-bottom: none; }
-      .schedule-edit-day { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
-      .schedule-edit-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-      .schedule-chip { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 7px 12px; cursor: pointer; }
-      .schedule-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
-      .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-      .cal-grid-header { margin-bottom: 4px; }
-      .cal-day-label { text-align: center; font-size: 12px; color: var(--text-dim); font-weight: 700; padding-bottom: 2px; }
-      .cal-cell { aspect-ratio: 1; background: var(--card); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text); font-size: 12px; cursor: pointer; gap: 3px; padding: 0; }
-      .cal-cell.empty { background: transparent; border: none; cursor: default; }
-      .cal-cell.today { border-color: var(--accent); border-width: 2px; }
-      .cal-cell.selected { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-      .cal-dot-row { display: flex; gap: 3px; }
-      .cal-dot { width: 6px; height: 6px; border-radius: 50%; }
-      .cal-dot.workout { background: var(--green); }
-      .cal-dot.mobility { background: var(--amber); border-radius: 1px; }
-      .cal-cell.selected .cal-dot.workout, .cal-cell.selected .cal-dot.mobility { background: #ffffff; }
 
       /* ---- Metric visuals: rings, tiles, wearable strip, heatmap ---- */
       .ring-row { display: flex; justify-content: space-around; align-items: flex-start; gap: 6px; margin-bottom: 18px; }
