@@ -134,7 +134,13 @@ async function kvDelete(userId, key) {
 // so the policies in supabase-community.sql are the whole security boundary —
 // not this file.
 
-const COMMUNITY_LIMIT = 200;
+// A page of conversations, not a page of rows. Fetching a flat 200 rows meant
+// replies ate the window — a busy thread pushed older posts out entirely, and
+// a reply whose parent had fallen off the end was downloaded and rendered
+// nowhere. Roots and their replies are fetched separately so the feed stays a
+// fixed, small size however much gets posted.
+const COMMUNITY_PAGE = 25;
+const COMMUNITY_MAX_PAGES = 12;
 const COMMUNITY_POLL_MS = 25000;
 const COMMUNITY_MAX_CHARS = 1200;
 
@@ -154,23 +160,37 @@ function embedFor(url) {
   return { kind: "link", href: u, host };
 }
 
-async function fetchCommunityFeed() {
+const COMMUNITY_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
+
+async function fetchCommunityFeed(pages) {
   if (!supabase) return LOAD_FAILED;
+  const limit = Math.min(pages || 1, COMMUNITY_MAX_PAGES) * COMMUNITY_PAGE;
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("community_posts")
-      .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at")
+      .select(COMMUNITY_COLS)
       .is("deleted_at", null)
+      .is("parent_id", null)
       .order("created_at", { ascending: false })
-      .limit(COMMUNITY_LIMIT);
+      .limit(limit + 1);
     if (error) throw error;
-    return data || [];
+    const roots = data || [];
+    const more = roots.length > limit;
+    const page = more ? roots.slice(0, limit) : roots;
+    if (!page.length) return { posts: [], more: false };
+    const { data: kids, error: kidsErr } = await supabase.from("community_posts")
+      .select(COMMUNITY_COLS)
+      .is("deleted_at", null)
+      .in("parent_id", page.map((p) => p.id))
+      .order("created_at", { ascending: true });
+    if (kidsErr) throw kidsErr;
+    return { posts: [...page, ...(kids || [])], more };
   });
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
 async function fetchCommunityReactions(postIds) {
   if (!supabase) return LOAD_FAILED;
-  const ids = (postIds || []).slice(0, COMMUNITY_LIMIT);
+  const ids = (postIds || []).slice(0, COMMUNITY_PAGE * COMMUNITY_MAX_PAGES * 6);
   if (!ids.length) return [];
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("community_reactions")
@@ -279,17 +299,44 @@ async function setCommunityReaction(postId, userId, on) {
 // video is enormous, and free storage is not.
 const COMMUNITY_CLIP_BUCKET = "community-clips";
 const isUploadedClip = (url) => /\/storage\/v1\/object\/public\//.test(String(url || ""));
-const COMMUNITY_CLIP_MAX_BYTES = 50 * 1024 * 1024;
+const COMMUNITY_CLIP_MAX_BYTES = 100 * 1024 * 1024;
+const COMMUNITY_CLIP_MAX_SECONDS = 70;
+
+// Size alone was a poor stand-in for length: the same minute is 45 MB from one
+// phone and 300 MB from another, so the old cap rejected a short clip from a 4K
+// phone and allowed three minutes from an old one. Reading the real duration
+// means the rule can be the one people actually care about.
+function clipDuration(file) {
+  return new Promise((resolve) => {
+    let url = null;
+    const v = document.createElement("video");
+    const done = (d) => { try { URL.revokeObjectURL(url); } catch {} resolve(d); };
+    const bail = setTimeout(() => done(null), 5000);
+    v.preload = "metadata";
+    v.onloadedmetadata = () => { clearTimeout(bail); done(Number.isFinite(v.duration) ? v.duration : null); };
+    v.onerror = () => { clearTimeout(bail); done(null); };
+    try { url = URL.createObjectURL(file); v.src = url; } catch { clearTimeout(bail); done(null); }
+  });
+}
 
 async function uploadCommunityClip(file, userId) {
   if (!supabase || !file || !userId) return { ok: false };
-  if (file.size > COMMUNITY_CLIP_MAX_BYTES) {
-    emitToast({ kind: "error", autoDismissMs: 9000,
-      message: "That clip is over 50 MB. Trim it shorter, or put it on YouTube as unlisted and paste the link." });
-    return { ok: false };
-  }
   if (!/^video\//i.test(file.type || "")) {
     emitToast({ kind: "error", autoDismissMs: 7000, message: "That isn't a video file. MP4 or MOV works best." });
+    return { ok: false };
+  }
+  const secs = await clipDuration(file);
+  if (secs !== null && secs > COMMUNITY_CLIP_MAX_SECONDS) {
+    const mins = Math.floor(secs / 60), rest = Math.round(secs % 60);
+    emitToast({ kind: "error", autoDismissMs: 9000,
+      message: `That clip is ${mins ? `${mins}:${String(rest).padStart(2, "0")}` : `${rest} seconds`} — the limit is a minute. Trim it, or put it on YouTube as unlisted and paste the link.` });
+    return { ok: false };
+  }
+  // A minute shot in 4K is hundreds of megabytes, which is a slow upload on gym
+  // wifi and expensive to store and to play back for everyone else.
+  if (file.size > COMMUNITY_CLIP_MAX_BYTES) {
+    emitToast({ kind: "error", autoDismissMs: 11000,
+      message: `That's ${Math.round(file.size / 1048576)} MB — over the 100 MB limit, usually because the phone is filming in 4K. Record it at 1080p, or put it on YouTube as unlisted and paste the link.` });
     return { ok: false };
   }
   const ext = (String(file.name || "").match(/\.([A-Za-z0-9]{2,5})$/) || [null, "mp4"])[1].toLowerCase();
@@ -3068,22 +3115,31 @@ function notifyNewPost(post) {
 }
 
 function VideoEmbed({ url }) {
+  const [playing, setPlaying] = useState(false);
   const e = embedFor(url);
   if (!e) return null;
-  if (e.kind === "video") {
-    // preload="metadata" so a feed of ten clips doesn't pull ten videos down
-    // over someone's phone data before they've tapped anything.
-    return (
+  if (e.kind === "video" || e.kind === "youtube") {
+    const native = e.kind === "video";
+    if (!playing) {
+      return (
+        <button type="button" className={`post-video poster${native ? " native" : ""}`}
+          onClick={() => setPlaying(true)} aria-label="Play the shared video">
+          {e.kind === "youtube" && (
+            <img src={`https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`} alt="" loading="lazy"
+              onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
+          )}
+          <span className="post-play" aria-hidden="true" />
+        </button>
+      );
+    }
+    return native ? (
       <div className="post-video native">
-        <video src={e.href} controls playsInline preload="metadata" />
+        <video src={e.href} controls playsInline autoPlay preload="auto" />
       </div>
-    );
-  }
-  if (e.kind === "youtube") {
-    return (
+    ) : (
       <div className="post-video">
-        <iframe src={`https://www.youtube-nocookie.com/embed/${e.id}`} title="Shared video" loading="lazy"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        <iframe src={`https://www.youtube-nocookie.com/embed/${e.id}?autoplay=1`} title="Shared video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
       </div>
     );
@@ -3097,7 +3153,7 @@ function VideoEmbed({ url }) {
   );
 }
 
-function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged }) {
+const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged }) {
   const mine = post.author_id === userId;
   const hearts = reactedBy.length;
   const iReacted = reactedBy.includes(userId);
@@ -3160,7 +3216,7 @@ function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply,
       {replyOpen && <ReplyComposer userId={userId} onSend={(text, vid) => onReply(post.id, text, vid)} />}
     </article>
   );
-}
+});
 
 // Upload control shared by both composers. Kept next to the paste-a-link field
 // rather than replacing it: a technique breakdown someone found is a link, a
@@ -3197,7 +3253,7 @@ function ClipPicker({ userId, url, onUrl, disabled, onBusy }) {
         </button>
       )}
       {busy && <span className="clip-note">Keep the app open until it finishes.</span>}
-      {!attached && !busy && <span className="clip-note">Up to 50 MB — roughly 30 seconds from a phone.</span>}
+      {!attached && !busy && <span className="clip-note">Up to a minute, 100 MB. Longer than that, put it on YouTube as unlisted and paste the link.</span>}
     </div>
   );
 }
@@ -3261,6 +3317,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const [alsoBlock, setAlsoBlock] = useState(false);
   const [blocks, setBlocks] = useState([]);
   const [reports, setReports] = useState([]);
+  const [pages, setPages] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [notifyState, setNotifyState] = useState(() => {
     if (typeof Notification === "undefined") return "unsupported";
     if (Notification.permission !== "granted") return Notification.permission;
@@ -3273,19 +3332,30 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   // lands after it is stale by definition, and applying it used to un-fill a
   // heart you just pressed or briefly vanish a post you just made.
   const mutations = useRef(0);
+  const pagesRef = useRef(1);
+  useEffect(() => { pagesRef.current = pages; }, [pages]);
   const load = useCallback(async () => {
     const at = mutations.current;
-    const feed = await fetchCommunityFeed();
+    const feed = await fetchCommunityFeed(pagesRef.current);
     if (feed === LOAD_FAILED) { setFailed(true); return; }
-    const reacts = await fetchCommunityReactions(feed.map((p) => p.id));
+    const reacts = await fetchCommunityReactions(feed.posts.map((p) => p.id));
     if (mutations.current !== at) return;
     setFailed(false);
-    setPosts(feed);
+    setPosts(feed.posts);
+    setHasMore(feed.more);
     setReactions(reacts === LOAD_FAILED ? [] : reacts);
     const bl = await fetchCommunityBlocks();
     if (bl !== LOAD_FAILED) setBlocks(bl);
     setReports(await fetchCommunityReports());
   }, []);
+
+  const loadOlder = async () => {
+    setLoadingMore(true);
+    pagesRef.current = pagesRef.current + 1;
+    setPages(pagesRef.current);
+    await load();
+    setLoadingMore(false);
+  };
 
   useEffect(() => {
     load();
@@ -3532,6 +3602,12 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
             onToggleReply={(id) => setReplyOpen((cur) => (cur === id ? null : id))} />
         ))}
       </div>
+
+      {hasMore && (
+        <button className="btn-ghost wide" style={{ marginTop: 4 }} onClick={loadOlder} disabled={loadingMore}>
+          {loadingMore ? "Loading…" : "Load older posts"}
+        </button>
+      )}
 
       {confirmHide && (
         <ModalShell onClose={() => setConfirmHide(null)} title="Remove this post?">
@@ -7884,6 +7960,12 @@ function GlobalStyle() {
          aspect ratio inside a height cap rather than being forced into 16:9. */
       .post-video.native { padding-top: 0; }
       .post-video.native video { display: block; width: 100%; max-height: 68vh; background: #000; }
+      /* Until it's tapped a clip is a still and a play button, so a feed of
+         videos costs nothing to scroll past. */
+      .post-video.poster { display: block; border: 0; padding: 0; padding-top: 56.25%; cursor: pointer; background: #0b0d10; }
+      .post-video.poster img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+      .post-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 54px; height: 54px; border-radius: 50%; background: rgba(8,10,12,.72); border: 1.5px solid rgba(255,255,255,.85); }
+      .post-play::after { content: ''; position: absolute; top: 50%; left: 54%; transform: translate(-50%, -50%); border-style: solid; border-width: 9px 0 9px 15px; border-color: transparent transparent transparent #fff; }
       .clip-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
       .clip-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
       .clip-chosen { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
