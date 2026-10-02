@@ -8081,6 +8081,28 @@ function GlobalStyle() {
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
       .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .schedule-row { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+      .schedule-row:last-child { border-bottom: 0; }
+      .schedule-day { flex: 0 0 92px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+      .schedule-detail { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.45; }
+      .schedule-detail.off { color: var(--text-dim); font-style: italic; }
+      .schedule-editor { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+      .schedule-edit-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
+      .schedule-edit-day { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px; }
+      .schedule-edit-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+      .schedule-chip {
+        flex: 1 1 auto; min-width: 0; background: var(--bg); border: 1.5px solid var(--border); border-radius: 999px;
+        padding: 9px 13px; min-height: 40px; color: var(--text-dim); font-family: inherit; font-size: 12.5px;
+        font-weight: 600; line-height: 1.2; cursor: pointer; text-align: center; transition: background .12s ease, border-color .12s ease, color .12s ease;
+      }
+      .schedule-chip:hover { border-color: var(--field-border); color: var(--text); }
+      .schedule-chip.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .schedule-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      /* Rest Day is the odd one out — it clears the day rather than adding to
+         it, so it sits on its own line and reads as the exception it is. */
+      .schedule-chip:last-child { flex: 0 0 100%; }
+      .schedule-chip:last-child.active { background: var(--field-border); border-color: var(--field-border); color: var(--bg); }
+      @media (min-width: 420px) { .schedule-chip:last-child { flex: 0 0 auto; } }
       /* ---- conditioning ---- */
       .cond-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 8px 0 10px; }
       .cond-why { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text); }
