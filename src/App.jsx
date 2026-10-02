@@ -1250,6 +1250,24 @@ const VIDEO_LIBRARY = {
   "inverse zottman curl": "https://www.youtube.com/shorts/FljBpJ5gQo0",
   "acceleration sprint": "https://www.youtube.com/shorts/7_-gaumnzWw",
   "neck bridge": "https://www.youtube.com/shorts/hxMolBuXmY0",
+
+  // --- The five exercises added when the neck bridge was retired, plus the
+  // --- explosive and Dynamic Effort work that had never been filmed.
+  "wall neck hold": "https://www.youtube.com/shorts/ha8mW6vhmhk",
+  "90/90 hip rotation lift-off": "https://www.youtube.com/shorts/-jipWmgofww",
+  // Two angles on this one; the second is wired to the exercise as Demo 2.
+  "seated calf raise": "https://www.youtube.com/shorts/NwA1N_EFTtk",
+  "side-lying external rotation": "https://www.youtube.com/watch?v=brwBvldn4gw",
+  "chin-up hold at 90 degrees": "https://www.youtube.com/watch?v=SUBuesb7Lgg",
+  "sandbag bear-hug carry": "https://www.youtube.com/shorts/cCkTI2isjJk",
+  "medicine ball slam": "https://www.youtube.com/watch?v=CkO1mfSBvv4",
+  // Second angle is wired to the exercise itself as Demo 2.
+  "medicine ball rotational scoop throw": "https://www.youtube.com/shorts/DcXmjQXqJNM",
+  "dumbbell jump squat — dynamic effort": "https://www.youtube.com/shorts/64jv6L8s78w",
+  "speed floor press — dynamic effort": "https://www.youtube.com/watch?v=1EDRlRy-wMQ",
+  "band-resisted push-up — dynamic effort": "https://www.youtube.com/watch?v=4hLdhyuLBOc",
+  "medicine ball chest pass — dynamic effort": "https://www.youtube.com/watch?v=t-c-8BzTwxk",
+  "slow breathing — six breaths a minute": "https://www.youtube.com/shorts/A3Ng1dyeA84",
 };
 function lookupVideo(name) {
   const key = (name || "").toLowerCase().replace(/\s*\([^)]*\)\s*/g, "").trim();
@@ -2324,7 +2342,9 @@ const WEEKLY_FLOORS = [
     make: () => ex({ name: "Seated Calf Raise (soleus)", sets: 2, reps: "12 to 15", load: "moderate", rir: 2,
       rest: "60 seconds", quality: "Durability",
       purpose: "The soleus is the largest force-absorbing tissue you have in landing and sprinting, and this program asks for a lot of both. Bent knee is what takes the gastrocnemius out and leaves the soleus to do the work.",
-      cues: "Knee bent to about ninety so the calf cannot cheat with the upper half. Full stretch at the bottom, pause at the top. Slow — this one is pointless fast." }) },
+      cues: "Knee bent to about ninety so the calf cannot cheat with the upper half. Full stretch at the bottom, pause at the top. Slow — this one is pointless fast.",
+      videoUrl: "https://www.youtube.com/shorts/NwA1N_EFTtk",
+      videoUrl2: "https://www.youtube.com/shorts/OZlYFWLZ3cw" }) },
   { key: "cuff", min: 2, deloadMin: 0, match: /external rotation|side-lying er/i,
     make: () => ex({ name: "Side-Lying External Rotation (each side)", sets: 2, reps: "12 to 15 per side", load: "light — 2 to 5 kg is plenty", rir: 3,
       rest: "45 seconds", quality: "Prehab",
@@ -2389,7 +2409,9 @@ const B_PRIMERS = [
     cues: "Reach tall, then throw it into the floor as hard as you own. Let it bounce away rather than catching it." },
   { name: "Medicine Ball Rotational Scoop Throw (each side)", reps: "4 per side", quality: "Rotational Power",
     purpose: "The only true rotational power expression in this program — a throw has no deceleration at the end of it, which is what separates it from a press.",
-    cues: "Stand side-on to a wall, load the back hip, and turn through the floor rather than swinging the arms. Hips first, then chest, then the ball." },
+    cues: "Stand side-on to a wall, load the back hip, and turn through the floor rather than swinging the arms. Hips first, then chest, then the ball.",
+    videoUrl: "https://www.youtube.com/shorts/DcXmjQXqJNM",
+    videoUrl2: "https://www.youtube.com/shorts/HLwSkCBM_xY" },
 ];
 function addExplosivePrimer(program) {
   (program.phases || []).forEach((phase) => {
@@ -2398,8 +2420,7 @@ function addExplosivePrimer(program) {
       const p = B_PRIMERS[i % B_PRIMERS.length];
       if ((day.sections || []).some((sec) => (sec.exercises || []).some((e) => e.name === p.name))) return;
       day.sections = [{ id: uid(), type: "power", name: "Explosive Primer", exercises: [
-        ex({ name: p.name, sets: 3, reps: p.reps, load: "bodyweight or a light ball", rir: 5,
-          rest: "60 seconds", quality: p.quality, purpose: p.purpose, cues: p.cues }),
+        ex({ sets: 3, load: "bodyweight or a light ball", rir: 5, rest: "60 seconds", ...p }),
       ] }, ...(day.sections || [])];
     });
   });
