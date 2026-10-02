@@ -1608,7 +1608,9 @@ const conjugateProgram = {
               ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "8", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is the best-evidenced protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells — if your grip is what gives out, that is the session working", rir: 3, rest: "2 minutes", purpose: "Grip and trunk bracing under load. If grip is the limiter, shorten the distance rather than adding weight — your grip failing is what stops you loading your spine with more than you can hold, and grip is the quality we are actually training here.", quality: "Grip/Trunk" }),
+              ex({ name: "Sandbag Bear-Hug Carry", sets: 3, reps: "30 meters", load: "heavy — a sandbag, a heavy bag, or a loaded duffel", rir: 1, rest: "90 seconds",
+                purpose: "Everything else in the gym is a shaped handle. This is a resisting, badly-balanced load held against your chest, which is the body lock, the double-leg finish, and carrying somebody. It also loads breathing under chest compression, which a farmer carry cannot.",
+                cues: "Hug it high on the chest, elbows underneath rather than out to the sides, ribs down. Short quick steps. Breathe shallow and often — you will not get a full breath and that is part of the exercise. If it slides below your sternum, set it down and reset rather than fighting it.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
@@ -1624,7 +1626,9 @@ const conjugateProgram = {
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Towel Hang (two towels over the bar)", sets: 3, reps: "20 to 30 seconds", load: "bodyweight, one towel in each hand", rir: 3, rest: "90 seconds", purpose: "The gi-specific version of a dead hang, and the single biggest gap this program had. Gi grip is cloth, not steel — a four-finger hold on fabric under a sustained pull, which is a genuinely different demand from a crush grip on a smooth bar. This is the closest gym analogue to holding a sleeve against someone trying to strip it.", cues: "Two towels to start, one in each hand. Shoulders active, not hanging dead off the joint. Progress by adding time first, then by moving to a single towel held in both hands. Stop the set when your grip starts sliding rather than fighting the last second — you are training the hold, not the failure.", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/R57zGkwfbo8" }),
+              ex({ name: "Chin-Up Hold at 90 Degrees", sets: 3, reps: "15 to 20 seconds", load: "bodyweight — add a towel over the bar in each hand for the gi version", rir: 3, rest: "90 seconds",
+                purpose: "A dead hang trains a passive grip. This trains the pull with the elbow bent, which is the collar tie, the arm drag, and breaking a closed guard — grip, lat and elbow-flexor tendon at once, in the position heavy gi gripping actually demands.",
+                cues: "Pull up until your elbows are at about ninety degrees and hold there, chest proud, shoulders pulled down away from your ears. The moment you start sinking the set is over — do not grind down to a dead hang.", quality: "Grip" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
@@ -1671,7 +1675,9 @@ const conjugateProgram = {
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "Neck Bridge (back only, hands assisting)", sets: 1, reps: "5, slow and controlled", load: "bodyweight, with both hands on the mat taking part of your weight", rir: 5, rest: "90 seconds", purpose: "Dynamic neck strength through a real range of motion — protective against the guillotine and choke pressure that isometric holds alone don't fully cover. Deliberately one short set: this is your first exposure to loading the neck dynamically and the only goal for these three weeks is that it feels easy.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
+              ex({ name: "Wall Neck Hold (feet walked out)", sets: 3, reps: "20 to 30 seconds per position", load: "as much of your bodyweight as you choose to lean in", rir: 4, rest: "60 seconds", quality: "Durability",
+                purpose: "The step between pressing against your own hand and carrying real load on the neck. You set the load by how far you walk your feet out, so it rises a few centimetres at a time instead of in one jump. Tolerating compression is what a stack actually demands, and it is the one thing the isometric holds cannot build on their own.",
+                cues: "Fold a towel against a wall and rest the back of your head on it, then walk your feet away until you feel real weight through your neck. Stay near vertical for the first week. Head stays in line with your spine — you are holding a position, not pushing into extension — and you never turn your head while you are loaded. Walk the feet out a little further only once the current position feels easy. Anything that pinches or travels down an arm, come off it." }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -1730,7 +1736,9 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 2, reps: "20 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk maintenance, low volume for freshness", quality: "Grip/Trunk" }),
-              ex({ name: "Neck Bridge (back only, hands assisting)", sets: 1, reps: "5, slow and controlled", load: "bodyweight, hands assisting as needed", rir: 5, rest: "60 seconds", purpose: "Brief neck maintenance this close to competition — kept to one set on purpose, since freshness outranks adding volume this late in the block", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/hxMolBuXmY0", videoUrl2: "https://www.youtube.com/shorts/_uewQzQ3uYE" }),
+              ex({ name: "Wall Neck Hold (feet walked out)", sets: 3, reps: "20 to 30 seconds per position", load: "as much of your bodyweight as you choose to lean in", rir: 4, rest: "60 seconds", quality: "Durability",
+                purpose: "The step between pressing against your own hand and carrying real load on the neck. You set the load by how far you walk your feet out, so it rises a few centimetres at a time instead of in one jump. Tolerating compression is what a stack actually demands, and it is the one thing the isometric holds cannot build on their own.",
+                cues: "Fold a towel against a wall and rest the back of your head on it, then walk your feet away until you feel real weight through your neck. Stay near vertical for the first week. Head stays in line with your spine — you are holding a position, not pushing into extension — and you never turn your head while you are loaded. Walk the feet out a little further only once the current position feels easy. Anything that pinches or travels down an arm, come off it." }),
               ex({ name: "Hanging Leg Raise", sets: 2, reps: "10", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Trunk flexion strength, kept brief to protect freshness", quality: "Trunk" }),
             ]},
           ]},
@@ -1873,7 +1881,7 @@ const rpeProgramCues = {
   "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
   "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
-  "Neck Bridge (back only, hands assisting)": "Only start this once the 4-way isometric holds from the earlier block feel genuinely easy — if they don't, keep doing those instead and come back to this next block. Keep both hands on the mat taking part of your weight, and only reduce that once five reps feel like nothing. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Never bridge on a day your neck is already sore from training. Anything that pinches, tingles, or travels down an arm: stop the set, come off it, and tell your coach.",
+  "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
   "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
   "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
@@ -2007,7 +2015,7 @@ function buildProgramCContent() {
           ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max — heavy, but a weight you can genuinely stand up with", rpe: 7 }, "Yielding Strength"),
           ssSingle(5, "Ab Roll Out", { sets: 2, reps: "12", rpe: 7 }, "Trunk"),
-          ssSingle(6, "Neck Bridge (back only, hands assisting)", { sets: 2, reps: "5, slow and controlled", rpe: 6 }, "Durability"),
+          ssSingle(6, "Wall Neck Hold (feet walked out)", { sets: 3, reps: "20 to 30 seconds per position", rpe: 6 }, "Durability"),
           ssSingle(7, "Plate Lifts (Around the World)", { sets: 2, reps: "10 each direction", rpe: 7 }, "Core"),
         ]},
       ]},
@@ -2307,6 +2315,21 @@ const WEEKLY_FLOORS = [
       rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
       purpose: "Rear delts and the muscles that hold the shoulder blade down and back. Grappling spends all day pulling the shoulders forward — gripping, framing, posting — and this is the cheapest insurance against that there is.",
       cues: "Pull to your forehead with the elbows high and finish with the knuckles facing behind you. Light enough that the shoulder blades do the work rather than the arms." }) },
+  { key: "hiprot", min: 2, deloadMin: 0, match: /90\/90|hip rotation|hip internal|hip external/i,
+    make: () => ex({ name: "90/90 Hip Rotation Lift-Off (each side)", sets: 2, reps: "5 per side with a 3 second hold", load: "bodyweight, or an ankle weight once it is easy", rir: 3,
+      rest: "60 seconds", quality: "Durability",
+      purpose: "Strength at the end of hip rotation, which is guard retention, a knee shield, shin-to-shin, and every hip escape. The cool-down stretches this range; nothing until now trained it under load, and a range you can only reach passively is one you lose first.",
+      cues: "Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range. If your torso has to rock to make it happen, you have gone past what you own." }) },
+  { key: "soleus", min: 2, deloadMin: 0, match: /calf raise|soleus|seated heel/i,
+    make: () => ex({ name: "Seated Calf Raise (soleus)", sets: 2, reps: "12 to 15", load: "moderate", rir: 2,
+      rest: "60 seconds", quality: "Durability",
+      purpose: "The soleus is the largest force-absorbing tissue you have in landing and sprinting, and this program asks for a lot of both. Bent knee is what takes the gastrocnemius out and leaves the soleus to do the work.",
+      cues: "Knee bent to about ninety so the calf cannot cheat with the upper half. Full stretch at the bottom, pause at the top. Slow — this one is pointless fast." }) },
+  { key: "cuff", min: 2, deloadMin: 0, match: /external rotation|side-lying er/i,
+    make: () => ex({ name: "Side-Lying External Rotation (each side)", sets: 2, reps: "12 to 15 per side", load: "light — 2 to 5 kg is plenty", rir: 3,
+      rest: "45 seconds", quality: "Prehab",
+      purpose: "The rotator cuff at the length a kimura threatens. Face pulls train the shoulder blade and the rear delt; they do not train the cuff in the position that actually gets you hurt, and this is the cheapest insurance against that there is.",
+      cues: "Lie on your side, elbow pinned to your ribs at ninety degrees, and rotate the forearm up only as far as it goes without the shoulder shrugging. Light. If you need to throw it, it is too heavy." }) },
   { key: "post", min: 5, deloadMin: 0, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
@@ -2399,9 +2422,8 @@ function trimAccessoryVolume(program) {
 
 function finishProgram(program) {
   if (program) program.warmupVersion = WARMUP_VERSION;
-  const balanced = weeklyFloorPass(program.variant === "B"
-    ? addExplosivePrimer(trimAccessoryVolume(program))
-    : program);
+  const floored = weeklyFloorPass(program);
+  const balanced = program.variant === "B" ? addExplosivePrimer(trimAccessoryVolume(floored)) : floored;
   return backfillVideos(balanced);
 }
 
@@ -7084,14 +7106,22 @@ const VOLUME_PATTERNS = [
   ["Neck", /neck/i],
   ["Grip", /dead hang|rice bucket|towel hang|wrist curl/i],
 ];
+const PREHAB_WORK = /neck|external rotation|face pull|pull-apart|y, t, w|scarecrow|scapular|calf raise|90\/90|clamshell|terminal knee|tibialis|wrist curl|rice bucket|dead hang/i;
 function weeklyVolumeFor(phase) {
-  const row = { hard: 0, speed: 0, conditioning: 0 };
+  const row = { hard: 0, speed: 0, prehab: 0, conditioning: 0 };
   (phase.days || []).forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
     const t = e.perSetTargets || null;
     const sets = t ? t.filter((x) => !/^(Warm-up|Build)$/.test(x.note || "")).length : (e.sets || 0);
     const q = e.quality || "";
     if (/Conditioning/.test(q)) { row.conditioning += sets; return; }
     if (/Dynamic Effort|Alactic|Agility|Neuromuscular/.test(q + " " + (e.name || ""))) { row.speed += sets; return; }
+    if (PREHAB_WORK.test(e.name || "")) {
+      // Still counted by pattern below, so the floors remain checkable — just
+      // not added to the hard-set total.
+      row.prehab += sets;
+      VOLUME_PATTERNS.forEach(([name, re]) => { if (re.test(e.name || "")) row[name] = (row[name] || 0) + sets; });
+      return;
+    }
     row.hard += sets;
     VOLUME_PATTERNS.forEach(([name, re]) => { if (re.test(e.name || "")) row[name] = (row[name] || 0) + sets; });
   })));
@@ -7114,7 +7144,7 @@ function VolumePanel({ program }) {
                 <tr>
                   <th>Block</th>
                   {VOLUME_PATTERNS.map(([n]) => <th key={n}>{n}</th>)}
-                  <th>Hard</th><th>Speed</th>
+                  <th>Hard</th><th>Prehab</th><th>Speed</th>
                 </tr>
               </thead>
               <tbody>
@@ -7123,6 +7153,7 @@ function VolumePanel({ program }) {
                     <td>Wk {r.weeks}</td>
                     {VOLUME_PATTERNS.map(([n]) => <td key={n}>{r[n] || 0}</td>)}
                     <td className="vol-total">{r.hard}</td>
+                    <td>{r.prehab || "—"}</td>
                     <td>{r.speed || "—"}</td>
                   </tr>
                 ))}
@@ -7130,7 +7161,7 @@ function VolumePanel({ program }) {
             </table>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Speed work — dynamic effort, sprints, agility — is counted separately because it is deliberately sub-maximal and costs far less than a hard set.
+            Speed work and light protective work are counted separately, because neither costs what a hard set costs — a speed triple at half your max and two sets of side-lying external rotation are not the same thing as two sets of squats.
             For an athlete also training four to six times a week on the mat, somewhere around 45 to 65 hard sets is a reasonable week.
           </p>
         </>
