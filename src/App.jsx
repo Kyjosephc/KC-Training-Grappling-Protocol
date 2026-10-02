@@ -1178,7 +1178,7 @@ const VIDEO_LIBRARY = {
   "banded terminal knee extension": "https://www.youtube.com/shorts/CU7Fn11YMTw",
   "cable lat row": "https://www.youtube.com/shorts/UyI7Sc7ZVdU",
   "medicine ball abdominal extension": "https://www.youtube.com/watch?v=bld2VhFtH9I",
-  "4-way isometric neck holds": "https://www.youtube.com/watch?v=CtbZUhBxNOM",
+  "6-way isometric neck holds": "https://www.youtube.com/shorts/fhLCBABZTUQ",
   "prone bench y, t, w's": "https://www.youtube.com/shorts/dCPuXZ5xH8k",
   "supine y, t, w": "https://www.youtube.com/watch?v=uuU5InOhwLw",
   "pull-up hold": "https://www.youtube.com/shorts/E9tgI5ZMQAE",
@@ -1292,7 +1292,7 @@ const TIME_BASED_EXERCISES = new Set([
   "heavy landmine anti-rotation hold",
   "half-kneeling landmine press hold",
   "rice bucket grip drills",
-  "4-way isometric neck holds",
+  "6-way isometric neck holds",
   "briefcase carry",
   "heavy pallof press hold",
   "pull-up hold",
@@ -1326,7 +1326,7 @@ const MINUTE_BASED_EXERCISES = new Set([
 // rather than shown unused, since a client typing a pounds figure into a shuttle run just adds
 // noise. Reviewed and confirmed by Kyle on 2026-09-20.
 const NO_WEIGHT_EXERCISES = new Set([
-  "4-way isometric neck holds",
+  "6-way isometric neck holds",
   "ab roll out",
   "acceleration sprint",
   "assault bike or incline treadmill walk — aerobic base",
@@ -1569,7 +1569,7 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-            ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+            ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
             ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
           ]},
         ]},
@@ -1630,7 +1630,7 @@ const conjugateProgram = {
                 purpose: "Everything else in the gym is a shaped handle. This is a resisting, badly-balanced load held against your chest, which is the body lock, the double-leg finish, and carrying somebody. It also loads breathing under chest compression, which a farmer carry cannot.",
                 cues: "Hug it high on the chest, elbows underneath rather than out to the sides, ribs down. Short quick steps. Breathe shallow and often — you will not get a full breath and that is part of the exercise. If it slides below your sternum, set it down and reset rather than fighting it.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -1815,7 +1815,7 @@ const conjugateProgram = {
           intent: "Same approach — stay light on purpose, no ego reps.",
           sections: [
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meUpperBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max. No max attempts this week." }),
@@ -2953,7 +2953,7 @@ const INJURY_AREAS = [
     rules: [
       { match: /neck bridge/i, drop: true,
         why: "No bridging on an irritated neck, at any dose. This is the one area where training around it is the wrong instinct — get it looked at." },
-      { match: /4-way isometric neck/i, lighter: true,
+      { match: /isometric neck hold/i, lighter: true,
         why: "Isometrics kept at an easy, pain-free pressure only. Any pinching or anything travelling down an arm means stop and see someone." },
       { match: /neck curl|neck extension/i,
         to: "Isometric Neck Holds — manual resistance, easy pressure",
