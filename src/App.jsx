@@ -1083,12 +1083,28 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     if (bjjHard && sec.type === "conditioning") {
       exs = exs.map((e) => ({ ...e, sets: 1, reps: "optional — trim or skip, hard grappling already supplied today's conditioning stimulus" }));
     }
+    if (bjjHard && sec.type === "power") {
+      // Speed work is only speed work on a fresh nervous system. After hard live
+      // rounds it is just more landings and more reps.
+      exs = exs.map((e) => ({ ...e, sets: Math.max(1, Math.round((e.sets || 2) * 0.5)),
+        cues: `${e.cues || ""} Hard grappling flagged, so this is half the usual sets — keep every rep fast and stop the moment speed drops.`.trim() }));
+    }
+    if (bjjHard && color !== "RED" && sec.type === "strength") {
+      // Not a lighter bar — a lower ceiling. Working up to a true single the
+      // evening after hard wrestling is where the back and the knees get hurt,
+      // and the top triple drives nearly the same adaptation.
+      exs = exs.map((e) => (e.perSetTargets && /Max Effort/.test(e.quality || "")
+        ? { ...e, perSetTargets: meTripleCapSets(), sets: meTripleCapSets().length,
+            reps: "working up to a heavy triple",
+            cues: `${e.cues || ""} Hard grappling flagged, so today stops at a heavy triple rather than a true single.`.trim() }
+        : e));
+    }
     return { ...sec, exercises: exs, skipped };
   });
 
   if (color === "RED") notes.push("You flagged a rough day, so today is half the sets, no singles, and no hard conditioning. Your warm-up and your neck and adductor work stay in — they cost almost nothing and they are what keeps you training.");
   else if (color === "YELLOW") notes.push("A notch back today: 5% lighter, one extra rep in reserve, less arm and core filler. Everything that protects you stays in.");
-  if (bjjHard) notes.push("Hard grappling flagged: conditioning trimmed since training already supplied that stimulus today.");
+  if (bjjHard) notes.push("Hard grappling flagged: conditioning trimmed, speed work halved, and the main lift stops at a heavy triple instead of a true single. The strength work is still here — the parts that cost the most on a tired nervous system are not.");
 
   return { sections: adjusted, adjustedNote: notes.length ? notes.join(" ") : null };
 }
@@ -1443,10 +1459,10 @@ const meUpperPool = [
   { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "https://www.youtube.com/watch?v=FiQUzPtS90E" },
   { name: "Spoto Press", notes: "Pause one inch off the chest — strength off the chest without bounce", videoUrl: "" },
   { name: "Standing Barbell Overhead Press", notes: "Overhead strength, shoulder resilience", videoUrl: "https://www.youtube.com/watch?v=cGnhixvC8uA" },
-  { name: "Weighted Dip (dip station)", notes: "Pressing strength — chest, shoulders, and triceps under a heavy vertical load", videoUrl: "" },
+  { name: "Weighted Dip (dip station)", maxTriple: true, notes: "Pressing strength — chest, shoulders, and triceps under a heavy vertical load", videoUrl: "" },
   { name: "Incline Barbell Press", notes: "Upper chest and shoulder press strength", videoUrl: "" },
-  { name: "Wide-Grip Bench Press", notes: "Chest-dominant press variation", videoUrl: "" },
-  { name: "Pendlay Row", notes: "Dead-stop barbell row from the floor every rep — a true heavy pulling variation, rotated in so the Max Effort Upper day occasionally builds pulling strength instead of always pressing", videoUrl: "https://www.youtube.com/shorts/0PSfteHhUtg" },
+  { name: "Wide-Grip Bench Press", maxTriple: true, notes: "Chest-dominant press variation", videoUrl: "" },
+  { name: "Pendlay Row", maxTriple: true, notes: "Dead-stop barbell row from the floor every rep — a true heavy pulling variation, rotated in so the Max Effort Upper day occasionally builds pulling strength instead of always pressing", videoUrl: "https://www.youtube.com/shorts/0PSfteHhUtg" },
 ];
 const wristPool = [
   { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction", videoUrl: "https://www.youtube.com/shorts/xENVg7RX_O8" },
@@ -1483,13 +1499,13 @@ const conditioningIntervalPool = [
 
 function meLowerDeloadBlock() {
   return ex({ name: meLowerPool[0].name, rotatingPool: "meLowerPool", sets: 4, reps: "light doubles and triples", load: "autoregulated, deliberately light", rir: 2,
-    perSetTargets: [{ reps: 3, rir: 4, note: "Light" }, { reps: 3, rir: 3, note: "Light" }, { reps: 2, rir: 3, note: "Moderate" }, { reps: 2, rir: 2, note: "Moderate" }],
+    perSetTargets: [{ reps: 3, rir: 5, note: "Light", pct1rm: 55 }, { reps: 3, rir: 5, note: "Light", pct1rm: 60 }, { reps: 2, rir: 4, note: "Moderate", pct1rm: 65 }, { reps: 2, rir: 4, note: "Moderate", pct1rm: 70 }],
     rest: "2 to 3 minutes", quality: "Max Effort (Deload)",
     cues: "This is a deload — stay light on purpose. Build to a moderate double or triple, at least 2 reps in reserve on every set. No max attempts this week." });
 }
 function meUpperDeloadBlock() {
   return ex({ name: meUpperPool[0].name, rotatingPool: "meUpperPool", sets: 4, reps: "light doubles and triples", load: "autoregulated, deliberately light", rir: 2,
-    perSetTargets: [{ reps: 3, rir: 4, note: "Light" }, { reps: 3, rir: 3, note: "Light" }, { reps: 2, rir: 3, note: "Moderate" }, { reps: 2, rir: 2, note: "Moderate" }],
+    perSetTargets: [{ reps: 3, rir: 5, note: "Light", pct1rm: 55 }, { reps: 3, rir: 5, note: "Light", pct1rm: 60 }, { reps: 2, rir: 4, note: "Moderate", pct1rm: 65 }, { reps: 2, rir: 4, note: "Moderate", pct1rm: 70 }],
     rest: "2 to 3 minutes", quality: "Max Effort (Deload)",
     cues: "This is a deload — stay light on purpose. Build to a moderate double or triple, at least 2 reps in reserve on every set. No max attempts this week." });
 }
@@ -1504,7 +1520,7 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-            ex({ name: "4-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+            ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
             ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
           ]},
         ]},
@@ -1563,7 +1579,7 @@ const conjugateProgram = {
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "30 meters", load: "heavy dumbbells — if your grip is what gives out, that is the session working", rir: 3, rest: "2 minutes", purpose: "Grip and trunk bracing under load. If grip is the limiter, shorten the distance rather than adding weight — your grip failing is what stops you loading your spine with more than you can hold, and grip is the quality we are actually training here.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -1590,7 +1606,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 1, reps: "3 build-up runs first — one at about 60 percent, one at 80, one at 90 — then 4 maximal sprints", load: "bodyweight", rir: 1, rest: "2 to 3 minutes between the maximal efforts — walk back, get your breath fully, then go again", purpose: "Alactic power and acceleration — short maximal efforts with full recovery, directly relevant to explosive takedown entries", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Combines acceleration, deceleration, lateral movement, and change of direction in a single drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
@@ -1651,7 +1667,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 4, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 1, reps: "3 build-up runs first — one at about 60 percent, one at 80, one at 90 — then 4 maximal sprints", load: "bodyweight", rir: 1, rest: "2 to 3 minutes between the maximal efforts — walk back, get your breath fully, then go again", purpose: "Alactic power and acceleration", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
               ex({ name: "Five-Ten-Five Pro Agility Shuttle", sets: 3, reps: "1 shuttle", load: "bodyweight", rir: 1, rest: "90 seconds", purpose: "Acceleration, deceleration, lateral movement, and change of direction in one drill", quality: "Agility" }),
             ]},
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
@@ -1708,7 +1724,7 @@ const conjugateProgram = {
           intent: "Keep it snappy and short. This is the easiest day to cut entirely if grappling is heavy this week. If you're training grappling four or more times a week, splitting the Dynamic Effort lift and the conditioning piece across two days works just as well as cutting either one.",
           sections: [
             { id: uid(), type: "agility", name: "Speed & Agility", exercises: [
-              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery", rir: 1, rest: "90 seconds", purpose: "Alactic power maintenance", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+              ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 1, reps: "3 build-up runs first — one at about 60 percent, one at 80, one at 90 — then 3 maximal sprints", load: "bodyweight", rir: 1, rest: "2 to 3 minutes between the maximal efforts — walk back, get your breath fully, then go again", purpose: "Alactic power maintenance", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
             ]},
             // Speed bench already runs on Day 1 of this week. A second eight-set
             // block of it in a taper block is volume for its own sake, and the
@@ -1742,7 +1758,7 @@ const conjugateProgram = {
           intent: "Same approach — stay light on purpose, no ego reps.",
           sections: [
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "4-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
             ]},
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meUpperBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max. No max attempts this week." }),
@@ -1825,7 +1841,7 @@ const rpeProgramCues = {
   "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
   "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
-  "4-Way Isometric Neck Holds": "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there.",
+  "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
   "Neck Bridge (back only, hands assisting)": "Only start this once the 4-way isometric holds from the earlier block feel genuinely easy — if they don't, keep doing those instead and come back to this next block. Keep both hands on the mat taking part of your weight, and only reduce that once five reps feel like nothing. Move slowly through the middle of the range — do not roll all the way onto the crown of your head, and never turn your head while you are on it. Never bridge on a day your neck is already sore from training. Anything that pinches, tingles, or travels down an arm: stop the set, come off it, and tell your coach.",
   "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
@@ -1882,7 +1898,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Back Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Side Plank", { sets: 4, reps: "20 seconds each side", rpe: 7 }),
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
           ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8 each side", tempo: "1/2/X", rpe: 8 }, "Scapular Push-Up", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
-          ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
+          ssSingle(4, "6-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
           ...ssPair(5, "Hip Abduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }),
         ]},
       ]},
@@ -1920,7 +1936,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Trap Bar Deadlift", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Banded Clamshell", { sets: 4, reps: "8 each side", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
-          ssSingle(4, "4-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
+          ssSingle(4, "6-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
           ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
         ]},
       ]},
@@ -1999,7 +2015,7 @@ function buildProgramCContent() {
         { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
           ...ssPair(1, weekNum === 4 ? "Back Squat" : weekNum === 8 ? "Trap Bar Deadlift" : "Split Stance Trap Bar Deadlift", { sets: 3, reps: weekNum === 12 ? "5 each side" : "6", tempo: "1/2/X", rpe: 6 }, weekNum === 4 ? "Side Plank" : weekNum === 8 ? "Banded Clamshell" : "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: weekNum === 4 ? "15 to 20 seconds each side" : weekNum === 8 ? "8 each side" : "6 each side", rpe: 6 }),
           ssSingle(2, weekNum === 4 ? "Bench Press" : weekNum === 8 ? "Dumbbell Glute Bridge Floor Press" : "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Strength"),
-          ssSingle(3, "4-Way Isometric Neck Holds", { sets: 3, reps: "15 seconds each way", rpe: 5 }, "Durability"),
+          ssSingle(3, "6-Way Isometric Neck Holds", { sets: 3, reps: "15 seconds each way", rpe: 5 }, "Durability"),
         ]},
       ]},
       { name: "Day 2 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
@@ -2159,7 +2175,7 @@ function twoDayDeloadPhase(weekNum, afterPhaseName) {
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-            ex({ name: "4-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
+            ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/watch?v=CtbZUhBxNOM" }),
             ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
           ]},
         ]},
@@ -2200,7 +2216,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Heavy Farmer Carry", sets: 2, reps: "25 meters", load: "heavy", rir: 1, rest: "90 seconds", purpose: "Grip and trunk bracing under load — the only carry slot in a two-day week, so it stays heavy", quality: "Grip/Trunk" }),
             ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
-            ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure", quality: "Durability" }),
+            ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", purpose: "Direct neck strength through every plane in one efficient slot — close to non-negotiable for anyone taking regular guillotine and choke pressure", quality: "Durability" }),
             ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
           ]},
           { id: uid(), type: "arms_core", name: "Core", exercises: [
@@ -2213,7 +2229,7 @@ function twoDayPhase(nameLabel, weekStart, weekEnd, objective, intensityNote, de
         intent: "Sprints first while you're completely fresh, then max effort on the press, the week's pulling work, explosive lower body work, and the week's one conditioning session to finish. Shoulder activation and neck work stay on Day 1 to keep this day, with its long conditioning finisher, clear of the two-hour mark.",
         sections: [
           { id: uid(), type: "agility", name: "Speed & Acceleration", exercises: [
-            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 3, reps: "3 build-up runs at about 60, 80 and 90 percent over the same distance, then 1 maximal effort sprint", load: "bodyweight, full recovery between efforts", rir: 1, rest: "90 seconds", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week. Placed here rather than ahead of the max-effort squat, so neither the sprint nor the lift is run on the other's fatigue.", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
+            ex({ name: "Acceleration Sprint (10 to 15 yards)", sets: 1, reps: "3 build-up runs first — one at about 60 percent, one at 80, one at 90 — then 4 maximal sprints", load: "bodyweight", rir: 1, rest: "2 to 3 minutes between the maximal efforts — walk back, get your breath fully, then go again", purpose: "Alactic power and acceleration — short maximal efforts directly relevant to explosive takedown entries, the one true speed-work slot in a two-day week. Placed here rather than ahead of the max-effort squat, so neither the sprint nor the lift is run on the other's fatigue.", quality: "Alactic Power", videoUrl: "https://www.youtube.com/shorts/7_-gaumnzWw" }),
           ]},
           { id: uid(), type: "strength", name: "Main Strength", exercises: [
             meUpperBlock(),
@@ -2237,6 +2253,7 @@ function buildTwoDayHybridContent() {
     id: uid(),
     name: "Condensed Conjugate — Two-Day Program (Program C)",
     variant: "C",
+    objective: "Hold on to strength and protect the joints that take the most punishment, in exactly two gym sessions a week. This is the program for the stretch when mat volume is high and the gym is not the priority.",
     sport: "Brazilian Jiu-Jitsu / Wrestling",
     sessionsPerWeek: 2,
     coachNote:
@@ -2370,7 +2387,7 @@ function videoRegistry() {
 // things that were already thinnest.
 const WEEKLY_FLOORS = [
   { key: "neck", min: 3, deloadMin: 2, match: /neck/i,
-    make: () => ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction",
+    make: () => ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction",
       load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", quality: "Durability",
       purpose: "The neck takes load every single round — in guard, in a scramble, under pressure. Isometric work builds it with no movement through the joint, which is why it can run every week without needing to be backed off.",
       cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there." }) },
@@ -2403,14 +2420,25 @@ function weeklyFloorPass(program) {
         if (floor.match.test(e.name || "")) have += e.sets || 0;
       })));
       if (have >= want) return;
-      // Put it in the durability block where one exists — that is where this
-      // kind of work belongs and where the athlete already expects to find it.
+      // If the work is already in the week, give the existing exercise the extra
+      // sets. Adding a second one instead put two Barbell Romanian Deadlifts in
+      // the same session with different targets — nonsense on the page and
+      // worse in the gym.
+      let best = null;
+      days.forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+        if (!floor.match.test(e.name || "")) return;
+        if (!best || (e.sets || 0) > (best.sets || 0)) best = e;
+      })));
+      if (best) { best.sets = (best.sets || 0) + (want - have); return; }
+      // Nothing of the kind in the week at all, so it has to be added. The
+      // durability block is where this work belongs and where the athlete
+      // already expects to find it.
       const host = days.map((d) => (d.sections || []).find((sec) => sec.type === "durability"))
         .find(Boolean)
         || days.map((d) => (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0]).find(Boolean);
       if (!host) return;
       const added = floor.make();
-      added.sets = Math.max(1, want - have);
+      added.sets = Math.max(1, want);
       host.exercises = [...(host.exercises || []), added];
     });
   });
@@ -2467,6 +2495,7 @@ function buildProgramVariant(variant) {
   if (variant === "A") {
     base.name = "Condensed Conjugate — Twelve-Week Program (Program A)";
     base.variant = "A";
+    base.objective = "Build maximal strength and the ability to express it fast, in three sessions a week, without taking anything away from your mat training. This is the program for someone with competitions on the calendar.";
     base.phases.forEach((phase) => {
       const isDeload = phase.name.toLowerCase().includes("deload");
       if (isDeload) return; // deload weeks stay Dynamic-Effort-free, same as the rest of the program
@@ -2490,6 +2519,8 @@ function buildProgramVariant(variant) {
   } else {
     base.name = "Offseason Strength Build — Twelve-Week Program (Program B)";
     base.variant = "B";
+    base.methodology =
+      "No percentages and no max-effort singles anywhere in this program. Every working set is prescribed by how hard it should feel — Rate of Perceived Exertion — and the load is whatever hits that number for you on the day. Week one of a block sits at RPE 8, which is two reps short of failure; weeks two and three push the same sets and reps toward RPE 9 by adding load. That is the whole progression, and it is why this program works for someone who cannot yet honestly judge a true one-rep max.\n\nThe lifts are paired. Each numbered pair (1A and 1B) is done back to back before you rest, which is what keeps three sessions of this volume inside an hour. Tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives.\n\nWhat separates this from the conjugate programs: no sprinting, no jumping, no agility work, nothing chasing speed. Twelve weeks of structure instead — tendon, scapula, neck, grip, single-leg control, and isometric holds at the joint angles the sport actually loads. It is built for the stretch of the year when there is nothing on the calendar and the job is to come back harder to break.";
     base.objective = "Built directly from a Rate-of-Perceived-Exertion based coaching program — paired supersets, tempo-controlled reps, and RPE targets instead of percentage-of-max ramps. No competition to taper for, so nothing in the final block backs off; the last three weeks simply shift from strength-endurance work to a faster, lower-fatigue speed-strength emphasis.";
     base.coachNote = "";
     base.philosophy = "Every working set below is paired into a numbered superset (1A and 1B, done back to back before resting) and prescribed by Rate of Perceived Exertion rather than a percentage of your max — the number after each exercise is the target RPE for that set. Tempo notation like 2/1/X means 2 seconds lowering the weight, a 1 second pause, then lift as explosively as you can (X).";
