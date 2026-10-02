@@ -431,6 +431,57 @@ async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST
 async function setClientList(userId, list) { return kvSet(userId, CLIENT_LIST_KEY, list); }
 async function getClient(userId, id) { const v = await kvGet(userId, clientKey(id)); return v === LOAD_FAILED ? LOAD_FAILED : (v || null); }
 async function setClient(userId, id, data) { return kvSet(userId, clientKey(id), data); }
+
+// The whole athlete record is one row, and every save rewrites all of it from
+// whatever this tab loaded. So a laptop left open on the Today screen will
+// happily write Tuesday's copy back over a session logged on a phone on
+// Wednesday — no error, no conflict, the session simply gone. This re-reads the
+// stored record first and folds anything it has that we don't back in.
+//
+// Only the append-only histories are merged. Everything else is a setting the
+// person just changed on this device, and the value in front of them wins.
+const HISTORY_ARRAYS = {
+  logs: (x) => x.id || x.date,
+  mobilityLogs: (x) => x.id || x.date,
+  bjjNotes: (x) => x.id || x.date,
+  bodyweightLog: (x) => x.date,
+  prLog: (x) => x.id || `${x.exerciseName}|${x.date}`,
+};
+function mergeStoredHistory(stored, next) {
+  if (!stored || typeof stored !== "object" || stored.id !== next.id) return next;
+  const out = { ...next };
+  for (const [key, idOf] of Object.entries(HISTORY_ARRAYS)) {
+    const mine = Array.isArray(next[key]) ? next[key] : [];
+    const theirs = Array.isArray(stored[key]) ? stored[key] : [];
+    if (!theirs.length) continue;
+    const have = new Set(mine.map(idOf));
+    const missing = theirs.filter((x) => x && !have.has(idOf(x)));
+    if (missing.length) {
+      out[key] = [...mine, ...missing].sort((a, b) => String(a.date || "") < String(b.date || "") ? -1 : 1);
+    }
+  }
+  // Readiness is keyed by date, so a day this device never saw is simply added.
+  // A day both touched keeps what is in front of the person right now.
+  if (stored.readiness && typeof stored.readiness === "object") {
+    out.readiness = { ...stored.readiness, ...(next.readiness || {}) };
+  }
+  // maxSessionsReached is the only genuinely one-way counter, so it takes the
+  // larger. sessionsCompleted and blockNumber are deliberately NOT merged: both
+  // move down on purpose — starting a new block resets the session count to
+  // zero, and "go back to this day" rewinds it — so raising them to whatever
+  // the server holds would quietly undo the thing the person just did.
+  const reached = Math.max(Number(next.maxSessionsReached) || 0, Number(stored.maxSessionsReached) || 0);
+  if (reached) out.maxSessionsReached = reached;
+  return out;
+}
+// Used by every write of a client record, so the merge happens in one place
+// rather than at each of the couple of dozen call sites.
+async function persistClientRecord(userId, updated) {
+  const stored = await getClient(userId, updated.id);
+  const merged = stored === LOAD_FAILED || !stored ? updated : mergeStoredHistory(stored, updated);
+  const res = await setClient(userId, updated.id, merged);
+  return { ...res, record: merged };
+}
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
 async function getSettings(userId) { const v = await kvGet(userId, SETTINGS_KEY); return (!v || v === LOAD_FAILED) ? { theme: "dark" } : v; }
 async function setSettings(userId, s) { return kvSet(userId, SETTINGS_KEY, s); }
@@ -2307,9 +2358,84 @@ function videoRegistry() {
   return reg;
 }
 
+// Floors that every week of every program has to clear, enforced after the
+// programs are built rather than by editing each one. These are the slots that
+// quietly go missing when a block gets rewritten — they are also the ones a
+// grappler can least afford to lose, which is why they get a guarantee instead
+// of being left to each phase's author.
+//
+// Counted per week. A deload keeps every pattern at a reduced dose rather than
+// dropping it: a deload that removes pulling and rear-delt work entirely isn't
+// a lighter version of the week, it's a different week, and it drops the two
+// things that were already thinnest.
+const WEEKLY_FLOORS = [
+  { key: "neck", min: 3, deloadMin: 2, match: /neck/i,
+    make: () => ex({ name: "4-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction",
+      load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", quality: "Durability",
+      purpose: "The neck takes load every single round — in guard, in a scramble, under pressure. Isometric work builds it with no movement through the joint, which is why it can run every week without needing to be backed off.",
+      cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there." }) },
+  { key: "scap", min: 2, deloadMin: 2, match: /face pull|pull-apart|y, t, w|scarecrow|scapular/i,
+    make: () => ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2,
+      rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
+      purpose: "Rear delts and the muscles that hold the shoulder blade down and back. Grappling spends all day pulling the shoulders forward — gripping, framing, posting — and this is the cheapest insurance against that there is.",
+      cues: "Pull to your forehead with the elbows high and finish with the knuckles facing behind you. Light enough that the shoulder blades do the work rather than the arms." }) },
+  { key: "post", min: 5, deloadMin: 0, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
+    make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
+      rest: "2 minutes", quality: "Posterior Chain",
+      purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
+      cues: "Push the hips back rather than bending the knees. The bar stays against the legs the whole way. Go down as far as the hamstrings allow with a flat back and no further — the depth is set by your hamstrings, not by the floor." }) },
+  { key: "pull", min: 2, deloadMin: 2, match: /pull-up|row\b|lat row|pulldown/i,
+    make: () => ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 2,
+      rest: "90 seconds", quality: "Pull",
+      purpose: "Kept in the deload at a reduced dose rather than cut. Pulling volume is what balances a sport spent gripping and framing, and the week it disappears is the week the shoulder notices.",
+      cues: "Chest stays on the pad. Pull to the bottom of the ribs and squeeze the shoulder blades together at the top." }) },
+];
+
+function weeklyFloorPass(program) {
+  (program.phases || []).forEach((phase) => {
+    const isDeload = /deload/i.test(phase.name || "");
+    const days = phase.days || [];
+    if (!days.length) return;
+    WEEKLY_FLOORS.forEach((floor) => {
+      const want = isDeload ? floor.deloadMin : floor.min;
+      let have = 0;
+      days.forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+        if (floor.match.test(e.name || "")) have += e.sets || 0;
+      })));
+      if (have >= want) return;
+      // Put it in the durability block where one exists — that is where this
+      // kind of work belongs and where the athlete already expects to find it.
+      const host = days.map((d) => (d.sections || []).find((sec) => sec.type === "durability"))
+        .find(Boolean)
+        || days.map((d) => (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0]).find(Boolean);
+      if (!host) return;
+      const added = floor.make();
+      added.sets = Math.max(1, want - have);
+      host.exercises = [...(host.exercises || []), added];
+    });
+  });
+  return program;
+}
+
+const TRIMMABLE = /^(Accessory|Prehab|Durability|Arms|Trunk|Grip|Grip\/Trunk)$/;
+function trimAccessoryVolume(program) {
+  (program.phases || []).forEach((phase) => {
+    if (/deload/i.test(phase.name || "")) return;
+    (phase.days || []).forEach((d) => (d.sections || []).forEach((sec) => {
+      (sec.exercises || []).forEach((e) => {
+        if (!TRIMMABLE.test(e.quality || "")) return;
+        if (/neck/i.test(e.name || "")) return; // floored above, and cheap to recover from
+        if ((e.sets || 0) >= 3) e.sets = e.sets - 1;
+      });
+    }));
+  });
+  return program;
+}
+
 function finishProgram(program) {
   if (program) program.warmupVersion = WARMUP_VERSION;
-  return backfillVideos(program);
+  const balanced = weeklyFloorPass(program.variant === "B" ? trimAccessoryVolume(program) : program);
+  return backfillVideos(balanced);
 }
 
 function backfillVideos(program) {
@@ -3879,7 +4005,14 @@ function MainApp({ userId, onSignOut }) {
   // fully interactive screen wired to the wrong person's record.
   useEffect(() => { setClientState(null); loadActiveClient(); }, [loadActiveClient]);
 
-  const persistClient = useCallback(async (updated) => { setClientState(updated); return setClient(userId, updated.id, updated); }, [userId]);
+  const persistClient = useCallback(async (updated) => {
+    setClientState(updated);
+    const res = await persistClientRecord(userId, updated);
+    // Show the merged record, so anything this device was missing appears
+    // straight away rather than at the next reload.
+    if (res && res.record && res.record !== updated) setClientState(res.record);
+    return res;
+  }, [userId]);
   // Holds the newest Personal Record list across taps that fire faster than a
   // re-render. Reset whenever the active athlete changes.
   const prLogRef = useRef(null);
@@ -5600,6 +5733,29 @@ function lastWeekBest(client, exerciseName, currentWeekNumber) {
   return best;
 }
 
+// Working sets, build-up sets, and a time estimate built from the actual rest
+// prescriptions rather than a guess per section.
+function sessionShape(sections) {
+  let working = 0, buildUps = 0, seconds = 0;
+  (sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+    if (/Conditioning/.test(e.quality || "")) {
+      // Conditioning carries its own duration in the reps field.
+      const m = String(e.reps || "").match(/(\d+)\s*(?:to\s*(\d+)\s*)?minutes?/i);
+      if (m) seconds += (Number(m[2] || m[1]) || 0) * 60;
+      return;
+    }
+    const targets = e.perSetTargets || null;
+    const hard = targets ? targets.filter((t) => !/^(Warm-up|Build)$/.test(t.note || "")).length : (e.sets || 0);
+    const build = targets ? targets.length - hard : 0;
+    working += hard; buildUps += build;
+    const restM = String(e.rest || "").match(/(\d+)\s*(?:to\s*\d+\s*)?(second|minute)/i);
+    const rest = restM ? Number(restM[1]) * (/minute/i.test(restM[2]) ? 60 : 1) : 75;
+    // Build-ups are moved through briskly, so they cost about a third as much.
+    seconds += hard * (rest + 35) + build * Math.round((rest + 35) / 3);
+  }));
+  return { working, buildUps, minutes: Math.max(10, Math.round((seconds + 8 * 60) / 60 / 5) * 5) };
+}
+
 function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const totalSessions = totalSessionsIn(client.program);
   const actualComplete = (client.sessionsCompleted || 0) >= totalSessions;
@@ -5630,6 +5786,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const isCurrent = viewIndex === (client.sessionsCompleted || 0);
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
   const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
+  const shape = useMemo(() => sessionShape(resolvedRaw), [resolvedRaw]);
   const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
   // A taper and a rough day stack rather than one overriding the other.
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
@@ -5731,7 +5888,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         </div>
 
         <div className="hero-title">{mainLift}</div>
-        <div className="hero-duration">{pos.day.name} · Estimated {30 + (pos.day.sections?.length || 0) * 5} minutes</div>
+        <div className="hero-duration">
+          {pos.day.name} · {shape.working} working set{shape.working === 1 ? "" : "s"}
+          {shape.buildUps > 0 ? ` plus ${shape.buildUps} build-up${shape.buildUps === 1 ? "" : "s"}` : ""}
+          {" · about "}{shape.minutes} minutes with the warm-up
+        </div>
 
         {isCurrent && (
           readinessToday ? (
@@ -6935,6 +7096,79 @@ function Prose({ text }) {
   );
 }
 
+// What a block actually prescribes, per week, by movement pattern. Written
+// because answering "is this too much, and am I missing anything" previously
+// meant reading the program source and counting by hand — which is both slow
+// and the kind of thing that gets counted wrong.
+//
+// Speed work is kept apart from hard sets on purpose. Eight explosive triples
+// at half your max is not eight hard sets, and adding them together makes a
+// sane week look like an overreaching one.
+const VOLUME_PATTERNS = [
+  ["Squat", /box squat|back squat|front squat|zercher|bulgarian|front-foot-elevated|quarter squat/i],
+  ["Hinge", /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i],
+  ["Press", /bench press|push-ups|floor press|overhead press|punch press|offset single arm/i],
+  ["Pull", /pull-up|row\b|lat row|pulldown/i],
+  ["Scap / rear delt", /face pull|pull-apart|y, t, w|scarecrow|scapular/i],
+  ["Core", /pallof|leg raise|toes to bar|roll out|plank|copenhagen|anti-rotation|plate lifts|farmer carry|suitcase|renegade|pull-through/i],
+  ["Neck", /neck/i],
+  ["Grip", /dead hang|rice bucket|towel hang|wrist curl/i],
+];
+function weeklyVolumeFor(phase) {
+  const row = { hard: 0, speed: 0, conditioning: 0 };
+  (phase.days || []).forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+    const t = e.perSetTargets || null;
+    const sets = t ? t.filter((x) => !/^(Warm-up|Build)$/.test(x.note || "")).length : (e.sets || 0);
+    const q = e.quality || "";
+    if (/Conditioning/.test(q)) { row.conditioning += sets; return; }
+    if (/Dynamic Effort|Alactic|Agility|Neuromuscular/.test(q + " " + (e.name || ""))) { row.speed += sets; return; }
+    row.hard += sets;
+    VOLUME_PATTERNS.forEach(([name, re]) => { if (re.test(e.name || "")) row[name] = (row[name] || 0) + sets; });
+  })));
+  return row;
+}
+
+function VolumePanel({ program }) {
+  const [open, setOpen] = useState(false);
+  const rows = useMemo(() => (program.phases || []).map((p) => ({
+    name: p.name, weeks: `${p.weekStart}–${p.weekEnd}`, deload: /deload/i.test(p.name || ""), ...weeklyVolumeFor(p),
+  })), [program]);
+  return (
+    <Card title="Weekly volume" subtitle="Hard sets per week, by pattern. Coach view.">
+      <button className="btn-ghost wide" onClick={() => setOpen((o) => !o)}>{open ? "Hide" : "Show"} the numbers</button>
+      {open && (
+        <>
+          <div className="vol-scroll">
+            <table className="vol-table">
+              <thead>
+                <tr>
+                  <th>Block</th>
+                  {VOLUME_PATTERNS.map(([n]) => <th key={n}>{n}</th>)}
+                  <th>Hard</th><th>Speed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.weeks + r.name} className={r.deload ? "vol-deload" : ""}>
+                    <td>Wk {r.weeks}</td>
+                    {VOLUME_PATTERNS.map(([n]) => <td key={n}>{r[n] || 0}</td>)}
+                    <td className="vol-total">{r.hard}</td>
+                    <td>{r.speed || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Speed work — dynamic effort, sprints, agility — is counted separately because it is deliberately sub-maximal and costs far less than a hard set.
+            For an athlete also training four to six times a week on the mat, somewhere around 45 to 65 hard sets is a reasonable week.
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function ProgramTab({ client, isCoach, onPersist }) {
   const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
@@ -6968,6 +7202,8 @@ function ProgramTab({ client, isCoach, onPersist }) {
       {client.program.coachNote && <Card title="From the Coach"><Prose text={client.program.coachNote} /></Card>}
       {client.program.philosophy && <Card title="Effort Philosophy" right={<Info size={16} color="var(--text-dim)" />}><Prose text={client.program.philosophy} /></Card>}
       {client.program.methodology && <Card title="Methodology"><Prose text={client.program.methodology} /></Card>}
+
+      {isCoach && <VolumePanel program={client.program} />}
 
       <div className="program-actions">
         {isCoach && <button className="btn-ghost" onClick={() => setEditingWarmup(true)}><Pencil size={14} /> Edit warm-up</button>}
@@ -7970,6 +8206,13 @@ function GlobalStyle() {
       .clip-note { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
       .clip-chosen { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
       .clip-chosen .link-btn { font-weight: 500; color: var(--text-dim); }
+      .vol-scroll { overflow-x: auto; margin-top: 10px; }
+      .vol-table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .vol-table th, .vol-table td { padding: 5px 7px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+      .vol-table th:first-child, .vol-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--card); }
+      .vol-table thead th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); font-weight: 700; }
+      .vol-table tr.vol-deload td { color: var(--text-dim); font-style: italic; }
+      .vol-table td.vol-total { font-weight: 700; color: var(--accent); }
       .post-act.quiet { margin-left: auto; color: var(--text-dim); }
       .post-act.quiet:disabled { opacity: .6; }
       .post-card.flagged { border-color: var(--amber, #e0a33a); }
