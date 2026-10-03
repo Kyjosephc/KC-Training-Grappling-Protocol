@@ -51,7 +51,16 @@ function useToastFeed() {
   const [toasts, setToasts] = useState([]);
   useEffect(() => {
     const listener = (toast) => {
-      setToasts((prev) => [...prev, toast]);
+      setToasts((prev) => {
+        // One toast per distinct message. Ten failed writes in a row are one
+        // problem, and ten identical cards stacked over the set inputs are worse
+        // than useless to somebody mid-session.
+        const same = prev.find((t) => t.message === toast.message);
+        const next = same
+          ? prev.map((t) => (t === same ? { ...toast, count: (same.count || 1) + 1 } : t))
+          : [...prev, toast];
+        return next.slice(-3);
+      });
       if (toast.autoDismissMs) setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toast.id)), toast.autoDismissMs);
     };
     toastListeners.push(listener);
@@ -104,7 +113,7 @@ async function kvGet(userId, key) {
 // The newest value written for each key, so a Retry tapped minutes later sends
 // current data rather than the snapshot that originally failed.
 const latestWrites = new Map();
-async function kvSet(userId, key, value) {
+async function kvSet(userId, key, value, errorMessage) {
   if (!supabase || !userId) return { ok: false };
   latestWrites.set(`${userId}:${key}`, value);
   const outcome = await withRetry(async () => {
@@ -114,7 +123,7 @@ async function kvSet(userId, key, value) {
   if (outcome.ok) { markSynced(); return { ok: true }; }
   // Re-read the latest value at retry time. Retrying the stale snapshot could
   // overwrite work the athlete did after the failure while the toast sat there.
-  emitToast({ kind: "error", message: "Couldn't save your last change — check your connection.", retryLabel: "Retry", onRetry: () => kvSet(userId, key, latestWrites.get(`${userId}:${key}`) ?? value) });
+  emitToast({ kind: "error", message: errorMessage || "Couldn't save your last change — check your connection.", retryLabel: "Retry", onRetry: () => kvSet(userId, key, latestWrites.get(`${userId}:${key}`) ?? value, errorMessage) });
   return { ok: false };
 }
 async function kvDelete(userId, key) {
@@ -572,6 +581,90 @@ function bodyweightAdvisory(client, daysToComp) {
 // copy that a newer build exists — it will keep running whatever index.html it
 // cached until the browser decides to revalidate, which on iOS can be days.
 // This asks the server directly, and lets the athlete choose when to take it.
+// Reads a deadline rather than counting ticks, because a browser throttles
+// setInterval in a background tab: the old mobility timer barely moved while the
+// phone was locked, which is precisely when a rest timer is running.
+function useRestTimer() {
+  const [endsAt, setEndsAt] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!endsAt) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 250);
+    const onVisible = () => setNow(Date.now());
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
+  }, [endsAt]);
+  const remaining = endsAt ? Math.max(0, Math.round((endsAt - now) / 1000)) : null;
+  useEffect(() => { if (remaining === 0) setEndsAt(null); }, [remaining]);
+  return {
+    remaining,
+    running: remaining !== null && remaining > 0,
+    start: (seconds) => setEndsAt(Date.now() + seconds * 1000),
+    stop: () => setEndsAt(null),
+  };
+}
+// The first number in a rest prescription, in seconds. "90 seconds" is 90,
+// "3 to 4 minutes" is 180 — the shorter end, because a rest timer that runs long
+// is one people stop trusting.
+function restSecondsFrom(text) {
+  const t = String(text || "").toLowerCase();
+  const n = Number((t.match(/\d+/) || [])[0]);
+  if (!n) return null;
+  return /min/.test(t) ? n * 60 : n;
+}
+function fmtClock(total) {
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+// Holds the screen awake while a session is open. Re-acquired on visibility
+// change because the browser releases it whenever the tab is hidden.
+function useScreenWakeLock(active) {
+  useEffect(() => {
+    if (!active || typeof navigator === "undefined" || !navigator.wakeLock) return undefined;
+    let lock = null;
+    let cancelled = false;
+    const acquire = async () => {
+      try {
+        if (document.visibilityState !== "visible") return;
+        lock = await navigator.wakeLock.request("screen");
+        if (cancelled) { try { await lock.release(); } catch {} lock = null; }
+      } catch {
+        // Refused (low battery, unsupported, not a user-visible failure).
+      }
+    };
+    acquire();
+    const onVisible = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      try { if (lock) lock.release(); } catch {}
+    };
+  }, [active]);
+}
+
+function OfflineBanner() {
+  const online = useOnlineStatus();
+  if (online) return null;
+  return (
+    <div className="offline-banner" role="status">
+      No connection — keep logging. Your sets are saved on this phone and will sync when you are back.
+    </div>
+  );
+}
+function useOnlineStatus() {
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine !== false));
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+  return online;
+}
+
 function useNewBuildAvailable() {
   const [available, setAvailable] = useState(false);
   useEffect(() => {
@@ -4008,12 +4101,36 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
 const TABS = [
   { id: "today", label: "Today", icon: Home },
   { id: "program", label: "Program", icon: CalendarDays },
-  { id: "history", label: "History", icon: HistoryIcon },
-  { id: "bjj", label: "Notes", icon: BookOpen },
   { id: "progress", label: "Progress", icon: TrendingUp },
-  { id: "prs", label: "Records", icon: Trophy },
   { id: "community", label: "Group", icon: MessageCircle },
 ];
+// The four views that used to be their own tabs. Charts, sessions, records and
+// the mat journal are all "look back at what I did", and splitting them across
+// four slots in a seven-slot bar made each one harder to find than if there had
+// been one place to look.
+const PROGRESS_VIEWS = [
+  { id: "charts", label: "Charts" },
+  { id: "sessions", label: "Sessions" },
+  { id: "records", label: "Records" },
+  { id: "notes", label: "Notes" },
+];
+function ProgressHub({ client, onPersist }) {
+  const [view, setView] = useState("charts");
+  return (
+    <>
+      <div className="view-toggle-row">
+        {PROGRESS_VIEWS.map((v) => (
+          <button key={v.id} className={`view-toggle-btn ${view === v.id ? "active" : ""}`}
+            onClick={() => setView(v.id)} aria-pressed={view === v.id}>{v.label}</button>
+        ))}
+      </div>
+      {view === "charts" && <ProgressTab client={client} />}
+      {view === "sessions" && <HistoryTab client={client} onPersist={onPersist} />}
+      {view === "records" && <PRsTab client={client} />}
+      {view === "notes" && <BJJNotesTab client={client} onPersist={onPersist} />}
+    </>
+  );
+}
 
 // A render error used to unmount the whole app and leave a blank screen, which
 // is a miserable thing to happen to someone mid-session. This catches it and
@@ -4248,8 +4365,16 @@ function MainApp({ userId, onSignOut }) {
   useEffect(() => { setClientState(null); loadActiveClient(); }, [loadActiveClient]);
 
   const persistClient = useCallback(async (updated) => {
-    setClientState(updated);
+    // Optimistic, because every one of these is a tap the athlete expects to see
+    // land immediately. But hold the previous record so a failed write can put
+    // the screen back rather than leaving it claiming something that never saved.
+    let previous = null;
+    setClientState((prev) => { previous = prev; return updated; });
     const res = await persistClientRecord(userId, updated);
+    if (res && res.ok === false) {
+      if (previous) setClientState(previous);
+      return res;
+    }
     // Show the merged record, so anything this device was missing appears
     // straight away rather than at the next reload.
     if (res && res.record && res.record !== updated) setClientState(res.record);
@@ -4406,6 +4531,7 @@ function MainApp({ userId, onSignOut }) {
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
       {!logging && <UpdateBanner />}
+      <OfflineBanner />
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
@@ -4414,10 +4540,11 @@ function MainApp({ userId, onSignOut }) {
             onStartMobility={() => setShowMobility(true)} />
         )}
         {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
-        {tab === "history" && <HistoryTab client={client} onPersist={persistClient} />}
-        {tab === "bjj" && <BJJNotesTab client={client} onPersist={persistClient} />}
-        {tab === "progress" && <ProgressTab client={client} />}
-        {tab === "prs" && <PRsTab client={client} />}
+        {/* history / bjj / prs are kept as routes so a bookmark or a deep link
+            from an older build still lands somewhere sensible. */}
+        {(tab === "progress" || tab === "history" || tab === "bjj" || tab === "prs") && (
+          <ProgressHub client={client} onPersist={persistClient} />
+        )}
         {tab === "community" && communityOpen && (
           <CommunityTab client={client} userId={userId} isCoach={isCoach}
             prefs={communityPrefs || {}} onPrefs={saveCommunityPrefs} />
@@ -6082,42 +6209,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <StatChip label="Total Lifted" value={totalLifted ? formatWeight(totalLifted) : "—"} />
       </div>
 
-      <Card title="Lifting Milestones" subtitle={formatWeight(totalLifted) + " lifted since you started"}>
-        {nextMilestoneIdx >= 0 ? (
-          <>
-            <p className="muted" style={{ marginBottom: 10 }}>Next up: the weight of {LIFT_MILESTONES[nextMilestoneIdx].emoji} {LIFT_MILESTONES[nextMilestoneIdx].name} ({formatWeight(LIFT_MILESTONES[nextMilestoneIdx].weight)}).</p>
-            <div className="progress-bar-track"><div className="progress-bar-fill" style={{ width: `${Math.min(100, Math.round((totalLifted / LIFT_MILESTONES[nextMilestoneIdx].weight) * 100))}%` }} /></div>
-          </>
-        ) : (
-          <p className="muted" style={{ marginBottom: 10 }}>You've hit every milestone there is. Incredible.</p>
-        )}
-        <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
-      </Card>
-
-      <Card title="Readiness & Bodyweight" right={readinessToday ? <span className="pill" style={{ background: readinessCopyFor(readinessToday).color, color: readinessCopyFor(readinessToday).textColor }}>{readinessToday.color}</span> : null}>
-        {readinessToday ? (
-          <div><p className="muted" style={{ marginBottom: 10 }}>{readinessCopyFor(readinessToday).detail}</p><button className="btn-ghost" onClick={() => setShowReadiness(true)}>Update today's check-in</button></div>
-        ) : (
-          <div><p className="muted" style={{ marginBottom: 10 }}>Quick check-in before today's session — how you slept, how ready you feel to train, your bodyweight, and whether grappling has been rough lately. The workout adjusts itself based on your answers.</p><button className="btn-primary" onClick={() => setShowReadiness(true)}>Check in</button></div>
-        )}
-      </Card>
-
-      {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {unitFor(recentPR.reps, recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
-      )}
-
-      <WearableStrip
-        source={"Today's check-in"}
-        dateLabel={fmtDate(todayStr())}
-        metrics={readinessToday ? [
-          { label: "Sleep", value: `${readinessToday.sleep}/5` },
-          { label: "Readiness", value: readinessToday.readiness != null ? `${readinessToday.readiness}/5` : `${readinessToday.energy ?? "—"}/5` },
-        ] : [
-          { label: "Sleep", value: "—" },
-          { label: "Readiness", value: "—" },
-        ]}
-      />
-
       <div className="hero-card">
         <div className="hero-top-row">
           <button className="hero-nav-btn" disabled={viewIndex <= 0} onClick={() => setViewIndex((i) => Math.max(0, i - 1))}><ChevronLeft size={16} /></button>
@@ -6256,6 +6347,25 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
           <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
         )}
       </div>
+
+      <Card title="Lifting Milestones" subtitle={formatWeight(totalLifted) + " lifted since you started"}>
+        {nextMilestoneIdx >= 0 ? (
+          <>
+            <p className="muted" style={{ marginBottom: 10 }}>Next up: the weight of {LIFT_MILESTONES[nextMilestoneIdx].emoji} {LIFT_MILESTONES[nextMilestoneIdx].name} ({formatWeight(LIFT_MILESTONES[nextMilestoneIdx].weight)}).</p>
+            <div className="progress-bar-track"><div className="progress-bar-fill" style={{ width: `${Math.min(100, Math.round((totalLifted / LIFT_MILESTONES[nextMilestoneIdx].weight) * 100))}%` }} /></div>
+          </>
+        ) : (
+          <p className="muted" style={{ marginBottom: 10 }}>You've hit every milestone there is. Incredible.</p>
+        )}
+        <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
+      </Card>
+
+
+      {recentPR && (
+        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {unitFor(recentPR.reps, recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
+      )}
+
+
 
       <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
@@ -6475,7 +6585,7 @@ function VideoLinkBlock({ url, onSave, onDelete, label, canEdit = false }) {
   return (
     <div className="ex-links-row" onClick={(e) => e.stopPropagation()}>
       {label && <span className="muted" style={{ fontSize: 11, marginRight: 4 }}>{label}</span>}
-      <button className="add-link-btn" onClick={(e) => { e.stopPropagation(); setEditing(true); }}>+ Add a video link</button>
+      {canEdit && <button className="add-link-btn" onClick={(e) => { e.stopPropagation(); setEditing(true); }}>+ Add a video link</button>}
     </div>
   );
 }
@@ -6630,12 +6740,17 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
         entries[secId] = (entriesBySection[secId] || []).map((en) => ({
           exerciseId: en.exerciseId,
           sets: (en.sets || []).map((s) => {
-            if (String(s.weight || "").trim()) hasAnything = true;
+            // Match the same test the logging grid uses for "this set has data":
+            // for an exercise that takes no external load, the reps field is the
+            // only thing the athlete can type.
+            const typed = needsWeight(en.name) ? String(s.weight || "").trim() : String(s.reps || "").trim();
+            if (typed) hasAnything = true;
             return { weight: s.weight, reps: s.reps, rir: s.rir };
           }),
         }));
       });
-      if (!hasAnything && !notes.trim() && !Object.keys(warmupChecked).length) return;
+      if (!hasAnything && !notes.trim() && !Object.keys(warmupChecked).length
+          && !Object.keys(complete).length && !Object.keys(manualPRs).length) return;
       writeDraft(draftKey, { v: 1, savedAt: Date.now(), sessionId: sessionIdRef.current, entries, warmupChecked, complete, manualPRs, notes, rpe });
     }, 400);
     return () => clearTimeout(t);
@@ -6663,6 +6778,10 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const totalSections = 2 + resolvedSections.length;
   const completedCount = Object.values(complete).filter(Boolean).length;
   const percent = totalSections ? (completedCount / totalSections) * 100 : 0;
+  const restTimer = useRestTimer();
+  // The screen used to sleep between every set, and unlocking risked the tab
+  // having been discarded with the session in it.
+  useScreenWakeLock(!finished);
 
   const updateSet = (sectionId, exIdx, setIdx, field, value) => setEntriesBySection((prev) => {
     const list = [...prev[sectionId]];
@@ -6783,7 +6902,13 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     setSavingSession(true);
     const result = await onSave(session);
     setSavingSession(false);
-    if (result && result.ok === false) return;
+    if (result && result.ok === false) {
+      // The generic write toast says "couldn't save your last change", which is
+      // the right size of words for a theme toggle and the wrong size for an
+      // hour of work. The reassurance is the important half.
+      emitToast({ kind: "error", message: "Your workout didn't send — it is still saved on this phone. Tap Finish again when you have signal.", retryLabel: "Try again", onRetry: () => finishWorkout() });
+      return;
+    }
     clearDraft(draftKey);
     setSummary({ totalVolume: session.totalVolume, prNames: Array.from(prNameSet), avgRPE: rpe, isFinalSession, newMilestones });
     setFinished(true);
@@ -6827,7 +6952,14 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   return (
     <ModalShell onClose={onClose} dismissOnEscape={false} title={`Day ${day.label} — ${mainLift}`}
       headerLeftExtra={<button className="icon-btn" onClick={() => setConfirmingReset(true)} title="Clear every input for this session" aria-label="Clear every input for this session"><RotateCcw size={16} /></button>}
-      headerRight={<ProgressBadge percent={percent} />} fullscreen>
+      headerRight={
+        restTimer.running
+          ? <button type="button" className="rest-countdown" onClick={restTimer.stop}
+              aria-label={`Rest timer, ${restTimer.remaining} seconds left. Tap to stop.`}>
+              {fmtClock(restTimer.remaining)}
+            </button>
+          : <ProgressBadge percent={percent} />
+      } fullscreen>
       {restoredNotice && !finished && (
         <div className="adjust-box" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }}>Picked up where you left off — everything you'd already entered for this session is back. Finish and save it when you're done.</span>
@@ -6901,7 +7033,10 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
           {expanded[sec.id] !== false && !sec.skipped && entriesBySection[sec.id].map((en, exIdx) => {
             const last = lastSessionFor(client, en.name);
             const lastWeek = lastWeekBest(client, en.name, weekNumber);
-            const inferredPoolKey = en.target.rotatingPool || (sec.type === "strength" && exIdx === 0 ? (day.label === "1" ? "meLowerPool" : day.label === "2" ? "meUpperPool" : null) : null);
+            // Only an exercise that actually declares a pool gets swap options.
+            // Inferring one from position meant an accessory in the second
+            // strength section was offered the max-effort pool.
+            const inferredPoolKey = en.target.rotatingPool || null;
             const poolOptions = inferredPoolKey ? (client.program.conjugate?.[inferredPoolKey] || []) : [];
             const displayName = en.name || poolOptions[0]?.name || "Exercise unavailable";
             const filledSetCount = en.sets.filter((s) => (needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "")).length;
@@ -6937,7 +7072,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   {sec.type === "conditioning" ? (
                     <ConditioningPlan target={en.target} name={displayName} />
                   ) : (
-                    <div className="log-exercise-target">Target: {prescriptionText(en.target.sets, en.target.reps)} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
+                    <div className="log-exercise-target">Target: {prescriptionText(en.target.sets, en.target.reps)} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— RPE ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
                   )}
                   {en.target.tempo ? <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{TEMPO_LEGEND}</div> : null}
                   {en.target.injuryNote && (
@@ -6946,9 +7081,22 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                       {en.target.injuryNote}
                     </div>
                   )}
-                  {en.target.rest && <div className="rest-note-static">Rest: {en.target.rest}</div>}
-                  {sec.type !== "conditioning" && en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
-                  {sec.type !== "conditioning" && en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
+                  {en.target.rest && (
+                    restSecondsFrom(en.target.rest)
+                      ? <button type="button" className="rest-note-btn"
+                          onClick={() => restTimer.start(restSecondsFrom(en.target.rest))}>
+                          Rest: {en.target.rest} · tap to time it
+                        </button>
+                      : <div className="rest-note-static">Rest: {en.target.rest}</div>
+                  )}
+                  {sec.type !== "conditioning" && (en.target.purpose || en.target.cues) && (
+                    <details className="coaching-notes">
+                      <summary>Coaching notes</summary>
+                      {en.target.purpose && <div className="log-exercise-cue">{en.target.purpose}</div>}
+                      {en.target.cues && <div className="log-exercise-cue" style={{ marginTop: 6 }}>{en.target.cues}</div>}
+                    </details>
+                  )}
+                  {sec.type === "conditioning" && en.target.cues && <div className="log-exercise-cue">{en.target.cues}</div>}
                   {lastWeek ? (
                     <div className="last-logged">Last week, heaviest: {needsWeight(displayName) ? `${lastWeek.weight} pounds × ` : ""}{lastWeek.reps} {unitFor(lastWeek.reps, displayName, en.target.reps)}</div>
                   ) : (
@@ -7789,7 +7937,7 @@ function HistoryTab({ client, onPersist }) {
             return (
               <div key={key} className="schedule-row">
                 <div className="schedule-day">{label}</div>
-                <div className={`schedule-detail ${isRestDay ? "off" : ""}`}>{activities.map((a, i) => <div key={i}>{a}</div>)}</div>
+                <div className={`schedule-detail ${isRestDay ? "off" : ""}`}>{activities.map((a, i) => <div key={`${key}-${i}`}>{a}</div>)}</div>
               </div>
             );
           })}
@@ -8263,12 +8411,14 @@ function GlobalStyle() {
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
       .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#f7f8f9; --card:#ffffff; --border:#e3e5e8; --field-border:#888e97; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#7d6f00; }
+      .app-shell[data-theme="light"] { --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#888e97; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#7d6f00; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
       * { box-sizing: border-box; }
-      .scroll-area { flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+      .offline-banner { background: var(--amber); color: var(--bg); font-size: 12.5px; font-weight: 600;
+        padding: 8px 16px; text-align: center; flex-shrink: 0; }
+      .scroll-area { overscroll-behavior-y: contain; flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
       .pad { padding: 16px; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
       .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -8421,7 +8571,7 @@ function GlobalStyle() {
       .stat-chip-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
       .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
       .card-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
-      .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text-dim); }
+      .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
       /* Form fields need a 3:1 edge against their background. --border is 1.4:1,
@@ -8541,7 +8691,7 @@ function GlobalStyle() {
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
-      .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 0; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
+      .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 2px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
       .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
       .pr-line { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 4px 0; }
@@ -8551,7 +8701,7 @@ function GlobalStyle() {
       .slider-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       .bw-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; }
-      .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 14px; text-align: right; }
+      .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 16px; text-align: right; }
       .sig-block { margin-top: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; }
       .sig-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }
       .sig-input { width: 100%; box-sizing: border-box; background: transparent; border: none; outline: none; color: var(--text); font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; padding: 0 2px 6px; min-height: 48px; }
@@ -8569,7 +8719,7 @@ function GlobalStyle() {
       .modal-overlay.fullscreen .modal-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
       .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px; }
       .modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 16px; flex: 1; }
-      .modal-content { padding: 16px; overflow-y: auto; flex: 1; }
+      .modal-content { overscroll-behavior-y: contain; padding: 16px; overflow-y: auto; flex: 1; }
       .progress-circle { position: relative; width: 42px; height: 42px; }
       .progress-circle-arc { stroke: var(--accent); transition: stroke-dashoffset 0.25s; }
       .progress-circle.amber .progress-circle-arc { stroke: var(--amber); }
@@ -8590,10 +8740,22 @@ function GlobalStyle() {
       .section-ex-block.ss-b::before { content: ""; position: absolute; top: 0; left: 14px; right: 14px; height: 1px; background: var(--border); }
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
-      .rest-note-static { font-size: 13px; color: var(--info); margin-top: 6px; font-weight: 600; }
+      .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
+      .rest-note-btn { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; background: var(--bg);
+        border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; min-height: 40px; cursor: pointer; text-align: left; }
+      .rest-note-btn:hover { border-color: var(--accent); color: var(--text); }
+      .rest-countdown { font-family: 'Oswald', sans-serif; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
+        background: var(--accent); color: var(--accent-text); border: none; border-radius: 999px; padding: 8px 14px;
+        min-height: 40px; min-width: 64px; cursor: pointer; }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
       .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 10px; margin: -4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
+      .coaching-notes { margin-top: 8px; }
+      .coaching-notes > summary { font-size: 12.5px; color: var(--text-dim); cursor: pointer; padding: 6px 0; min-height: 32px;
+        list-style: none; font-weight: 600; letter-spacing: 0.02em; }
+      .coaching-notes > summary::-webkit-details-marker { display: none; }
+      .coaching-notes > summary::before { content: "▸ "; display: inline-block; transition: transform 0.15s; }
+      .coaching-notes[open] > summary::before { content: "▾ "; }
       .log-exercise-cue { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-style: normal; line-height: 1.5; padding-top: 6px; border-top: 1px dashed var(--border); }
       .ex-name-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .recommended-tag { font-size: 12px; color: var(--green); border: 1px solid var(--green); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
@@ -8611,7 +8773,7 @@ function GlobalStyle() {
       .set-pr.flagged { background: var(--amber); border-color: var(--amber); color: var(--bg); }
       .sub-row { display: flex; flex-wrap: wrap; margin-top: 8px; gap: 6px; }
       .sub-pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
-      .sub-pill { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12px; padding: 6px 11px; cursor: pointer; }
+      .sub-pill { min-height: 44px; display: inline-flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12.5px; padding: 6px 14px; cursor: pointer; }
       .sub-pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
       .section-header { flex: 1; min-width: 0; background: none; border: none; color: var(--text); display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 8px 0; }
       .section-header-row { display: flex; align-items: center; gap: 4px; }
@@ -8628,14 +8790,14 @@ function GlobalStyle() {
       .set-grid-header { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.02em; }
       .set-grid-row { margin-bottom: 6px; }
       .set-num { font-size: 13px; color: var(--text-dim); }
-      .set-grid-row input { background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px 4px; min-height: 44px; font-size: 16px; font-weight: 700; width: 100%; text-align: center; }
+      .set-grid-row input { background: var(--bg); border: 1.5px solid var(--field-border); border-radius: 8px; color: var(--text); padding: 12px 4px; min-height: 44px; font-size: 16px; font-weight: 700; width: 100%; text-align: center; }
       .set-grid-row input:focus { border-color: var(--accent); outline: none; }
       .set-grid-row input[type="number"]::-webkit-outer-spin-button,
       .set-grid-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       .set-grid-row input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
       .set-grid-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .set-grid-row input:disabled, .set-grid-row input[readonly] { opacity: 0.55; background: var(--card); cursor: default; font-weight: 600; }
-      .notes-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px; font-size: 14px; font-family: inherit; resize: vertical; }
+      .notes-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); padding: 10px; font-size: 16px; font-family: inherit; resize: vertical; }
       .finish-summary { display: flex; flex-direction: column; gap: 12px; align-items: stretch; padding-top: 10px; }
       .finish-stat { text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
       .finish-stat-value { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 30px; color: var(--accent); }
@@ -8657,12 +8819,14 @@ function GlobalStyle() {
       .day-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
       .day-badge { background: var(--accent); color: var(--accent-text); font-weight: 800; font-size: 12px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
       .day-name { font-weight: 600; font-size: 14px; flex: 1; }
-      .program-ex-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-top: 1px solid var(--border); gap: 10px; }
+      .program-ex-row { display: grid; grid-template-columns: 1fr minmax(96px, 38%); align-items: baseline; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--border); gap: 10px; }
+      .program-ex-row > :first-child { min-width: 0; overflow-wrap: anywhere; }
+      .program-ex-row > :last-child { text-align: right; min-width: 0; font-variant-numeric: tabular-nums; }
       .program-ex-row:first-of-type { border-top: none; }
       .edit-ex-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
       .edit-ex-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
       .edit-ex-row.four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-      .edit-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 13.5px; }
+      .edit-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 16px; }
       .edit-input:disabled { opacity: 0.6; }
       .wide-input { flex: 1; }
       .labeled-input { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 12px; }
