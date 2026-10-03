@@ -1155,12 +1155,35 @@ function resolveWarmupBlocks(blocks, opts, isDeload) {
   }).filter((b) => (b.items || []).length);
 }
 
+// Three sets of a broad jump at RIR 5 is a primer, not what the day is about.
+// It lives in a "power" section at the top of every Program B day, so taking the
+// first strength-or-power exercise named every one of those days after its
+// primer — the screen said "Day 1 — Broad Jump" above a squat and bench session.
+// Primers, jumps, throws and agility drills are all preparation for the lift
+// that follows, so none of them can be the thing the day is called.
+const PRIMER_QUALITIES = /Neuromuscular|Rotational Power|Alactic|Agility|Movement Quality/i;
+function isPrimerSection(sec) {
+  return /primer|prep|warm/i.test(sec.name || "");
+}
 function primaryLiftName(day, weekNumber, program, phase, opts) {
-  for (const sec of day.sections) {
-    if (sec.type === "strength" || sec.type === "power") {
-      const first = sec.exercises[0];
-      if (first) return resolveExercise(first, weekNumber, program, phase, opts).name;
-    }
+  const named = (sec) => {
+    const first = (sec.exercises || [])[0];
+    if (!first) return null;
+    const resolved = resolveExercise(first, weekNumber, program, phase, opts);
+    return PRIMER_QUALITIES.test(resolved.quality || "") ? null : resolved.name;
+  };
+  // A real strength section first: the max-effort lift in Program A, the main
+  // barbell pair in Program B.
+  for (const sec of day.sections || []) {
+    if (sec.type !== "strength" || isPrimerSection(sec)) continue;
+    const name = named(sec);
+    if (name) return name;
+  }
+  // Then a power section, for a day whose main work IS the Dynamic Effort lift.
+  for (const sec of day.sections || []) {
+    if (sec.type !== "power" || isPrimerSection(sec)) continue;
+    const name = named(sec);
+    if (name) return name;
   }
   return day.name;
 }
@@ -1168,7 +1191,10 @@ function resolveOptsFor(client) {
   return { blockNumber: client.blockNumber || 1, excludedExercises: client.excludedExercises || [], injuryAreas: client.injuryAreas || [] };
 }
 function sectionHeadline(resolvedSec) {
-  if ((resolvedSec.type === "strength" || resolvedSec.type === "power") && resolvedSec.exercises[0]) {
+  if ((resolvedSec.type === "strength" || resolvedSec.type === "power")
+      && resolvedSec.exercises[0]
+      && !isPrimerSection(resolvedSec)
+      && !PRIMER_QUALITIES.test(resolvedSec.exercises[0].quality || "")) {
     return resolvedSec.exercises[0].name;
   }
   return resolvedSec.name;
