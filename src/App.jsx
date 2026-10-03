@@ -2429,6 +2429,14 @@ function blankProgram(name) {
 const SCHEDULE_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
 const REST_DAY = "Rest Day";
 const SCHEDULE_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ", "Strength/Conditioning", REST_DAY];
+// Both programs are written for three lifting sessions a week. Picking fewer
+// means running a three-day program on two days, which is the kind of thing that
+// looks like the program failing rather than the schedule being wrong.
+const STRENGTH_ACTIVITY = "Strength/Conditioning";
+const REQUIRED_STRENGTH_DAYS = 3;
+function strengthDayCount(schedule) {
+  return SCHEDULE_DAYS.filter(([key]) => (schedule?.[key] || []).includes(STRENGTH_ACTIVITY)).length;
+}
 function defaultWeeklySchedule() {
   const blank = {};
   SCHEDULE_DAYS.forEach(([key]) => { blank[key] = []; });
@@ -4669,7 +4677,9 @@ function OnboardingScreen({ onSubmit }) {
   const [profilePicture, setProfilePicture] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
   const [picError, setPicError] = useState("");
-  const canSubmit = firstName.trim() && lastName.trim() && weight;
+  const strengthDays = strengthDayCount(schedule);
+  const hasEnoughStrengthDays = strengthDays >= REQUIRED_STRENGTH_DAYS;
+  const canSubmit = firstName.trim() && lastName.trim() && weight && hasEnoughStrengthDays;
   const handlePictureUpload = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -4756,8 +4766,13 @@ function OnboardingScreen({ onSubmit }) {
         </select>
       </label>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. You can change this any time in Settings.</p>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Pick <b>at least three Strength/Conditioning days</b> — both programs are written for three sessions a week, and running one on two days is the most common way it stops working. Then tap whatever else you do each day: Low Intensity BJJ, High Intensity BJJ, any combination, or leave a day blank. You can change this any time in Settings.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
+      <div className={`schedule-requirement ${hasEnoughStrengthDays ? "met" : ""}`} role="status">
+        {hasEnoughStrengthDays
+          ? `${strengthDays} strength days selected — you're set.`
+          : `${strengthDays} of ${REQUIRED_STRENGTH_DAYS} strength days selected. Pick ${REQUIRED_STRENGTH_DAYS - strengthDays} more to continue.`}
+      </div>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
         The speed-work sets are prescribed as a percentage of your one-rep max on the bench press and the trap bar deadlift. You do not need to go test either one — take your best recent heavy set of three to five reps and add about fifteen percent, and that is close enough to start. Week 8 is a good point to re-estimate, because by then the original number will be stale and the speed work will have drifted light.
@@ -4781,6 +4796,11 @@ function OnboardingScreen({ onSubmit }) {
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
       <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
+      {!hasEnoughStrengthDays && (firstName.trim() && lastName.trim() && weight) && (
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0, color: "var(--amber)" }}>
+          Go back up to your weekly schedule and pick {REQUIRED_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {REQUIRED_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start.
+        </p>
+      )}
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
         onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver })}>
         Get started
@@ -5611,6 +5631,11 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
+      {strengthDayCount(schedule) < REQUIRED_STRENGTH_DAYS && (
+        <div className="schedule-requirement" role="status">
+          {strengthDayCount(schedule)} of {REQUIRED_STRENGTH_DAYS} Strength/Conditioning days selected. Your program is written for three a week — you can save fewer, but the plan assumes three.
+        </div>
+      )}
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
       {isCoach && (
@@ -8526,6 +8551,9 @@ function GlobalStyle() {
       .schedule-edit-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
       .schedule-edit-day { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px; }
       .schedule-edit-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+      .schedule-requirement { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+        background: var(--card); border: 1px solid var(--amber); color: var(--amber); }
+      .schedule-requirement.met { border-color: var(--green); color: var(--green); }
       .schedule-chip {
         flex: 1 1 auto; min-width: 0; background: var(--bg); border: 1.5px solid var(--border); border-radius: 999px;
         padding: 9px 13px; min-height: 40px; color: var(--text-dim); font-family: inherit; font-size: 12.5px;
