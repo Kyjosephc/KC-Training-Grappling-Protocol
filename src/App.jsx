@@ -1065,11 +1065,15 @@ function positionAtIndex(program, index) {
 
 /* ============================== READINESS-BASED ADJUSTMENT ============================== */
 
-function adjustSectionsForReadiness(sections, readinessEntry) {
-  if (!readinessEntry) return { sections, adjustedNote: null };
-  const color = readinessEntry.color;
-  const bjjHard = !!readinessEntry.bjjHard;
+function adjustSectionsForReadiness(sections, readinessEntry, trend) {
+  if (!readinessEntry && !trend) return { sections, adjustedNote: null };
+  const entry = readinessEntry || {};
+  // A pattern outranks a single morning. Three below-par check-ins in the last
+  // five means today runs as a low-readiness day whatever was scored today.
+  const color = trend ? "RED" : entry.color;
+  const bjjHard = !!entry.bjjHard;
   const notes = [];
+  if (trend) notes.push(trend.note);
 
   const adjusted = sections.map((sec) => {
     let exs = sec.exercises;
@@ -1078,7 +1082,13 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     // the last thing a beaten-up athlete should do, and this block was being
     // deleted on exactly the day it mattered most.
     if (color === "RED" && sec.type === "arms_core") {
-      return { ...sec, exercises: [], skipped: true };
+      const keep = (sec.exercises || []).filter((e) => IS_TRUNK_WORK.test(`${e.name} ${e.quality || ""}`));
+      if (!keep.length) return { ...sec, exercises: [], skipped: true };
+      return { ...sec, exercises: keep.map((e) => ({
+        ...e,
+        sets: Math.max(1, Math.round((e.sets || 2) * 0.5)),
+        cues: `${e.cues || ""} Half the sets today. The arm work is gone — this is trunk work and it is worth keeping even on a bad day.`.trim(),
+      })) };
     }
     // Durability — neck, adductors, tibialis — costs almost no fatigue and is
     // the most protective work in the session. This athlete is still rolling
@@ -2792,6 +2802,26 @@ function classifyReadiness(r) {
   if (score >= 3) return "GREEN";
   return "YELLOW";
 }
+// A single day's check-in says how today feels. A run of them says something the
+// single day cannot, and the phase objective promises "any early signs of
+// overtraining get caught quickly" — which a stateless classifier cannot do.
+// Three below-par days in the last five is the point where the pattern is worth
+// acting on rather than riding out.
+const READINESS_TREND_WINDOW = 5;
+const READINESS_TREND_TRIGGER = 3;
+function readinessTrend(readiness, today) {
+  const entries = Object.values(readiness || {})
+    .filter((r) => r && r.date && r.date <= today)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, READINESS_TREND_WINDOW);
+  if (entries.length < READINESS_TREND_WINDOW) return null;
+  const belowPar = entries.filter((r) => (r.color || classifyReadiness(r)) !== "GREEN").length;
+  if (belowPar < READINESS_TREND_TRIGGER) return null;
+  return {
+    belowPar,
+    note: `${belowPar} of your last ${entries.length} check-ins came back below par. One rough day is noise; this is a pattern, and it is the thing the check-in exists to catch. Today's session is treated as a low-readiness day regardless of what you scored this morning. If next week looks the same, take the deload early rather than pushing into it.`,
+  };
+}
 const READINESS_COPY = {
   GREEN: { detail: "Good to go — today's session runs exactly as written.", color: "var(--green)", textColor: "var(--bg)" },
   YELLOW: { detail: "You flagged a rough night, so today runs a notch back: a little lighter, one more rep left in the tank, less arm and core filler. Your neck and adductor work stays in. This is the session doing its job, not you failing a test.", color: "var(--amber)", textColor: "var(--bg)" },
@@ -2858,6 +2888,15 @@ const TEMPO_LEGEND = "Tempo is three numbers — for example 3/0/1. The first is
 // one, the written rule below is what the athlete gets.
 
 const TAPER_DAYS = 10;
+// How long after a competition the program stays backed off. A multi-match day
+// is the single hardest thing an athlete does all cycle, and before this the
+// full session came straight back the next morning — in the peak block that can
+// be a max-effort day with a true top single.
+const POST_COMP_DAYS = 4;
+// Trunk work, as distinct from arm isolation. Both live in the same section, so
+// without this a bad day deleted the only anti-rotation and anti-extension work
+// in the week along with the curls.
+const IS_TRUNK_WORK = /pallof|plank|roll ?out|leg raise|carry|core|trunk|anti-rotation|landmine.*hold|plate lift/i;
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -2869,7 +2908,31 @@ function daysUntil(dateStr) {
 // Applied on top of the readiness adjustment, so a taper and a rough day stack
 // rather than one overwriting the other.
 function applyTaper(sections, daysOut) {
-  if (daysOut == null || daysOut < 0 || daysOut > TAPER_DAYS) return { sections, taperNote: null };
+  // The days AFTER the date. daysOut goes negative once the competition has
+  // passed, and the program used to hand back the full session immediately.
+  if (daysOut != null && daysOut < 0) {
+    const since = -daysOut;
+    if (since > POST_COMP_DAYS) return { sections, taperNote: null };
+    return {
+      sections: sections.map((sec) => {
+        if (sec.type === "strength" || sec.type === "power" || sec.type === "agility") {
+          return { ...sec, exercises: (sec.exercises || []).map((e) => ({
+            ...e,
+            sets: Math.max(1, Math.round((e.sets || 3) * 0.5)),
+            rir: Math.max(Number(e.rir) || 0, 4),
+            reps: /down to 1|top single|working sets/i.test(String(e.reps)) ? "light doubles and triples, nothing close to a max" : e.reps,
+            perSetTargets: e.perSetTargets ? e.perSetTargets.slice(0, Math.max(1, Math.round((e.sets || 3) * 0.5)))
+              .map((t) => ({ ...t, rir: Math.max(t.rir, 4), pct1rm: t.pct1rm ? Math.min(t.pct1rm, 60) : t.pct1rm })) : e.perSetTargets,
+            pct1rmFlat: e.pct1rmFlat ? Math.min(e.pct1rmFlat, 60) : e.pct1rmFlat,
+            cues: `${e.cues || ""} You competed ${since === 1 ? "yesterday" : `${since} days ago`}. Light and easy this week — no maxes, no speed work worth the name, nothing to prove.`.trim(),
+          })) };
+        }
+        return sec;
+      }),
+      taperNote: `You competed ${since === 1 ? "yesterday" : `${since} days ago`}. The next ${POST_COMP_DAYS - since + 1} day${POST_COMP_DAYS - since ? "s are" : " is"} deliberately light — a competition day is the hardest thing you do all cycle and it is worth recovering from properly. Durability and easy aerobic work stay, because those are what you recover with.`,
+    };
+  }
+  if (daysOut == null || daysOut > TAPER_DAYS) return { sections, taperNote: null };
 
   // Competition day. The note used to say nothing in the gym helps you while the
   // screen still listed a session underneath it — so the session is actually
@@ -5920,7 +5983,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
   const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
   const shape = useMemo(() => sessionShape(resolvedRaw), [resolvedRaw]);
-  const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, isCurrent]);
+  const readinessPattern = useMemo(() => (isCurrent ? readinessTrend(client.readiness, today) : null), [client.readiness, today, isCurrent]);
+  const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday, readinessPattern) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, readinessPattern, isCurrent]);
   // A taper and a rough day stack rather than one overriding the other.
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
   const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
@@ -6461,12 +6525,13 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   // full untapered session. On competition morning that meant a card saying to
   // rest sitting above a live button that loaded a true one-rep-max attempt.
   const daysToComp = daysUntil(client.competitionDate);
+  const readinessPattern = useMemo(() => readinessTrend(client.readiness, todayStr()), [client.readiness]);
   const { sections: resolvedSections, adjustedNote } = useMemo(() => {
-    const eased = adjustSectionsForReadiness(rawResolvedSections, readinessToday);
+    const eased = adjustSectionsForReadiness(rawResolvedSections, readinessToday, readinessPattern);
     const tapered = applyTaper(eased.sections, daysToComp);
     const notes = [eased.adjustedNote, tapered.taperNote].filter(Boolean);
     return { sections: tapered.sections, adjustedNote: notes.length ? notes.join(" ") : null };
-  }, [rawResolvedSections, readinessToday, daysToComp]);
+  }, [rawResolvedSections, readinessToday, readinessPattern, daysToComp]);
   const mainLift = primaryLiftName(day, weekNumber, client.program, phase, resolveOptsFor(client));
 
   const buildFreshEntries = useCallback(() => {
