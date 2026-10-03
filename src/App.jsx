@@ -545,6 +545,29 @@ function sleepAdvisory(client) {
   return "Your last few check-ins have sleep running low. Of everything this app measures, sleep is the one with the most leverage on how you recover and how quickly technique sticks — more than anything you could change in the gym this week. What reliably helps: the same bed and wake time every day, weekends included; a properly dark, cool room; and last caffeine by early afternoon. If sessions have been feeling harder than the numbers say they should, this is usually the reason.";
 }
 
+// A falling bodyweight is one of the most common reasons a check-in reads badly
+// week after week, and the app was logging the bodyweight without ever joining
+// those two facts up.
+function bodyweightAdvisory(client, daysToComp) {
+  const log = (client.bodyweightLog || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (log.length < 3) return null;
+  const latest = log[log.length - 1];
+  const past = log.filter((e) => {
+    const gap = (new Date(latest.date + "T00:00:00") - new Date(e.date + "T00:00:00")) / 86400000;
+    return gap >= 14 && gap <= 45;
+  });
+  if (!past.length) return null;
+  const was = Number(past[0].weight);
+  const now = Number(latest.weight);
+  if (!was || !now) return null;
+  const pct = ((was - now) / was) * 100;
+  if (pct < 3) return null;
+  const cutting = daysToComp != null && daysToComp >= 0 && daysToComp <= 21;
+  return cutting
+    ? `You are down about ${pct.toFixed(1)} percent of your bodyweight over the last few weeks with a competition coming up. That is a real cut, and the main thing worth knowing is that the lifting is not what gets you to weight — it is what keeps the strength you already built while the weight comes off. So keep the loads heavy and let the volume fall, which is exactly what the taper is already doing. Expect the top sets to feel heavier than the numbers say; that is the cut, not a loss of strength. If a check-in reads badly this week, it is almost certainly this rather than the training. Anyone cutting more than about five percent should be doing it with someone who knows your sport and your history, not from an app.`
+    : `You are down about ${pct.toFixed(1)} percent of your bodyweight over the last few weeks with nothing on the calendar. If that is deliberate, fine — but it is worth saying that a falling bodyweight is one of the most common reasons check-ins start reading badly, and it looks the same from the inside as overtraining does. If it is not deliberate, eating more is a faster fix than training less.`;
+}
+
 // There is no service worker here, so nothing tells an installed home-screen
 // copy that a newer build exists — it will keep running whatever index.html it
 // cached until the browser decides to revalidate, which on iOS can be days.
@@ -626,6 +649,17 @@ function upsertBodyweight(log, date, weight) {
   const filtered = (log || []).filter((e) => e.date !== date);
   filtered.push({ date, weight });
   return filtered.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+// "6 sets of working sets of 3 down to 1" and "1 sets of 3 build-up runs" both
+// came from blindly gluing a set count onto a reps string that already read as a
+// sentence. If the reps text already says "sets", or there is only one set, the
+// count is noise.
+function prescriptionText(sets, reps) {
+  const r = String(reps ?? "").trim();
+  const n = Number(sets);
+  if (!r) return n ? `${n} set${n === 1 ? "" : "s"}` : "";
+  if (!n || n === 1 || /\bsets?\b/i.test(r)) return r;
+  return `${n} sets of ${r}`;
 }
 function rpeFromRir(rir) {
   const n = Number(rir);
@@ -1587,7 +1621,7 @@ const meLowerPool = [
   // put a true good-morning single seven days out from competing.
   { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", maxTriple: true, videoUrl: "" },
   { name: "Zercher Squat", notes: "Heavy anterior-loaded trunk bracing — carries over to grappling posture under load", videoUrl: "" },
-  { name: "Trap Bar Deadlift", notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single on your own", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
+  { name: "Trap Bar Deadlift", maxTriple: true, notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single on your own", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
 ];
 const meUpperPool = [
   { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "https://www.youtube.com/watch?v=FiQUzPtS90E" },
@@ -1715,7 +1749,7 @@ const conjugateProgram = {
                 purpose: "Everything else in the gym is a shaped handle. This is a resisting, badly-balanced load held against your chest, which is the body lock, the double-leg finish, and carrying somebody. It also loads breathing under chest compression, which a farmer carry cannot.",
                 cues: "Hug it high on the chest, elbows underneath rather than out to the sides, ribs down. Short quick steps. Breathe shallow and often — you will not get a full breath and that is part of the exercise. If it slides below your sternum, set it down and reset rather than fighting it.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
               ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
@@ -1826,8 +1860,8 @@ const conjugateProgram = {
     deloadWeekPhase(8, "the intensification phase"),
     {
       id: uid(), name: "Conjugate Peak / Compete Prep", weekStart: 9, weekEnd: 11,
-      objective: "Accessory volume comes down and what stays is chosen for a reason — the priority is a heavy, fresh Max Effort top set and fast Dynamic Effort work while your grappling volume is at its highest. The lower-body day keeps two light Romanian Deadlifts because you are still sprinting every week.",
-      intensityNote: "Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max. A few movements appear for the first time in this block — neck curls, hanging leg raises and a standalone Pallof press — all of them low-fatigue work chosen because they cost nothing and protect something.",
+      objective: "Accessory volume comes down and what stays is chosen for a reason — the priority is a heavy, fresh Max Effort top set and fast Dynamic Effort work while your grappling volume is at its highest. The lower-body day keeps two light Romanian Deadlifts because you are still sprinting every week.\n\nPut your competition date in your profile. From ten days out the program tapers itself: volume comes off week by week while the weights stay heavy, the Max Effort ramp turns into one crisp opener of two or three reps at around 85 to 90 percent rather than a max attempt, speed work drops to a couple of sets, and competition day itself is cleared entirely. Build-up sets are never taken away — a taper removes working sets, never the sets that make the working set safe. Without a date set, this block runs true Max Effort singles through week 11, which is the right thing for somebody not competing and the wrong thing for somebody who is.",
+      intensityNote: "Dynamic Effort moves up to 60 to 65 percent of your One-Rep Max — and on the jump variations that means 30 percent of your trap bar max, not 60, because a jump you cannot leave the floor with is not a jump. A few movements appear for the first time in this block — neck curls, hanging leg raises and a standalone Pallof press — all of them low-fatigue work chosen because they cost nothing and protect something. The heavy hinges and the dip stop at a triple rather than a single; a true single on a loaded hinge is the one place in this rotation where the risk stops being worth the adaptation.",
       dePercent: "60 to 65%",
       days: [
         { id: uid(), label: "1", name: "Max Effort Lower",
@@ -1926,6 +1960,14 @@ const conjugateProgram = {
 function takesPercentTarget(name, reps) {
   if (!isLoadableReps(reps)) return false;
   if (!needsWeight(name)) return false;
+  // Prehab and machine work. A percentage on end-range cuff work is an
+  // invitation to load it, directly against the instruction on the exercise
+  // beside it that two to five kilos is plenty.
+  if (/scarecrow|y, ?t,? ?w|abduction|adduction|machine|medicine ball|plate lift|band|clamshell|terminal knee/i.test(name || "")) return false;
+  // Unilateral work. There is no single-leg or single-arm one-rep max to take a
+  // percentage of, so the number printed is a percentage of a lift the athlete
+  // is not doing.
+  if (/single leg|single arm|split stance|each side|offset|bulgarian|renegade/i.test(name || "")) return false;
   return !/\b(hold|plank|bridge|carry|grip|neck|pull-through|roll out)\b/i.test(name || "");
 }
 // A lift written as "4 sets of 6" with 80 percent printed next to it is an
@@ -2035,7 +2077,7 @@ function buildProgramCContent() {
     1, 3,
     "Foundational strength block. Same movements and the same sets and reps all three weeks — the load is what climbs. Week 1 sits at Rate of Perceived Exertion 8, two good reps left in the tank. Weeks 2 and 3 push to 9, one rep left. Add weight whenever last week's load leaves more in you than that.",
     [
-      { name: "Day 1", intent: "Squat, bench, and row pattern with isometric neck work to finish.", sections: [
+      { name: "Squat & Bench — Strength Base", intent: "Squat, bench, and row pattern with isometric neck work to finish.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Back Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Side Plank", { sets: 4, reps: "20 seconds each side", rpe: 7 }),
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
@@ -2044,7 +2086,7 @@ function buildProgramCContent() {
           ...ssPair(5, "Hip Abduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }),
         ]},
       ]},
-      { name: "Day 2", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
+      { name: "Zercher & Overhead — Grip & Trunk", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Zercher Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Supine Hamstring Single Leg Glute Bridge (ball or slides)", { sets: 4, reps: "8 each side", tempo: "2/0/X", rpe: 8 }),
           ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
@@ -2054,7 +2096,7 @@ function buildProgramCContent() {
           ssSingle(5, "Rice Bucket Grip Drills", { sets: 2, reps: "20 seconds each direction", rpe: 6 }, "Grip"),
         ]},
       ]},
-      { name: "Day 3", intent: "Single-leg hinge and pressing day, finishing on a loaded carry for anti-lateral-flexion core strength.", sections: [
+      { name: "Single-Leg Hinge & Carries", intent: "Single-leg hinge and pressing day, finishing on a loaded carry for anti-lateral-flexion core strength.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Single Leg Romanian Deadlift", { sets: 3, reps: "6 each side", tempo: "2/0/1", rpe: 8 }, "Side Plank", { sets: 3, reps: "20 seconds each side", rpe: 7 }),
           ...ssPair(2, "Weighted Push-Ups", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Weighted Scarecrows", { sets: 3, reps: "8, controlled", rpe: 7 }),
@@ -2073,7 +2115,7 @@ function buildProgramCContent() {
     5, 7,
     "Different main lifts than the first block on purpose — trap bar deadlift and front squat replace back squat and Zercher, keeping the same superset structure so the movement pattern stays fresh while total training stress builds. Effort follows the same pattern as the first block: Rate of Perceived Exertion 8 in week 1, then 9 in weeks 2 and 3, with one good rep always left in the tank.",
     [
-      { name: "Day 1", intent: "Trap bar deadlift and floor press pattern, finishing on a pull-up hold and neck work.", sections: [
+      { name: "Trap Bar & Floor Press", intent: "Trap bar deadlift and floor press pattern, finishing on a pull-up hold and neck work.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Trap Bar Deadlift", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Banded Clamshell", { sets: 4, reps: "8 each side", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
@@ -2082,7 +2124,7 @@ function buildProgramCContent() {
           ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
         ]},
       ]},
-      { name: "Day 2", intent: "Front squat and landmine press pattern.", sections: [
+      { name: "Front Squat & Landmine Press", intent: "Front squat and landmine press pattern.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Front Squat", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 4, reps: "10 each side", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(2, "Landmine Punch Press", { sets: 3, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
@@ -2090,7 +2132,7 @@ function buildProgramCContent() {
           ssSingle(4, "Toes to Bar", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 8 }, "Trunk"),
         ]},
       ]},
-      { name: "Day 3", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
+      { name: "Split Squat & Offset Pressing", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Bulgarian Split Squat (rear foot elevated, dumbbells)", { sets: 4, reps: "5 each side", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
@@ -2109,9 +2151,9 @@ function buildProgramCContent() {
   const phase3 = buildProgramCPhase(
     "Strength Speed, Speed Strength, Yielding Strength, Contralateral Stability, Concurrent Aerobic — Weeks 9 to 11",
     9, 11,
-    "The realization block — the lightest week-to-week workload of the program paired with its heaviest loads. Six sets of low reps on the main lift, moved with real intent, with accessory volume deliberately stripped back so the main lifts land on fresh legs rather than on top of the previous two blocks' accumulated fatigue. Hard working sets step down across the program (roughly 59, then 52, then 50) while the loads step up, which is the point: you express the strength you built rather than keep grinding for more. There is one near-maximal hinge a week here, not two — Day 1 carries the heavy triples and Day 3 trains the same pattern at a dose you can recover from. Yielding-strength holds (the static trap bar hold, the single-arm kettlebell hold) train your ability to resist being moved, which is a different and just as important quality for grappling as producing force. Neck work also progresses here: once you have built a base with the isometric holds in earlier blocks, this block moves to the wall hold, where walking your feet further out is how you add load.",
+    "The realization block — the lightest week-to-week workload of the program paired with its heaviest loads. Six sets of low reps on the main lift, moved with real intent, with accessory volume deliberately stripped back so the main lifts land on fresh legs rather than on top of the previous two blocks' accumulated fatigue. Hard working sets step down across the program (roughly 56, then 49, then 47) while the loads step up, which is the point: you express the strength you built rather than keep grinding for more. There is one near-maximal hinge a week here, not two — Day 1 carries the heavy triples and Day 3 trains the same pattern at a dose you can recover from. Yielding-strength holds (the static trap bar hold, the single-arm kettlebell hold) train your ability to resist being moved, which is a different and just as important quality for grappling as producing force. Neck work also progresses here: once you have built a base with the isometric holds in earlier blocks, this block moves to the wall hold, where walking your feet further out is how you add load.",
     [
-      { name: "Day 1", intent: "Split-stance trap bar deadlift for six triples, then supporting single-effort work.", sections: [
+      { name: "Split-Stance Trap Bar — Heavy Triples", intent: "Split-stance trap bar deadlift for six triples, then supporting single-effort work.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
           ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: "6 each side", tempo: "3/1/X", rpe: 7 }),
           ssSingle(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
@@ -2121,7 +2163,7 @@ function buildProgramCContent() {
 
         ]},
       ]},
-      { name: "Day 2", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
+      { name: "Front Squat — Speed Triples", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
           ...ssPair(1, "Front Squat", { sets: 6, reps: "3", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
           ssSingle(2, "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
@@ -2134,7 +2176,7 @@ function buildProgramCContent() {
           ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
       ]},
-      { name: "Day 3", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
+      { name: "Single-Leg Hinge & Contralateral Work", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
           // One near-max hinge a week, not two. Day 1 already carries the heavy
           // triples; this is the same pattern at a dose you can recover from
@@ -2417,7 +2459,7 @@ const WEEKLY_FLOORS = [
     make: () => ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction",
       load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", quality: "Durability",
       purpose: "The neck takes load every single round — in guard, in a scramble, under pressure. Isometric work builds it with no movement through the joint, which is why it can run every week without needing to be backed off.",
-      cues: "Press your hand into your forehead, then each side, then the back of your head. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. Anything that pinches or travels down an arm, stop there." }) },
+      cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in." }) },
   { key: "scap", min: 2, deloadMin: 2, match: /face pull|pull-apart|y, t, w|scarecrow|scapular/i,
     make: () => ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2,
       rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
@@ -2608,7 +2650,7 @@ function buildProgramVariant(variant) {
     base.name = "Offseason Strength Build — Twelve-Week Program (Program B)";
     base.variant = "B";
     base.methodology =
-      "No percentages and no max-effort singles anywhere in this program. Every working set is prescribed by how hard it should feel — Rate of Perceived Exertion — and the load is whatever hits that number for you on the day. Week one of a block sits at RPE 8, which is two reps short of failure; weeks two and three push the same sets and reps toward RPE 9 by adding load. That is the whole progression, and it is why this program works for someone who cannot yet honestly judge a true one-rep max.\n\nThe lifts are paired. Each numbered pair (1A and 1B) is done back to back before you rest, which is what keeps three sessions of this volume inside an hour. Tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives.\n\nWhat separates this from the conjugate programs: no sprinting, no jumping, no agility work, nothing chasing speed. Twelve weeks of structure instead — tendon, scapula, neck, grip, single-leg control, and isometric holds at the joint angles the sport actually loads. It is built for the stretch of the year when there is nothing on the calendar and the job is to come back harder to break.";
+      "No percentages and no max-effort singles anywhere in this program. Every working set is prescribed by how hard it should feel — Rate of Perceived Exertion — and the load is whatever hits that number for you on the day. Week one of a block sits at RPE 8, which is two reps short of failure; weeks two and three push the same sets and reps toward RPE 9 by adding load. That is the whole progression, and it is why this program works for someone who cannot yet honestly judge a true one-rep max.\n\nThe lifts are paired. Each numbered pair (1A and 1B) is done back to back before you rest, which is what keeps three sessions of this volume inside an hour. Tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives.\n\nWhat separates this from the conjugate programs: no sprinting, no agility work, and no max-effort singles. There are three low jumps in the warm-up and one explosive primer to start each session — enough to keep the quality alive, nowhere near enough to be the point of the program. Twelve weeks of structure instead — tendon, scapula, neck, grip, single-leg control, and isometric holds at the joint angles the sport actually loads. It is built for the stretch of the year when there is nothing on the calendar and the job is to come back harder to break.";
     base.objective = "Built directly from a Rate-of-Perceived-Exertion based coaching program — paired supersets, tempo-controlled reps, and RPE targets instead of percentage-of-max ramps. No competition to taper for, so nothing in the final block backs off; the last three weeks simply shift from strength-endurance work to a faster, lower-fatigue speed-strength emphasis.";
     base.coachNote = "";
     base.philosophy = "Every working set below is paired into a numbered superset (1A and 1B, done back to back before resting) and prescribed by Rate of Perceived Exertion rather than a percentage of your max — the number after each exercise is the target RPE for that set. Tempo notation like 2/1/X means 2 seconds lowering the weight, a 1 second pause, then lift as explosively as you can (X).";
@@ -5975,6 +6017,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
   const daysInactive = useMemo(() => daysSinceLastActivity(client), [client]);
   const nudgeMessage = hasEverTrained ? reengagementMessage(daysInactive) : null;
   const sleepNote = useMemo(() => sleepAdvisory(client), [client.readiness]);
+  const bodyweightNote = useMemo(() => bodyweightAdvisory(client, daysUntil(client.competitionDate)), [client.bodyweightLog, client.competitionDate]);
 
   // These must stay above the completion branch below: hook order and count
   // have to be identical on every render of this component.
@@ -6018,6 +6061,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <div className="nudge-card">
           <div className="nudge-card-title">On your sleep</div>
           <p className="muted" style={{ marginBottom: 0 }}>{sleepNote}</p>
+        </div>
+      )}
+      {isCurrent && bodyweightNote && (
+        <div className="nudge-card">
+          <div className="nudge-card-title">On your bodyweight</div>
+          <p className="muted" style={{ marginBottom: 0 }}>{bodyweightNote}</p>
         </div>
       )}
       {isCurrent && nudgeMessage && (
@@ -6888,7 +6937,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   {sec.type === "conditioning" ? (
                     <ConditioningPlan target={en.target} name={displayName} />
                   ) : (
-                    <div className="log-exercise-target">Target: {en.target.sets} sets of {en.target.reps} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
+                    <div className="log-exercise-target">Target: {prescriptionText(en.target.sets, en.target.reps)} {en.target.load ? `— ${en.target.load}` : ""} {en.target.rir !== undefined ? `— Rate of Perceived Exertion ${rpeFromRir(en.target.rir)}` : ""}{en.target.tempo ? ` — Tempo ${en.target.tempo}` : ""}</div>
                   )}
                   {en.target.tempo ? <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{TEMPO_LEGEND}</div> : null}
                   {en.target.injuryNote && (
@@ -7263,7 +7312,7 @@ function ScheduleTab({ client }) {
                             {sec.exercises.map((e, i) => {
                               const fallbackPoolKey = i === 0 && (sec.type === "strength" || sec.type === "power") ? (day.label === "1" ? "meLowerPool" : day.label === "2" ? "meUpperPool" : null) : null;
                               const displayName = e.name || (fallbackPoolKey ? client.program.conjugate?.[fallbackPoolKey]?.[0]?.name : "") || "Exercise";
-                              return <div key={e.id} className="program-ex-row"><span>{displayName}</span><span className="muted">{e.sets} sets of {e.reps}</span></div>;
+                              return <div key={e.id} className="program-ex-row"><span>{displayName}</span><span className="muted">{prescriptionText(e.sets, e.reps)}</span></div>;
                             })}
                           </div>
                         )
@@ -7324,7 +7373,7 @@ function weeklyVolumeFor(phase) {
     const sets = t ? t.filter((x) => !/^(Warm-up|Build)$/.test(x.note || "")).length : (e.sets || 0);
     const q = e.quality || "";
     if (/Conditioning/.test(q)) { row.conditioning += sets; return; }
-    if (/Dynamic Effort|Alactic|Agility|Neuromuscular/.test(q + " " + (e.name || ""))) { row.speed += sets; return; }
+    if (/Dynamic Effort|Alactic|Agility|Neuromuscular|Rotational Power/.test(q + " " + (e.name || ""))) { row.speed += sets; return; }
     if (PREHAB_WORK.test(e.name || "")) {
       // Still counted by pattern below, so the floors remain checkable — just
       // not added to the hard-set total.
@@ -7451,7 +7500,7 @@ function ProgramTab({ client, isCoach, onPersist }) {
                               ? `${poolLabelFor(e.rotatingPool)} — rotates through: ${(client.program.conjugate?.[e.rotatingPool] || []).map((p) => p.name).join(", ")}`
                               : e.name}
                           </span>
-                          <span className="muted">{e.sets} sets of {e.reps}{e.rir !== undefined ? `, Rate of Perceived Exertion ${rpeFromRir(e.rir)}` : ""}</span>
+                          <span className="muted">{prescriptionText(e.sets, e.reps)}{e.rir !== undefined ? ` · RPE ${rpeFromRir(e.rir)}` : ""}</span>
                         </div>
                       ))}
                     </div>
