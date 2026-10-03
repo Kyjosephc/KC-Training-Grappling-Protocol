@@ -17,7 +17,7 @@ const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
-const PROGRAM_PRICE = 20;
+const PROGRAM_PRICE = 15;
 // Promo codes map to a dollar amount off PROGRAM_PRICE. Add more codes here as needed.
 const PROMO_CODES = { INFINITI: 5 };
 
