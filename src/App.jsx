@@ -3078,6 +3078,11 @@ const POST_COMP_DAYS = 4;
 // point where it can still change how hard they roll this week, which is the
 // only reason to say it early at all.
 const TAPER_HEADS_UP_DAYS = 7;
+// Shown in the last week. The app can only taper the barbell, and the barbell is
+// the small half — by this point it is twenty minutes of light work. What decides
+// how fresh somebody walks on is mat volume, which the app never sees. Said in
+// the one week where it changes what a person does.
+const COMPETITION_MAT_GUIDANCE = "The lifting is already cut right back, and it is not the part that makes you tired this week — hard rounds are, and they are also where a tweak seven days out comes from. So do not drop the gym and keep sparring hard, which is the way round most people get this. Keep drilling, flow rolling, positional work and specifics: that is the skill work that genuinely helps now. What comes out is the hard competitive rounds. If you are cutting weight, travelling, or already beat up, talk to your coach rather than deciding it alone.";
 // What the athlete is shown about a competition OUTSIDE the taper window. Inside
 // it the taper note already counts down and says what it is doing, so this stops
 // rather than printing the same thing twice.
@@ -5694,6 +5699,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <p className="muted" style={{ marginBottom: 10 }}>
         Set a date and the last ten days before it taper automatically — volume comes down gradually as the date approaches, intensity stays, no maximal lifting, and competition day itself is left clear. Leave it blank and the program runs as normal.
       </p>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        What the taper cannot do is take anything off the mat. Only the lifting is cut here, and the lifting is the small half — by the final week it is twenty minutes of light work. How fresh somebody walks on is decided by their mat volume, so hard rounds have to come down in that last week too. The app will say so, but it has no way to enforce it.
+      </p>
       <label className="labeled-input">
         <span>Competition date (optional)</span>
         <input type="date" value={client.competitionDate || ""} min={todayStr()}
@@ -6474,6 +6482,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
 
         {pos.day.intent && <div className="intent-box">{pos.day.intent}</div>}
         {tapered.taperNote && <div className="intent-box"><Prose text={tapered.taperNote} /></div>}
+        {isCurrent && daysToComp != null && daysToComp >= 0 && daysToComp <= TAPER_HEADS_UP_DAYS && (
+          <div className="intent-box" style={{ marginTop: 8 }}>
+            <strong>On your mat work this week.</strong> <Prose text={COMPETITION_MAT_GUIDANCE} />
+          </div>
+        )}
         {adjustment.adjustedNote && <div className="adjust-box">{adjustment.adjustedNote}</div>}
 
         <button className="preview-toggle" onClick={() => setShowPreview((s) => !s)}>
