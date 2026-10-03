@@ -2068,37 +2068,42 @@ function buildProgramCContent() {
   const phase3 = buildProgramCPhase(
     "Strength Speed, Speed Strength, Yielding Strength, Contralateral Stability, Concurrent Aerobic — Weeks 9 to 11",
     9, 11,
-    "The realization block — the lightest week-to-week workload of the program paired with its heaviest loads. Six sets of low reps on the main lift, moved with real intent, with accessory volume deliberately stripped back so the main lifts land on fresh legs rather than on top of the previous two blocks' accumulated fatigue. Total sets per week step down across the program (roughly 76, then 72, then 67) while the loads step up, which is the point: you express the strength you built rather than keep grinding for more. Yielding-strength holds (the static trap bar hold, the single-arm kettlebell hold) train your ability to resist being moved, which is a different and just as important quality for grappling as producing force. Neck work also progresses here — once you've built a base with the isometric holds in earlier blocks, this block adds a light weighted bridge, since flat, unprogressed neck work indefinitely stops being real programming.",
+    "The realization block — the lightest week-to-week workload of the program paired with its heaviest loads. Six sets of low reps on the main lift, moved with real intent, with accessory volume deliberately stripped back so the main lifts land on fresh legs rather than on top of the previous two blocks' accumulated fatigue. Hard working sets step down across the program (roughly 59, then 52, then 50) while the loads step up, which is the point: you express the strength you built rather than keep grinding for more. There is one near-maximal hinge a week here, not two — Day 1 carries the heavy triples and Day 3 trains the same pattern at a dose you can recover from. Yielding-strength holds (the static trap bar hold, the single-arm kettlebell hold) train your ability to resist being moved, which is a different and just as important quality for grappling as producing force. Neck work also progresses here: once you have built a base with the isometric holds in earlier blocks, this block moves to the wall hold, where walking your feet further out is how you add load.",
     [
       { name: "Day 1", intent: "Split-stance trap bar deadlift for six triples, then supporting single-effort work.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
-          ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 4, reps: "6 each side", tempo: "3/1/X", rpe: 7 }),
+          ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: "6 each side", tempo: "3/1/X", rpe: 7 }),
           ssSingle(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max — heavy, but a weight you can genuinely stand up with", rpe: 7 }, "Yielding Strength"),
-          ssSingle(5, "Ab Roll Out", { sets: 2, reps: "12", rpe: 7 }, "Trunk"),
-          ssSingle(6, "Wall Neck Hold (feet walked out)", { sets: 3, reps: "20 to 30 seconds per position", rpe: 6 }, "Durability"),
-          ssSingle(7, "Plate Lifts (Around the World)", { sets: 2, reps: "10 each direction", rpe: 7 }, "Core"),
+          ssSingle(5, "Wall Neck Hold (feet walked out)", { sets: 3, reps: "20 to 30 seconds per position", rpe: 6 }, "Durability"),
+
         ]},
       ]},
       { name: "Day 2", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
           ...ssPair(1, "Front Squat", { sets: 6, reps: "3", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
-          ssSingle(2, "Incline Close Grip Bench Press", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
-          ssSingle(3, "Renegade Row", { sets: 4, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(2, "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
+          ssSingle(3, "Renegade Row", { sets: 3, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7 }, "Durability"),
           ssSingle(5, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 6 }, "Core"),
-          ...armSuperset(7, 2),
+          // The arm superset comes out here. In a block whose whole premise is
+          // that the main lifts land on fresh legs, curls are the first thing
+          // that should go and the last thing anyone will miss.
           ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
       ]},
       { name: "Day 3", intent: "Split-stance Romanian deadlift for speed, single-leg and single-arm work throughout for contralateral stability.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
-          ...ssPair(1, "Split Stance Romanian Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "6", tempo: "3/1/1", rpe: 7 }),
+          // One near-max hinge a week, not two. Day 1 already carries the heavy
+          // triples; this is the same pattern at a dose you can recover from
+          // with four to six mat sessions on top of it.
+          ...ssPair(1, "Split Stance Romanian Deadlift", { sets: 3, reps: "6 each side", tempo: "3/0/1", rpe: 7 }, "Valslide Hamstring Curls", { sets: 3, reps: "6", tempo: "3/1/1", rpe: 7 }),
           ssSingle(2, "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 3, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Contralateral Stability"),
           ssSingle(3, "Banded Single Leg Single Arm Row", { sets: 3, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Contralateral Stability"),
           ssSingle(4, "Single Arm Kettlebell Hold", { sets: 2, reps: "one 20 second hold each side", rpe: 8 }, "Yielding Strength"),
-          ssSingle(5, "High Plank Kettlebell Pull-Through", { sets: 2, reps: "8 each side", rpe: 8 }, "Contralateral Stability"),
+          // Three contralateral-stability exercises in one day was one too many
+          // for a block that is supposed to be stripped back.
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
           ex({ name: matchSpecificPool[0].name, rotatingPool: "matchSpecificPool", sets: 1, reps: matchSpecificPool[0].reps, load: "", rir: 1, rest: "none", purpose: "The competition-specific block. Conditioning stops being general here and starts rehearsing the event — a round the length of a real match, a second round after a long rest the way a competition day actually runs, and aerobic power to keep raising the ceiling. Rotates every 2 weeks.", quality: "Conditioning" }),
@@ -2399,7 +2404,11 @@ const WEEKLY_FLOORS = [
       rest: "45 seconds", quality: "Durability",
       purpose: "Adductor strain is the most common soft-tissue injury in grappling, and the adductor is loaded every time you retain guard or defend a pass. The hip pool rotates, so without a floor here a whole block could go by with abduction work and no adductor work at all.",
       cues: "Start with the top knee on the bench rather than the foot — the short lever is plenty hard. Hips stacked and lifted, hold still. Lengthen the lever only once the short one is easy and completely pain-free." }) },
-  { key: "post", min: 5, deloadMin: 0, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
+  // peakMin: the protective reason for this floor is that the athlete is still
+  // sprinting every week. In the peak block the sprinting is already reduced and
+  // the point of the block is freshness, so two maintenance sets is the honest
+  // dose — which is exactly what that phase's own text promises.
+  { key: "post", min: 5, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
       purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
@@ -2414,10 +2423,13 @@ const WEEKLY_FLOORS = [
 function weeklyFloorPass(program) {
   (program.phases || []).forEach((phase) => {
     const isDeload = /deload/i.test(phase.name || "");
+    const isPeak = /peak|compete|realization/i.test(phase.name || "");
     const days = phase.days || [];
     if (!days.length) return;
     WEEKLY_FLOORS.forEach((floor) => {
-      const want = isDeload ? floor.deloadMin : floor.min;
+      const want = isDeload ? floor.deloadMin
+        : isPeak && floor.peakMin !== undefined ? floor.peakMin
+        : floor.min;
       let have = 0;
       days.forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
         if (floor.match.test(e.name || "")) have += e.sets || 0;
