@@ -905,11 +905,18 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
       ? { perSetTargets: meTripleCapSets(), sets: 4, reps: "working sets of 3", rir: 1,
           cues: "Work up in triples to one heavy top set. This lift stops at a triple on purpose — a true single on a loaded hinge is the one place in this rotation where the risk stops being worth the adaptation. Stop the set the moment your back rounds or the bar speed drops." }
       : {};
-    return { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
+    const merged = { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
       rir: chosen.rir !== undefined ? chosen.rir : e.rir,
+      // Whether this rotation is a jump belongs to the exercise the pool landed
+      // on, not to the slot — the slot's flag describes only the pool's first
+      // entry. Falling back to it made every rotation inherit "jump", so a
+      // Speed Box Squat was prescribed at a jump's percentage.
+      deJump: !!chosen.deJump,
+      deMaxLabel: chosen.deMaxLabel || e.deMaxLabel,
       ...capped,
       poolLabel: poolLabelFor(poolKey) };
+    return merged.deWave && !capped.perSetTargets ? applyDeWave(merged, phase) : merged;
   }
   // The phase text promises the effort climbs across a block. Without this the
   // athlete saw the identical target in week 1 and week 3. Capped at one rep in
@@ -919,25 +926,39 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     const waved = Math.max(1, (e.rir === undefined ? 2 : e.rir) - step);
     if (waved !== e.rir) e = { ...e, rir: waved };
   }
-  if (e.deWave) {
-    const pct = phase?.dePercent || "55%";
-    const nums = (pct.match(/\d+/g) || []).map(Number);
-    const pctNum = nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : null;
-    // A jump is not a box squat. Peak power on a loaded jump sits far below the
-    // percentages that are correct for a barbell Dynamic Effort lift, and past
-    // roughly a third of a max the athlete stops leaving the ground and just
-    // absorbs the landing. deJump lifts get their own, much lighter wave.
-    const jumpPct = pctNum === null ? null : pctNum <= 50 ? 20 : pctNum <= 55 ? 25 : 30;
-    const effPct = e.deJump ? jumpPct : pctNum;
-    const maxLabel = e.deMaxLabel || "One-Rep Max";
-    const perSetTargets = effPct ? Array.from({ length: e.sets || 8 }, () => ({ pct1rm: effPct, reps: e.reps, rir: e.rir })) : e.perSetTargets;
-    const loadText = e.deJump
-      ? `${effPct}% of your ${maxLabel} — light enough that you clear the floor on every rep`
-      : `${pct} of your ${maxLabel}, maximal bar speed`;
-    return { ...e, load: loadText, perSetTargets };
-  }
+  if (e.deWave) return applyDeWave(e, phase);
   return withRampSets(e);
 }
+// A jump is not a box squat. Peak power on a loaded jump sits far below the
+// percentages that are correct for a barbell Dynamic Effort lift, and past
+// roughly a third of a max the athlete stops leaving the ground and just
+// absorbs the landing. deJump lifts get their own, much lighter wave.
+//
+// This lives in its own function because every Dynamic Effort lift is also a
+// rotating-pool exercise, and the pool branch returns before the end of
+// resolveExercise. For a long time that meant none of this ran: the athlete was
+// shown 50 to 65 percent of their trap bar max on a jump squat, with a blank
+// load line and a cue telling them to take weight off if they were not clearing
+// the floor. Whether the slot is a jump is a property of the exercise the pool
+// landed on, not of the slot, so it is read after the rotation has been applied.
+function applyDeWave(e, phase) {
+  const pct = phase?.dePercent || "55%";
+  const nums = (pct.match(/\d+/g) || []).map(Number);
+  const pctNum = nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : null;
+  const jumpPct = pctNum === null ? null : pctNum <= 50 ? 20 : pctNum <= 55 ? 25 : 30;
+  const effPct = e.deJump ? jumpPct : pctNum;
+  const maxLabel = e.deMaxLabel || "One-Rep Max";
+  const perSetTargets = effPct
+    ? Array.from({ length: e.sets || 8 }, () => ({ pct1rm: effPct, reps: e.reps, rir: e.rir }))
+    : e.perSetTargets;
+  const loadText = e.deJump
+    ? `${effPct}% of your ${maxLabel} — light enough that you clear the floor on every rep`
+    : `${pct} of your ${maxLabel}, maximal bar speed`;
+  // pct1rmFlat is what the weight suggestion falls back to, so it has to carry
+  // the jump percentage too or the suggestion contradicts the target.
+  return { ...e, load: loadText, perSetTargets, pct1rmFlat: effPct || e.pct1rmFlat };
+}
+
 function resolveSectionExercises(section, weekNumber, program, phase, opts) {
   return section.exercises.map((e) => resolveExercise(e, weekNumber, program, phase, opts));
 }
@@ -959,6 +980,29 @@ function resolveDaySections(day, weekNumber, program, phase, veteranMode, opts) 
     return { ...sec, exercises };
   });
 }
+// The warm-up lives outside day.sections, so it never went through the injury
+// pass or the deload rules — which is exactly backwards, because the two highest
+// landing-force items in the whole system (box jumps and broad jumps) live here
+// and run every single session. Same rules, same shape, applied to blocks.
+function resolveWarmupBlocks(blocks, opts, isDeload) {
+  const areas = (opts && opts.injuryAreas) || [];
+  if (!areas.length && !isDeload) return blocks || [];
+  return (blocks || []).map((block) => {
+    let items = (block.items || []).map((i) => ({ ...i }));
+    if (areas.length) {
+      // applyInjurySubstitutions works on exercises keyed by `name`, which is
+      // the shape a warm-up item already has, so the same rules apply directly.
+      items = applyInjurySubstitutions(items, areas).map((i) => (
+        i.substitutedFor ? { ...i, detail: i.injuryNote || i.detail } : i
+      ));
+    }
+    if (isDeload) {
+      items = items.filter((i) => !/box jump|broad jump|depth jump|pogo/i.test(i.name || ""));
+    }
+    return { ...block, items };
+  }).filter((b) => (b.items || []).length);
+}
+
 function primaryLiftName(day, weekNumber, program, phase, opts) {
   for (const sec of day.sections) {
     if (sec.type === "strength" || sec.type === "power") {
@@ -2350,6 +2394,11 @@ const WEEKLY_FLOORS = [
       rest: "45 seconds", quality: "Prehab",
       purpose: "The rotator cuff at the length a kimura threatens. Face pulls train the shoulder blade and the rear delt; they do not train the cuff in the position that actually gets you hurt, and this is the cheapest insurance against that there is.",
       cues: "Lie on your side, elbow pinned to your ribs at ninety degrees, and rotate the forearm up only as far as it goes without the shoulder shrugging. Light. If you need to throw it, it is too heavy." }) },
+  { key: "adductor", min: 2, deloadMin: 0, match: /copenhagen|adduction|adductor/i,
+    make: () => ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 3,
+      rest: "45 seconds", quality: "Durability",
+      purpose: "Adductor strain is the most common soft-tissue injury in grappling, and the adductor is loaded every time you retain guard or defend a pass. The hip pool rotates, so without a floor here a whole block could go by with abduction work and no adductor work at all.",
+      cues: "Start with the top knee on the bench rather than the foot — the short lever is plenty hard. Hips stacked and lifted, hold still. Lengthen the lever only once the short one is easy and completely pain-free." }) },
   { key: "post", min: 5, deloadMin: 0, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
@@ -2862,21 +2911,30 @@ function applyTaper(sections, daysOut) {
 const INJURY_AREAS = [
   {
     key: "shoulder", label: "Shoulder",
+    returnCriteria: "Two clear weeks with no pinching at the top of a press and no ache the morning after, then put the pressing back one step at a time — floor press first, then incline, then overhead. Add one step a week.",
     note: "Overhead and barbell pressing swap to neutral-grip and landmine work, which most cranky shoulders tolerate. Pulling moves to a supported row. Face pulls stay — they are part of the fix.",
     rules: [
       { match: /overhead press|incline (barbell )?press|bench press|close.?grip bench|spoto press|weighted push|dip\b/i,
         to: "Neutral-Grip Dumbbell Floor Press",
         why: "Pressing swapped for a neutral-grip floor press — the floor limits the range at exactly the point an irritated shoulder complains, and the neutral grip keeps the joint centred.",
         cues: "Elbows tucked to about 45 degrees, upper arms stopping on the floor each rep. If any range of this hurts, shorten it rather than pushing through." },
-      { match: /weighted pull-?up|pull-?up(?! bar dead)/i,
+      { match: /weighted (pull|chin)-?up|(pull|chin)-?up(?! bar dead)/i,
         to: "Chest-Supported Dumbbell Row",
         why: "Vertical pulling swapped for a supported row while the shoulder settles.",
         cues: "Chest stays on the pad. Pull to the bottom of the ribs and stop the set well short of anything that pinches." },
-      { match: /landmine rotational press/i, drop: true, why: "Overhead rotational pressing is out while the shoulder is irritated." },
+      { match: /landmine rotational press/i, lighter: true,
+        why: "Kept light. The note above is right that most cranky shoulders tolerate landmine work — it is the load that needs to come off, not the movement." },
+      { match: /landmine.*hold|landmine punch press/i, lighter: true,
+        why: "A heavy sustained press hold asks more of an irritated shoulder than the rotational press does. Kept at a weight that never pinches." },
+      { match: /scarecrow/i,
+        to: "Side-Lying External Rotation (each side)",
+        why: "End-range external rotation at shoulder height swapped for the side-lying version, which trains the same tissue with the joint in a position it tolerates.",
+        cues: "Elbow pinned to your side, two to five kilos is plenty, slow both ways." },
     ],
   },
   {
     key: "lowBack", label: "Low back",
+    returnCriteria: "Two clear weeks pain-free through a full squat and a hinge with no load, then bar-only, then rebuild to about 60 percent of what you were lifting and go up roughly 10 percent a week. Any morning stiffness that lasts past the warm-up means drop back a step.",
     note: "Spinal loading comes down: axial squatting and pulling swap to supported variations, and loaded spinal flexion is replaced with bracing work.",
     rules: [
       { match: /box squat|back squat|zercher|front squat|good morning|anderson squat/i,
@@ -2887,7 +2945,7 @@ const INJURY_AREAS = [
         to: "Supine Hamstring Curl (bodyweight, heels on a slider)",
         why: "Hamstring work kept, hip hinge removed while the back settles.",
         cues: "Hips up, heels sliding out slowly. Stop the set the moment your lower back wants to arch." },
-      { match: /jump squat|box jump|depth jump|pogo/i, drop: true,
+      { match: /jump squat|box jump|broad jump|depth jump|pogo/i, drop: true,
         why: "Jumping and landing is out while the back is sore — the landing is the highest spinal load in the program, and it arrives faster than you can brace for it." },
       { match: /deadlift|trap bar(?! static)/i,
         to: "Trap Bar Deadlift from blocks (shortened range)",
@@ -2899,17 +2957,24 @@ const INJURY_AREAS = [
         cues: "Lower back stays flat on the floor the entire set. The moment it lifts, that rep was the last one." },
       { match: /farmer carry|suitcase carry/i, lighter: true,
         why: "Carries kept but lighter and shorter — they are good for a back, right up until they are not." },
+      { match: /bent over.*row|pendlay row|barbell row|seal row|renegade row/i,
+        to: "Chest-Supported Dumbbell Row",
+        why: "An unsupported row is a loaded hinge you hold for the whole set. The chest-supported version trains the same muscle with the spine out of it.",
+        cues: "Chest stays on the pad the entire set. If you start lifting off it to move the weight, the weight is too heavy." },
+      { match: /trap bar static hold/i, lighter: true,
+        why: "The heaviest compressive load in the program. Kept, but at a weight you could hold comfortably for twice the time." },
     ],
   },
   {
     key: "knee", label: "Knee",
+    returnCriteria: "No swelling, no giving way, and a full pain-free range for two clear weeks before jumping and cutting come back. Reintroduce in this order: double-leg jumps with a soft landing, then single-leg, then the shuttle. Never two new ones in the same week.",
     note: "Deep knee flexion and hard landings come out. Single-leg work continues in a range that does not hurt, because strength is most of what protects the joint.",
     rules: [
       { match: /bulgarian split squat|split squat|lunge/i,
         to: "Step-Down to a Low Box",
         why: "Split squats swapped for a step-down, where you control the depth exactly.",
         cues: "Start with a low box — six inches is plenty. Lower under control, tap the heel, come back up. Never into a range that hurts." },
-      { match: /jump squat|pogo|box jump|depth jump/i, drop: true,
+      { match: /jump squat|pogo|box jump|broad jump|depth jump/i, drop: true,
         why: "Jumping and landing is out while the knee is sore. It is the highest-force thing in the program and the first thing to go." },
       { match: /acceleration sprint|shuttle|5-?10-?5/i, drop: true,
         why: "Sprinting and cutting are out while the knee is sore." },
@@ -2919,14 +2984,17 @@ const INJURY_AREAS = [
   },
   {
     key: "elbowWrist", label: "Elbow or wrist",
+    returnCriteria: "Two clear weeks with no pain gripping a gi and none the morning after rolling, then hanging comes back before loading does — a short dead hang first, then the chin-up hold, then weighted pull-ups.",
     note: "Grip and hanging load comes down, because the elbow is almost always a grip-volume problem. Direct forearm work stays, light and slow — that is the part that actually fixes it.",
     rules: [
-      { match: /weighted pull-?up|pull-?up(?! bar dead)/i,
+      { match: /weighted (pull|chin)-?up|(pull|chin)-?up(?! bar dead)/i,
         to: "Chest-Supported Dumbbell Row",
         why: "Hanging swapped for a supported row while the elbow settles.",
         cues: "Chest on the pad, neutral grip if you have the option." },
-      { match: /dead hang|towel hang/i, drop: true,
+      { match: /dead hang|towel hang|chin-?up hold/i, drop: true,
         why: "Hanging is out — it is sustained load on exactly the tissue that is irritated, on top of gripping a gi three times a week." },
+      { match: /rice bucket|hanging leg raise/i, drop: true,
+        why: "More grip and hanging volume, which is the thing to subtract here rather than add to." },
       { match: /farmer carry|suitcase carry|kettlebell hold|landmine.*hold/i, lighter: true,
         why: "Carries and holds kept but lighter — grip volume is usually the cause here." },
       { match: /wrist curl/i, lighter: true,
@@ -2949,10 +3017,11 @@ const INJURY_AREAS = [
   },
   {
     key: "neck", label: "Neck",
+    returnCriteria: "This one is not a two-week rule. Anything that travelled down an arm, any weakness, any numbness: see someone before you load the neck again, whatever it feels like now. Once you are cleared, go back to the hand-resisted isometrics for two weeks before the wall hold returns.",
     note: "Bridging comes out entirely and the isometrics drop to an easy dose. Please get a neck looked at rather than training around it.",
     rules: [
-      { match: /neck bridge/i, drop: true,
-        why: "No bridging on an irritated neck, at any dose. This is the one area where training around it is the wrong instinct — get it looked at." },
+      { match: /wall neck hold|neck bridge/i, drop: true,
+        why: "Anything putting bodyweight through the neck is out, at any dose — the wall hold included. This is the one area where training around it is the wrong instinct; get it looked at." },
       { match: /isometric neck hold/i, lighter: true,
         why: "Isometrics kept at an easy, pain-free pressure only. Any pinching or anything travelling down an arm means stop and see someone." },
       { match: /neck curl|neck extension/i,
@@ -2963,10 +3032,13 @@ const INJURY_AREAS = [
   },
   {
     key: "hamstring", label: "Hamstring",
+    returnCriteria: "The one that matters most, because this is where people re-tear. Only start running again when the slow eccentric work is completely pain-free. Then build over at least four weeks: strides at about 60 percent of top speed with full recovery, then 70, then 80, then the full sprints — one step per week, and only if the previous week was pain-free on the day and the morning after. A twinge at any step means drop back one and stay there a week.",
     note: "Sprinting comes out — it is where hamstrings tear. The slow eccentric work stays, because that is the best-evidenced thing you can do for one.",
     rules: [
-      { match: /acceleration sprint/i, drop: true,
-        why: "Maximal sprinting is out until this is fully settled. If you have a sled, push or drag it instead — same repeat-effort quality, none of the tearing risk." },
+      { match: /acceleration sprint|shuttle|5-?10-?5|broad jump/i, drop: true,
+        why: "Maximal sprinting, cutting and jumping are out until this is fully settled — a change of direction loads a hamstring harder than a straight sprint does. If you have a sled, push or drag it instead: same repeat-effort quality, none of the tearing risk." },
+      { match: /valslide|supine hamstring/i, lighter: true,
+        why: "Kept light. Loaded knee flexion on a healing hamstring is a common way a strain becomes a re-tear." },
       { match: /romanian deadlift/i, lighter: true,
         why: "Kept and lightened deliberately. Slow, long-range eccentric loading is the best-evidenced protection for a hamstring — this is the exercise that fixes it, so it stays." },
     ],
@@ -3030,6 +3102,11 @@ function InjuryAreaPicker({ value, onChange, compact }) {
           {INJURY_AREAS.filter((a) => selected.includes(a.key)).map((a) => (
             <div key={a.key} className="intent-box" style={{ marginBottom: 8 }}>
               <strong>{a.label}.</strong> {a.note}
+              {a.returnCriteria && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                  <strong>Getting back to it.</strong> {a.returnCriteria}
+                </div>
+              )}
             </div>
           ))}
           <p className="muted" style={{ fontSize: 12.5 }}>
@@ -6415,7 +6492,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     setConfirmingReset(false);
   };
 
-  const warmupItems = client.program.warmup || [];
+  const warmupItems = resolveWarmupBlocks(client.program.warmup, resolveOptsFor(client), /deload/i.test(phase?.name || ""));
   const totalWarmupItems = warmupItems.reduce((n, b) => n + b.items.length, 0);
   const warmupCheckedCount = Object.values(warmupChecked).filter(Boolean).length;
   const toggleWarmupItem = (id) => setWarmupChecked((prev) => ({ ...prev, [id]: !prev[id] }));
