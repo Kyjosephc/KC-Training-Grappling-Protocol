@@ -853,7 +853,29 @@ const MATCH_SPECIFIC_FROM_WEEK = 9;
 // phase whose own text says the conditioning should feel easy. Keyed by the
 // phase's first week; anything else falls back to the old rotation.
 // Pool order: 0 Zone 2, 1 aerobic power, 2 grip under fatigue, 3 repeat tempo.
-const CONDITIONING_BY_PHASE = { 1: [0, 0, 3], 5: [3, 1, 2] };
+const CONDITIONING_BY_PHASE = { 1: [0, 0, 3], 5: [3, 2, 1] };
+// What counts as a hard conditioning piece, as opposed to easy aerobic work.
+// Both the low-readiness branch and the hard-grappling branch read this, because
+// they were drifting: one correctly kept easy aerobic work and the other deleted
+// every conditioning exercise regardless of what kind it was.
+const CONDITIONING_IS_HARD = /interval|round|tempo|hard|sprint|power|simulation|grip/i;
+// Pool order: 0 match-duration round, 1 multi-match day, 2 aerobic power.
+// Multi-match twice with a week between, because it is the only session that
+// rehearses the third match of the day and it was running once in twelve weeks.
+// Aerobic power moves out of the final block: raising a ceiling in the last week
+// before a taper is work you cannot absorb in time to use it.
+const MATCH_SPECIFIC_PLAN = [1, 0, 1];
+// Two easy aerobic sessions a week, every week, done on their own time rather
+// than in the one conditioning slot. The methodology opens by saying the aerobic
+// base is what you recover between rounds with, and the Zone 2 item's own cue
+// already says "one session a week will not do it; three easy ones will" — but
+// that cue only ever appeared in weeks one and two, so in practice the base was
+// scheduled twice in twelve weeks. This is the standing instruction that was
+// missing. It costs no hard sets, which is the whole reason it can run all year.
+const AEROBIC_BASE_STANDING = {
+  title: "Two easy aerobic sessions this week",
+  detail: "Thirty to forty minutes each, on days you are not lifting — a walk on an incline, an easy bike, anything you can hold a conversation through the whole way. This is the base everything else recovers on top of, and it is the one piece of conditioning that runs every week of the program including deloads. If you can only fit one, do one. If a session leaves you tired, it was not easy enough.",
+};
 const ROTATING_POOL_LABELS = {
   meLowerPool: "Max Effort Lower",
   meUpperPool: "Max Effort Upper",
@@ -898,7 +920,10 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     // Folding blockNumber into the offset means block 2 doesn't start the rotation at the
     // exact same spot as block 1 — without this, every restart replayed an identical sequence.
     let idx = (Math.floor((rotWeek - 1) / rotW) + (blockNumber - 1)) % pool.length;
-    const plan = poolKey === "conditioningIntervalPool" && phase ? CONDITIONING_BY_PHASE[phase.weekStart] : null;
+    const plan = !phase ? null
+      : poolKey === "matchSpecificPool" ? MATCH_SPECIFIC_PLAN
+      : poolKey === "conditioningIntervalPool" ? CONDITIONING_BY_PHASE[phase.weekStart]
+      : null;
     if (plan) idx = plan[Math.max(0, Math.min(plan.length - 1, weekNumber - phase.weekStart))] % pool.length;
     const chosen = pool[idx];
     const capped = chosen.maxTriple
@@ -1103,7 +1128,7 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
     }
     if (color === "RED" && sec.type === "conditioning") {
       exs = exs.map((e) => {
-        const isHard = /interval|round|tempo|hard|sprint|power/i.test(`${e.name} ${e.reps}`);
+        const isHard = CONDITIONING_IS_HARD.test(`${e.name} ${e.reps}`);
         // Easy aerobic work on a bad day actively helps you recover. It is the
         // hard intervals that are worth nothing today, so those are what goes.
         return isHard
@@ -1127,7 +1152,13 @@ function adjustSectionsForReadiness(sections, readinessEntry) {
       exs = exs.map((e) => ({ ...e, cues: `${e.cues || ""} Yellow readiness: back today's effort off slightly from what the protocol normally asks for — moderate rather than maximal, whichever modality this is.`.trim() }));
     }
     if (bjjHard && sec.type === "conditioning") {
-      exs = exs.map((e) => ({ ...e, sets: 1, reps: "optional — trim or skip, hard grappling already supplied today's conditioning stimulus" }));
+      exs = exs.map((e) => {
+        const isHard = CONDITIONING_IS_HARD.test(`${e.name} ${e.reps}`);
+        return isHard
+          ? { ...e, sets: 1, reps: "optional — trim or skip, hard grappling already supplied today's hard conditioning",
+              cues: `${e.cues || ""} Hard grappling flagged. Live rounds already gave you this exact stimulus today, so this is the piece to cut.`.trim() }
+          : { ...e, cues: `${e.cues || ""} Hard grappling flagged, and this one still stays. Easy aerobic work is not the same stimulus as hard rounds — it is what you recover from them with, and it is the piece of conditioning worth keeping on a day like today.`.trim() };
+      });
     }
     if (bjjHard && sec.type === "power") {
       // Speed work is only speed work on a fresh nervous system. After hard live
@@ -1579,14 +1610,14 @@ const hipPool = [
 // again after an hour's rest, which is what a medal actually comes down to.
 const matchSpecificPool = [
   { rir: 1, name: "Assault Bike or Treadmill — Match-Duration Round", notes: "One continuous effort the length of a real match. Every other piece of conditioning in this program is shorter than the thing you are training for, and holding output for eight minutes is a different skill from holding it for three", reps: "1 round of 6 to 8 minutes continuous at 85 to 88 percent of your max heart rate", cues: "Pace it. The mistake everyone makes here is starting at interval pace and falling apart at four minutes, which trains nothing except how to fail. Settle into an output you believe you can hold to the end, and hold it. The check that you paced it right is that the last minute is your hardest effort and not your slowest — if you are fading badly by the halfway point, take ten percent off next time. Match the round length to your belt: six minutes at white and blue, eight at brown and black." },
-  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Two hard rounds separated by a long rest, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "2 rounds of 6 minutes hard, 20 minutes easy or complete rest between rounds", cues: "Treat these as two separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full twenty minutes. Walk, sit down, eat something, do what you would actually do between matches. The second round is the one that matters: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
+  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Two hard rounds separated by a long rest, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "3 rounds of 6 minutes hard, 30 to 40 minutes easy or complete rest between rounds", cues: "Treat these as three separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full rest. Walk, sit down, eat something, do what you would actually do between matches, and match the gap to your own bracket if you know it. The third round is the one that matters, because nobody loses the first: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson's aerobic power protocol, kept in the specific block because raising the aerobic ceiling still pays right up to competition — and because it is the closest thing here to the repeated hard exchanges inside a single round", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds." },
 ];
 
 const conditioningIntervalPool = [
   { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "30 to 40 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time. The test is that you could hold a full conversation the whole way through without gasping — if you can only manage short sentences, you are going too fast for what this session trains. If you have a heart rate monitor, 130 to 150 beats per minute is the band; the talk test comes first and the number is just the check. This is meant to feel almost boring. That's correct.\n\nDo this one at the end of today's session, and then do one or two more like it across the rest of the week, off your lifting days — a brisk walk, an easy bike, a ruck with the dog. That is the part that actually builds the base, and it costs you no gym time and no recovery. One session a week will not do it; three easy ones will." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate, not off how hard it feels. You are aiming to be at 88 to 92 percent of your max heart rate by about the ninety-second mark and to hold it there to the end of the round — hard and honest, but deliberately below what you could manage for a single round, because you have to do it four times. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds, easy movement or complete rest." },
-  { rir: 2, name: "Assault Bike + Gi Grip — Repeat Effort Under Fatigue", notes: "Grip and conditioning are trained all through this program and never in the same place, which is not how a gi match works — your hands fail while your heart rate is high, not while you are fresh. This puts the two demands together, which is the only way to train the thing that actually gives out", reps: "5 rounds of 60 seconds hard on the bike straight into a 30 second hard grip hold, 90 seconds easy between rounds", cues: "Go straight from the bike to the hold with no pause — the whole point is that the grip work starts while you are already breathing hard. Use two towels over the pull-up bar, a gi sleeve, or a heavy dumbbell in each hand; whichever you use, hold it for the full 30 seconds or until your hand genuinely opens, not until it starts to burn. The burn is the session. If you can hold comfortably for 30 seconds, go heavier or move to one towel. Expect the last two rounds to be much harder than the first two — that is the adaptation, not a sign you paced it wrong." },
+  { rir: 2, name: "Assault Bike + Gi Grip — Repeat Effort Under Fatigue", notes: "Grip and conditioning are trained all through this program and never in the same place, which is not how a gi match works — your hands fail while your heart rate is high, not while you are fresh. This puts the two demands together, which is the only way to train the thing that actually gives out", reps: "6 rounds of 25 seconds hard on the bike straight into a 20 second hard grip hold, 2 minutes easy between rounds", cues: "Go straight from the bike to the hold with no pause — the whole point is that the grip work starts while you are already breathing hard. Use two towels over the pull-up bar, a gi sleeve, or a heavy dumbbell in each hand; whichever you use, hold it until your hand genuinely opens rather than until it starts to burn. If you can hold comfortably for the full 20 seconds, go heavier or move to one towel. The short effort and the long rest are deliberate: this is a repeat-effort session, so every round should look like the first one. If the last two rounds fall apart, you went too hard on the first two rather than pacing it wrong." },
   { rir: 3, name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
 ];
 
@@ -1699,7 +1730,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
-          intent: "Speed and rhythm over grinding. The conditioning piece should feel easy — if it doesn't, you're going too hard for a base week. Training grappling four or more times this week? It's fine to split the rotational power work and the conditioning piece into two shorter sessions instead of stacking them together.",
+          intent: "Speed and rhythm over grinding. The conditioning piece is easy for the first two weeks of this block and steps up to tempo work in the third — if an easy week does not feel easy, you are going too hard for a base week. Training grappling four or more times this week? It's fine to split the rotational power work and the conditioning piece into two shorter sessions instead of stacking them together.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation before jump-loaded work", quality: "Neuromuscular" }),
@@ -1762,7 +1793,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
-          intent: "Tempo work, not a fight. Moderate-hard effort, never all-out — save your nervous system for the mats and for the next top set. Training grappling four or more times this week? Split the rotational power work and the conditioning piece across two shorter sessions instead of stacking them back to back.",
+          intent: "The sprints are genuinely maximal and short — that is the point of them, and the long walk-back rest is what makes them affordable. Everything after them is moderate-hard and never all-out: save the rest of your nervous system for the mats and for the next top set. Training grappling four or more times this week? Split the rotational power work and the conditioning piece across two shorter sessions instead of stacking them back to back.",
           sections: [
             { id: uid(), type: "agility", name: "Speed, Agility & Change of Direction", exercises: [
               ex({ name: "Pogo Hops", sets: 2, reps: "10", load: "bodyweight", rir: 5, rest: "45 seconds", purpose: "Elastic ankle stiffness preparation", quality: "Neuromuscular" }),
@@ -6116,6 +6147,10 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
       <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
         <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
         <button className="btn-ghost wide" onClick={onStartMobility}>Start recovery session</button>
+      </Card>
+
+      <Card title={AEROBIC_BASE_STANDING.title}>
+        <p className="muted">{AEROBIC_BASE_STANDING.detail}</p>
       </Card>
 
       <Card title="Phase Notes">
