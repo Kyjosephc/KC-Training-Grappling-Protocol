@@ -2354,6 +2354,17 @@ function buildProgramCContent() {
 // than being a pile of drills. Bumping WARMUP_VERSION replaces it for athletes
 // who already have the old one saved against their program.
 const WARMUP_VERSION = 4;
+// Bumped whenever the built program changes: exercises, sets, reps, weekly
+// floors, pools or phase text. An athlete's program is copied into their account
+// at sign-up and is what they train from, so a change here does not reach anyone
+// already running the old copy until they take it. Unlike the warm-up this is
+// never applied silently — their copy can carry their own swaps and anything
+// their coach adjusted for them, so the athlete is asked rather than overwritten.
+const PROGRAM_VERSION = 2;
+function programIsOutOfDate(client) {
+  if (!client || !client.program) return false;
+  return (client.program.programVersion || 0) < PROGRAM_VERSION;
+}
 
 function defaultWarmup() {
   return [
@@ -2714,6 +2725,7 @@ function trimAccessoryVolume(program) {
 
 function finishProgram(program) {
   if (program) program.warmupVersion = WARMUP_VERSION;
+  if (program) program.programVersion = PROGRAM_VERSION;
   const floored = weeklyFloorPass(program);
   const balanced = program.variant === "B" ? addExplosivePrimer(trimAccessoryVolume(floored)) : floored;
   return backfillVideos(balanced);
@@ -4457,10 +4469,10 @@ function MainApp({ userId, onSignOut }) {
     setShowSettings(false);
   };
   const refreshProgramTemplate = async (variantOverride) => {
-    if (!client) return;
+    if (!client) return { ok: false };
     const variant = variantOverride || client.program?.variant || "B";
     const updated = { ...client, program: buildProgramVariant(variant) };
-    await persistClient(updated);
+    return persistClient(updated);
   };
 
   // Community is for paying athletes — and always for the coach, who otherwise
@@ -4571,7 +4583,8 @@ function MainApp({ userId, onSignOut }) {
         {tab === "today" && (
           <TodayTab client={client} onPersist={persistClient}
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
-            onStartMobility={() => setShowMobility(true)} />
+            onStartMobility={() => setShowMobility(true)}
+            onRefreshProgram={refreshProgramTemplate} />
         )}
         {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
         {/* history / bjj / prs are kept as routes so a bookmark or a deep link
@@ -5700,7 +5713,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         <div className="adjust-box">
           This replaces your program's exercises with the current default. Your logs, check-ins, and Personal Records are never touched. Continue?
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }} onClick={async () => { await onRefreshProgram(); setConfirmingRefresh(false); setRefreshed(true); }}>Yes, update it</button>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }} onClick={async () => { const r = await onRefreshProgram(); if (r && r.ok === false) return; setConfirmingRefresh(false); setRefreshed(true); }}>Yes, update it</button>
             <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={() => setConfirmingRefresh(false)}>Cancel</button>
           </div>
         </div>
@@ -5711,7 +5724,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
       {["A", "B"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
-        <button key={v} className="btn-ghost wide" onClick={async () => { await onRefreshProgram(v); setRefreshed(true); }}>
+        <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setRefreshed(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>
       ))}
@@ -6172,7 +6185,10 @@ function sessionShape(sections) {
   return { working, buildUps, minutes: Math.max(10, Math.round((seconds + 8 * 60) / 60 / 5) * 5) };
 }
 
-function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
+function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram }) {
+  const [programUpdateHidden, setProgramUpdateHidden] = useState(false);
+  const [updatingProgram, setUpdatingProgram] = useState(false);
+  const programStale = programIsOutOfDate(client) && !programUpdateHidden;
   const totalSessions = totalSessionsIn(client.program);
   const actualComplete = (client.sessionsCompleted || 0) >= totalSessions;
   const [viewIndex, setViewIndex] = useState(client.sessionsCompleted || 0);
@@ -6235,6 +6251,31 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility }) {
         <span className="quote-hero-attr"><span className="quote-hero-dash" />{todaysMentalTip.author}</span>
       </button>
 
+      {programStale && (
+        <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
+          <div className="nudge-card-title">Your program has been updated</div>
+          <p className="muted">
+            Your coach has made changes to the program since you started — exercises, sets or reps.
+            Taking them replaces the plan you train from. Everything you have logged stays exactly
+            where it is: sessions, Personal Records, check-ins, and the week and block you are on.
+          </p>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+              disabled={updatingProgram}
+              onClick={async () => {
+                setUpdatingProgram(true);
+                const res = await onRefreshProgram();
+                setUpdatingProgram(false);
+                if (res && res.ok === false) return;
+                setProgramUpdateHidden(true);
+              }}>
+              {updatingProgram ? "Updating…" : "Update my program"}
+            </button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+              onClick={() => setProgramUpdateHidden(true)}>Not now</button>
+          </div>
+        </div>
+      )}
       {isCurrent && sleepNote && (
         <div className="nudge-card">
           <div className="nudge-card-title">On your sleep</div>
