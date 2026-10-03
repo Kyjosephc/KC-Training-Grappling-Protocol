@@ -3074,6 +3074,25 @@ const TAPER_DAYS = 10;
 // full session came straight back the next morning — in the peak block that can
 // be a max-effort day with a true top single.
 const POST_COMP_DAYS = 4;
+// How far out the athlete is told the taper is coming. A week's notice is the
+// point where it can still change how hard they roll this week, which is the
+// only reason to say it early at all.
+const TAPER_HEADS_UP_DAYS = 7;
+// What the athlete is shown about a competition OUTSIDE the taper window. Inside
+// it the taper note already counts down and says what it is doing, so this stops
+// rather than printing the same thing twice.
+function competitionCountdown(daysOut) {
+  if (daysOut == null || daysOut <= TAPER_DAYS) return null;
+  const weeks = Math.round(daysOut / 7);
+  const away = daysOut > 14 ? `${weeks} weeks` : `${daysOut} days`;
+  const untilTaper = daysOut - TAPER_DAYS;
+  return {
+    headline: `Competition in ${away}`,
+    detail: untilTaper <= TAPER_HEADS_UP_DAYS
+      ? `Your taper starts in ${untilTaper} day${untilTaper === 1 ? "" : "s"} — from then the program takes volume off on its own while the weights stay heavy. Between now and then is the last stretch where hard mat work is free, so if you are going to push, push this week.`
+      : "Nothing changes in the program yet. The taper starts automatically ten days out.",
+  };
+}
 // Trunk work, as distinct from arm isolation. Both live in the same section, so
 // without this a bad day deleted the only anti-rotation and anti-extension work
 // in the week along with the curls.
@@ -6186,6 +6205,10 @@ function sessionShape(sections) {
 }
 
 function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram }) {
+  const [compLearned, setCompLearned] = useState("");
+  const [compWorkOn, setCompWorkOn] = useState("");
+  const [savingDebrief, setSavingDebrief] = useState(false);
+  const clearedCompRef = useRef(false);
   const [programUpdateHidden, setProgramUpdateHidden] = useState(false);
   const [updatingProgram, setUpdatingProgram] = useState(false);
   const programStale = programIsOutOfDate(client) && !programUpdateHidden;
@@ -6225,6 +6248,34 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   // A taper and a rough day stack rather than one overriding the other.
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
   const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
+  const countdown = competitionCountdown(daysToComp);
+  // The day after a competition through the end of the recovery window, and only
+  // until they have answered once.
+  const showDebrief = isCurrent && daysToComp != null && daysToComp < 0
+    && -daysToComp <= POST_COMP_DAYS
+    && client.competitionDebriefed !== client.competitionDate;
+  const saveDebrief = async (withNote) => {
+    setSavingDebrief(true);
+    const next = { ...client, competitionDebriefed: client.competitionDate };
+    if (withNote && (compLearned.trim() || compWorkOn.trim())) {
+      next.bjjNotes = [...(client.bjjNotes || []), {
+        id: uid(), date: todayStr(), competitionDate: client.competitionDate,
+        learned: compLearned.trim(), workOn: compWorkOn.trim(),
+      }];
+    }
+    const saved = await onPersist(next);
+    setSavingDebrief(false);
+    if (saved && saved.ok === false) return;
+    setCompLearned(""); setCompWorkOn("");
+  };
+  // Once the recovery window has passed, a finished date is clutter — it sits in
+  // Settings telling the athlete to clear it, forever. Clear it for them.
+  useEffect(() => {
+    if (!isCurrent || clearedCompRef.current) return;
+    if (daysToComp == null || daysToComp >= -POST_COMP_DAYS) return;
+    clearedCompRef.current = true;
+    onPersist({ ...client, competitionDate: null, competitionDebriefed: null });
+  }, [isCurrent, daysToComp]); // eslint-disable-line
 
   if (actualComplete) {
     return (
@@ -6251,6 +6302,40 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         <span className="quote-hero-attr"><span className="quote-hero-dash" />{todaysMentalTip.author}</span>
       </button>
 
+      {showDebrief && (
+        <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
+          <div className="nudge-card-title">How did it go?</div>
+          <p className="muted">
+            Worth writing down while it is fresh. This goes straight into your notes against the block
+            that produced it, so next time you can look back at what the training actually did.
+          </p>
+          <label className="labeled-input" style={{ marginTop: 10 }}>
+            <span>How did it go?</span>
+            <textarea className="notes-box" rows={3} value={compLearned}
+              onChange={(e) => setCompLearned(e.target.value)}
+              placeholder="How you felt, what worked, how the gas tank held up." />
+          </label>
+          <label className="labeled-input">
+            <span>What to work on</span>
+            <textarea className="notes-box" rows={2} value={compWorkOn}
+              onChange={(e) => setCompWorkOn(e.target.value)}
+              placeholder="What you want to be better at before the next one." />
+          </label>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+              disabled={savingDebrief || (!compLearned.trim() && !compWorkOn.trim())}
+              onClick={() => saveDebrief(true)}>{savingDebrief ? "Saving…" : "Save to my notes"}</button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+              disabled={savingDebrief} onClick={() => saveDebrief(false)}>Skip</button>
+          </div>
+        </div>
+      )}
+      {countdown && (
+        <div className="nudge-card">
+          <div className="nudge-card-title">{countdown.headline}</div>
+          <p className="muted" style={{ marginBottom: 0 }}>{countdown.detail}</p>
+        </div>
+      )}
       {programStale && (
         <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
           <div className="nudge-card-title">Your program has been updated</div>
@@ -8153,7 +8238,10 @@ function BJJNotesTab({ client, onPersist }) {
         notes.map((note) => (
           <div key={note.id} className="history-card">
             <div className="history-body" style={{ borderTop: "none", padding: 14 }}>
-              <div className="history-date" style={{ marginBottom: 8 }}>{fmtDate(note.date)}</div>
+              <div className="history-date" style={{ marginBottom: 8 }}>
+                {fmtDate(note.date)}
+                {note.competitionDate && <span className="pill" style={{ marginLeft: 8, background: "var(--accent)", color: "var(--accent-text)" }}>Competition</span>}
+              </div>
               {note.learned && (
                 <div style={{ marginBottom: 10 }}>
                   <div className="section-subheading">What I Learned</div>
