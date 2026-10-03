@@ -649,7 +649,7 @@ function OfflineBanner() {
   if (online) return null;
   return (
     <div className="offline-banner" role="status">
-      No connection — keep logging. Your sets are saved on this phone and will sync when you are back.
+      No connection — keep logging. Your sets stay on this phone; tap Retry on any save that failed once you are back.
     </div>
   );
 }
@@ -3082,7 +3082,7 @@ const TAPER_HEADS_UP_DAYS = 7;
 // the small half — by this point it is twenty minutes of light work. What decides
 // how fresh somebody walks on is mat volume, which the app never sees. Said in
 // the one week where it changes what a person does.
-const COMPETITION_MAT_GUIDANCE = "The lifting is already cut right back, and it is not the part that makes you tired this week — hard rounds are, and they are also where a tweak seven days out comes from. So do not drop the gym and keep sparring hard, which is the way round most people get this. Keep drilling, flow rolling, positional work and specifics: that is the skill work that genuinely helps now. What comes out is the hard competitive rounds. If you are cutting weight, travelling, or already beat up, talk to your coach rather than deciding it alone.";
+const COMPETITION_MAT_GUIDANCE = "The lifting is already cut right back, and it is not the part that makes you tired this week — hard rounds are, and they are also where a tweak seven days out comes from. So do not drop the gym and keep sparring hard, which is the way round most people get this. Keep drilling, flow rolling, positional work and specifics: that is the skill work that genuinely helps now. What comes out is the hard competitive rounds. If you are cutting weight, travelling, or already beat up, talk to your Jiu Jitsu coach rather than deciding it alone.";
 // What the athlete is shown about a competition OUTSIDE the taper window. Inside
 // it the taper note already counts down and says what it is doing, so this stops
 // rather than printing the same thing twice.
@@ -4608,7 +4608,8 @@ function MainApp({ userId, onSignOut }) {
           <TodayTab client={client} onPersist={persistClient}
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
             onStartMobility={() => setShowMobility(true)}
-            onRefreshProgram={refreshProgramTemplate} />
+            onRefreshProgram={refreshProgramTemplate}
+            onReloadClient={loadActiveClient} />
         )}
         {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
         {/* history / bjj / prs are kept as routes so a bookmark or a deep link
@@ -4634,7 +4635,7 @@ function MainApp({ userId, onSignOut }) {
         }} />
       )}
       {showTutorial && (
-        <TutorialModal onClose={async () => {
+        <TutorialModal variant={client?.program?.variant} onClose={async () => {
           setShowTutorial(false);
           if (!client.hasSeenTutorial) await persistClient({ ...client, hasSeenTutorial: true });
         }} />
@@ -4714,6 +4715,7 @@ function OnboardingScreen({ onSubmit }) {
   const [profilePicture, setProfilePicture] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
   const [picError, setPicError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const strengthDays = strengthDayCount(schedule);
   const hasEnoughStrengthDays = strengthDays >= REQUIRED_STRENGTH_DAYS;
   const canSubmit = firstName.trim() && lastName.trim() && weight && hasEnoughStrengthDays;
@@ -4838,9 +4840,9 @@ function OnboardingScreen({ onSubmit }) {
           Go back up to your weekly schedule and pick {REQUIRED_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {REQUIRED_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start.
         </p>
       )}
-      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver}
-        onClick={() => onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver })}>
-        Get started
+      <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver || submitting}
+        onClick={async () => { setSubmitting(true); try { await onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver }); } finally { setSubmitting(false); } }}>
+        {submitting ? "Setting up your program…" : "Get started"}
       </button>
       </>)}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -4946,9 +4948,9 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
 }
 
 const TUTORIAL_PAGES = [
-  { title: "Welcome", body: "This app runs a twelve-week conjugate strength program built specifically for grapplers. A handful of terms show up throughout it — here's what they actually mean, in plain language, before you dive in." },
-  { title: "Max Effort", body: "A day where you build up to the heaviest weight you can honestly lift for a single rep or a few reps, that day. It isn't a fixed number written in advance — you find it based on how you feel." },
-  { title: "Dynamic Effort", body: "Using a lighter weight and moving it as explosively as possible. This is about building speed and power, not raw strength — the weight is intentionally light so you can move it fast." },
+  { title: "Welcome", variant: "A", body: "Your program is a twelve-week conjugate strength program built specifically for grapplers. A handful of terms show up throughout it — here's what they actually mean, in plain language, before you dive in." },
+  { title: "Max Effort", variant: "A", body: "A day where you build up to the heaviest weight you can honestly lift for a single rep or a few reps, that day. It isn't a fixed number written in advance — you find it based on how you feel." },
+  { title: "Dynamic Effort", variant: "A", body: "Using a lighter weight and moving it as explosively as possible. This is about building speed and power, not raw strength — the weight is intentionally light so you can move it fast." },
   { title: "Reps in Reserve", body: "How many more reps you could have done before failing. Zero reps in reserve means you truly couldn't have done another rep — that's a genuine maximum effort. Two or three reps in reserve is a comfortably hard set." },
   { title: "Rate of Perceived Exertion", body: "A one-to-ten scale for how hard a set felt, with ten being an all-out maximum. This app calculates it automatically from your reps in reserve, so you never have to think about the two separately." },
   { title: "One-Rep Max Calculator", body: "Tap the calculator icon next to the help button at the top of the screen any time. Enter a weight you lifted, how many reps you got with it, and your reps in reserve, and it estimates your true one-rep max and shows you exact weights for every percentage of it — handy for planning a lift without doing the math yourself." },
@@ -5135,17 +5137,28 @@ function ShareModal({ onClose }) {
     </ModalShell>
   );
 }
-function TutorialModal({ onClose }) {
+function TutorialModal({ onClose, variant }) {
   const [page, setPage] = useState(0);
-  const isLast = page === TUTORIAL_PAGES.length - 1;
-  const current = TUTORIAL_PAGES[page];
+  // Pages tied to one program are shown only to athletes on it. Teaching Max
+  // Effort to somebody whose program says "no max-effort singles anywhere" was
+  // the first thing a new Program B athlete read.
+  const pages = useMemo(() => {
+    const v = variant === "A" ? "A" : "B";
+    const kept = TUTORIAL_PAGES.filter((p) => !p.variant || p.variant === v);
+    return v === "A" ? kept : [{
+      title: "Welcome",
+      body: "Your program is a twelve-week offseason strength build, written specifically for grapplers. Every set is prescribed by how hard it should feel rather than by a percentage of a max, so you never need a tested one-rep max to run it. A handful of terms show up throughout — here is what they actually mean, in plain language, before you dive in.",
+    }, ...kept.filter((p) => p.title !== "Welcome")];
+  }, [variant]);
+  const isLast = page === pages.length - 1;
+  const current = pages[page];
   return (
     <ModalShell onClose={onClose} title="Quick Start Guide">
       <div className="card" style={{ textAlign: "center", padding: 28 }}>
         <div className="card-title" style={{ marginBottom: 12 }}>{current.title}</div>
         <p className="muted" style={{ fontSize: 14.5, lineHeight: 1.6 }}>{current.body}</p>
       </div>
-      <div className="muted" style={{ textAlign: "center", marginBottom: 14, fontSize: 12 }}>{page + 1} of {TUTORIAL_PAGES.length} — reopen this any time from the help button</div>
+      <div className="muted" style={{ textAlign: "center", marginBottom: 14, fontSize: 12 }}>{page + 1} of {pages.length} — reopen this any time from the help button</div>
       <div style={{ display: "flex", gap: 8 }}>
         {page > 0 && <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={() => setPage((p) => p - 1)}>Back</button>}
         <button className="btn-primary" style={{ flex: 1 }} onClick={() => (isLast ? onClose() : setPage((p) => p + 1))}>{isLast ? "Let's Start Training" : "Next"}</button>
@@ -6212,7 +6225,7 @@ function sessionShape(sections) {
   return { working, buildUps, minutes: Math.max(10, Math.round((seconds + 8 * 60) / 60 / 5) * 5) };
 }
 
-function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram }) {
+function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram, onReloadClient }) {
   const [compLearned, setCompLearned] = useState("");
   const [compWorkOn, setCompWorkOn] = useState("");
   const [savingDebrief, setSavingDebrief] = useState(false);
@@ -6257,6 +6270,23 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
   const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
   const countdown = competitionCountdown(daysToComp);
+  const awaitingPayment = isCurrent
+    && (client.logs || []).length >= (client.program.sessionsPerWeek || 3)
+    && !client.paid;
+  const [checkingPaid, setCheckingPaid] = useState(false);
+  const onCheckPaid = async () => {
+    if (!onReloadClient || checkingPaid) return;
+    setCheckingPaid(true);
+    await onReloadClient();
+    setCheckingPaid(false);
+  };
+  useEffect(() => {
+    if (!awaitingPayment || !onReloadClient) return undefined;
+    const tick = () => { if (document.visibilityState === "visible") onReloadClient(); };
+    const id = setInterval(tick, 45 * 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
+  }, [awaitingPayment, onReloadClient]);
   // The day after a competition through the end of the recovery window, and only
   // until they have answered once.
   const showDebrief = isCurrent && daysToComp != null && daysToComp < 0
@@ -6446,9 +6476,13 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
               <button className="link-btn" onClick={() => setViewIndex(client.sessionsCompleted || 0)}>Jump back to today</button>
               <button className="link-btn" onClick={async () => {
                 const goingBack = viewIndex < (client.sessionsCompleted || 0);
-                // Moving the cursor backwards rewinds progress and, because the
-                // payment gate reads the current week, silently reopens it.
-                if (goingBack && !window.confirm("This moves you back to this day. Sessions you've already finished stay in your history, but your progress marker goes back to here. Continue?")) return;
+                // Both directions move the marker, so both ask. Forward used to
+                // be silent, which meant a curious athlete could jump to week
+                // five on their first day and skip eleven sessions by accident.
+                const question = goingBack
+                  ? "This moves you back to this day. Sessions you've already finished stay in your history, but your progress marker goes back to here. Continue?"
+                  : `This skips you forward to Week ${pos.weekNumber}, Day ${pos.day.label}. The sessions in between will be marked as passed and you will not be prompted to do them. Continue?`;
+                if (!window.confirm(question)) return;
                 await onPersist({ ...client, sessionsCompleted: viewIndex, maxSessionsReached: Math.max(client.maxSessionsReached || 0, client.sessionsCompleted || 0) });
                 setShowJumpPicker(false);
               }}>{viewIndex < (client.sessionsCompleted || 0) ? "Go back to this day" : "Skip ahead — make this my current day"}</button>
@@ -6506,10 +6540,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           </div>
         )}
         {isCurrent ? (
-          Math.floor(Math.max(client.sessionsCompleted || 0, client.maxSessionsReached || 0) / (client.program.sessionsPerWeek || 3)) + 1 >= 2 && !client.paid ? (
+          (client.logs || []).length >= (client.program.sessionsPerWeek || 3) && !client.paid ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
-              <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach will confirm it on their end — this screen updates automatically once they do, no need to do anything else here.`}</p>
+              <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
+              <button className="btn-ghost wide" style={{ marginBottom: 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {(coachVenmo || coachCashApp || coachPaymentLink) ? (
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
