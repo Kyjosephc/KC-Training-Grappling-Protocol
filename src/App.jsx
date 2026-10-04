@@ -169,7 +169,22 @@ function embedFor(url) {
   return { kind: "link", href: u, host };
 }
 
-const COMMUNITY_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at, channel";
+const COMMUNITY_BASE_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
+const COMMUNITY_COLS = `${COMMUNITY_BASE_COLS}, channel`;
+// Set to false the first time the database tells us the column is not there, so
+// the app falls back to the single-feed behaviour instead of breaking. It flips
+// back on its own at the next reload once the migration has run.
+let CHANNELS_READY = true;
+function channelsAreReady() { return CHANNELS_READY; }
+// PostgREST reports an unknown column as 42703, and its schema cache as PGRST204.
+// Matching the message as well, because the code is not always populated.
+function isMissingChannelColumn(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  const msg = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`.toLowerCase();
+  if (code === "42703" || code === "PGRST204") return msg.includes("channel") || !msg;
+  return msg.includes("channel") && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
+}
 const COMMUNITY_CHANNELS = [
   { id: "general", label: "General",
     blurb: "Questions about the app, the program, how to log something, or anything else.",
@@ -196,20 +211,27 @@ async function fetchCommunityFeed(pages, channel) {
   if (!supabase) return LOAD_FAILED;
   const limit = Math.min(pages || 1, COMMUNITY_MAX_PAGES) * COMMUNITY_PAGE;
   const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("community_posts")
-      .select(COMMUNITY_COLS)
-      .is("deleted_at", null)
-      .is("parent_id", null)
-      .eq("channel", channel || DEFAULT_CHANNEL)
-      .order("created_at", { ascending: false })
-      .limit(limit + 1);
+    const roots_ = async (withChannel) => {
+      let q = supabase.from("community_posts")
+        .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
+        .is("deleted_at", null)
+        .is("parent_id", null);
+      if (withChannel) q = q.eq("channel", channel || DEFAULT_CHANNEL);
+      return q.order("created_at", { ascending: false }).limit(limit + 1);
+    };
+    let { data, error } = await roots_(CHANNELS_READY);
+    if (error && CHANNELS_READY && isMissingChannelColumn(error)) {
+      // The build is ahead of the database. Serve one feed rather than none.
+      CHANNELS_READY = false;
+      ({ data, error } = await roots_(false));
+    }
     if (error) throw error;
     const roots = data || [];
     const more = roots.length > limit;
     const page = more ? roots.slice(0, limit) : roots;
     if (!page.length) return { posts: [], more: false };
     const { data: kids, error: kidsErr } = await supabase.from("community_posts")
-      .select(COMMUNITY_COLS)
+      .select(CHANNELS_READY ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
       .is("deleted_at", null)
       .in("parent_id", page.map((p) => p.id))
       .order("created_at", { ascending: true });
@@ -251,12 +273,22 @@ async function createCommunityPost(post) {
   // collides on the primary key and we read back the one that already landed.
   const row = { id: newId(), ...post };
   const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("community_posts").insert(row)
-      .select(COMMUNITY_COLS).single();
+    const send = async (withChannel) => {
+      const { channel: ch, ...withoutChannel } = row;
+      const cols = withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS;
+      return supabase.from("community_posts").insert(withChannel ? row : withoutChannel).select(cols).single();
+    };
+    let { data, error } = await send(CHANNELS_READY);
+    if (error && CHANNELS_READY && isMissingChannelColumn(error)) {
+      // Same reason as the feed: post it into the one feed that exists rather
+      // than refusing, and stop claiming the connection is at fault.
+      CHANNELS_READY = false;
+      ({ data, error } = await send(false));
+    }
     if (error) {
       if (error.code === "23505") {
         const { data: already } = await supabase.from("community_posts")
-          .select(COMMUNITY_COLS).eq("id", row.id).maybeSingle();
+          .select(CHANNELS_READY ? COMMUNITY_COLS : COMMUNITY_BASE_COLS).eq("id", row.id).maybeSingle();
         if (already) return already;
       }
       throw error;
@@ -3617,7 +3649,7 @@ function useCommunityUnread(prefs, userId, enabled) {
       if (document.visibilityState === "hidden") return;
       try {
         const { data, error } = await supabase.from("community_posts")
-          .select("id, author_name, body, video_url, created_at, channel")
+          .select(channelsAreReady() ? "id, author_name, body, video_url, created_at, channel" : "id, author_name, body, video_url, created_at")
           .is("deleted_at", null)
           .gt("created_at", lastSeen)
           .neq("author_id", userId)
@@ -3625,6 +3657,8 @@ function useCommunityUnread(prefs, userId, enabled) {
           .limit(30);
         if (error || cancelled || !data) return;
         const unseen = data.filter((row) => row.created_at > (seenBy[row.channel] || lastSeen));
+        // With no channel column every row reads as the default channel, which
+        // is exactly the single-feed behaviour from before channels existed.
         setCount(unseen.length);
         const newest = unseen[0];
         // Seed on the very first check whatever came back, including nothing.
@@ -4097,6 +4131,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         ))}
       </div>
       <p className="muted" style={{ margin: "-6px 0 14px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
+      {isCoach && posts && !channelsAreReady() && (
+        <div className="adjust-box" style={{ marginBottom: 14 }}>
+          Both tabs are showing the same posts because the channel column is not in the database yet.
+          Run <strong>supabase-community-channels.sql</strong> in the Supabase SQL editor and reload.
+          Nothing is broken in the meantime — this is the single feed, working as it did before.
+        </div>
+      )}
 
       <div className="community-prefs" role="group" aria-label="Community settings">
         {notifyState === "granted" ? (
