@@ -94,7 +94,7 @@ async function withRetry(fn, retries = 2, delayMs = 900) {
   return { ok: false, error: lastErr };
 }
 
-async function kvGet(userId, key) {
+async function kvGet(userId, key, opts) {
   if (!supabase || !userId) return null;
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("kv_store").select("value").eq("user_id", userId).eq("key", key).maybeSingle();
@@ -105,7 +105,9 @@ async function kvGet(userId, key) {
     // NOT null. A failed read and an empty record are completely different
     // things, and conflating them is how an eight-week athlete gets shown the
     // welcome screen on bad gym wifi and overwrites their own client list.
-    emitToast({ kind: "error", message: "Couldn't load your data — check your connection.", autoDismissMs: 6000 });
+    // A background refresh nobody asked for stays silent. It still reports the
+    // failure to its caller; it just does not interrupt a session to do it.
+    if (!(opts && opts.quiet)) emitToast({ kind: "error", message: "Couldn't load your data — check your connection.", autoDismissMs: 6000 });
     return LOAD_FAILED;
   }
   return outcome.result ? outcome.result.value : null;
@@ -193,7 +195,7 @@ function markChannelsMissing() { channelsMissingSince = Date.now(); }
 function isMissingChannelColumn(error) {
   if (!error) return false;
   const code = String(error.code || "");
-  const msg = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`.toLowerCase();
+  const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
   if (code === "42703" || code === "PGRST204") return msg.includes("channel") || !msg;
   return msg.includes("channel") && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
 }
@@ -504,7 +506,7 @@ function timeAgo(iso) {
 
 async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST_KEY); return v === LOAD_FAILED ? LOAD_FAILED : (v || []); }
 async function setClientList(userId, list) { return kvSet(userId, CLIENT_LIST_KEY, list); }
-async function getClient(userId, id) { const v = await kvGet(userId, clientKey(id)); return v === LOAD_FAILED ? LOAD_FAILED : (v || null); }
+async function getClient(userId, id, opts) { const v = await kvGet(userId, clientKey(id), opts); return v === LOAD_FAILED ? LOAD_FAILED : (v || null); }
 async function setClient(userId, id, data) { return kvSet(userId, clientKey(id), data); }
 
 // The whole athlete record is one row, and every save rewrites all of it from
@@ -674,8 +676,17 @@ function useRestTimer() {
 // is one people stop trusting.
 function restSecondsFrom(text) {
   const t = String(text || "").toLowerCase();
-  const n = Number((t.match(/\d+/) || [])[0]);
+  const m = t.match(/(\d+)\s*([a-z]*)/);
+  if (!m) return null;
+  const n = Number(m[1]);
   if (!n) return null;
+  // The unit attached to the first number, not the first unit anywhere in the
+  // string. "90 seconds to 2 minutes" is ninety seconds; reading the "minutes"
+  // off the far end of that sentence put a 90 minute clock on nearly every
+  // main lift in Program B.
+  const unit = m[2];
+  if (unit.startsWith("min") || unit === "m") return n * 60;
+  if (unit.startsWith("sec") || unit === "s") return n;
   return /min/.test(t) ? n * 60 : n;
 }
 function fmtClock(total) {
@@ -3983,8 +3994,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     setLoadingMore(false);
   };
 
+  // No load() here — the channel effect above already runs one on mount, and
+  // two concurrent four-query loads on every open of the tab is just noise.
   useEffect(() => {
-    load();
     const id = setInterval(() => { if (document.visibilityState === "visible") load(); }, COMMUNITY_POLL_MS);
     const onVis = () => { if (document.visibilityState === "visible") load(); };
     document.addEventListener("visibilitychange", onVis);
@@ -4373,6 +4385,10 @@ function MainApp({ userId, onSignOut }) {
   const [clients, setClients] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [client, setClientState] = useState(null);
+  // The record as it stands right now, for the handlers that need it after an
+  // await rather than at render time.
+  const clientRef = useRef(null);
+  clientRef.current = client;
   const [tab, setTab] = useState("today");
   const [showSettings, setShowSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -4448,14 +4464,18 @@ function MainApp({ userId, onSignOut }) {
   // session used to land on the previously selected athlete.
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
-  const loadActiveClient = useCallback(async () => {
+  const loadActiveClient = useCallback(async (opts) => {
     if (!activeId) return;
+    const background = !!(opts && opts.background);
     const requestedId = activeId;
-    setClientLoadError(false);
+    if (!background) setClientLoadError(false);
     {
-      const c = await getClient(userId, activeId);
+      const c = await getClient(userId, activeId, background ? { quiet: true } : undefined);
       if (activeIdRef.current !== requestedId) return;
-      if (c === LOAD_FAILED) { setClientLoadError(true); return; }
+      // A poll that fails is a poll that fails. Only a read the athlete is
+      // actually waiting on earns the full-screen connection error — otherwise
+      // one bad tick on gym wifi wipes out the session they are mid-way through.
+      if (c === LOAD_FAILED) { if (!background) setClientLoadError(true); return; }
       let healedReadiness = false;
       if (c) {
         if (!c.bodyweightLog) c.bodyweightLog = [];
@@ -4556,8 +4576,11 @@ function MainApp({ userId, onSignOut }) {
     // Optimistic, because every one of these is a tap the athlete expects to see
     // land immediately. But hold the previous record so a failed write can put
     // the screen back rather than leaving it claiming something that never saved.
-    let previous = null;
-    setClientState((prev) => { previous = prev; return updated; });
+    // Read from the ref, not from inside a state updater: outside a React event
+    // the updater has not run by the time the await below resolves, so the
+    // rollback had nothing to roll back to.
+    const previous = clientRef.current;
+    setClientState(updated);
     const res = await persistClientRecord(userId, updated);
     if (res && res.ok === false) {
       if (previous) setClientState(previous);
@@ -6388,6 +6411,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const shape = useMemo(() => sessionShape(resolvedRaw), [resolvedRaw]);
   const readinessPattern = useMemo(() => (isCurrent ? readinessTrend(client.readiness, today) : null), [client.readiness, today, isCurrent]);
   const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday, readinessPattern) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, readinessPattern, isCurrent]);
+  // A run of below-par days outranks whatever was scored this morning, so the
+  // badge has to say what the session is actually doing.
+  const effectiveReadinessColor = readinessPattern ? "RED" : (readinessToday && readinessToday.color) || "GREEN";
   // A taper and a rough day stack rather than one overriding the other.
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
   const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
@@ -6396,15 +6422,20 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
     && (client.logs || []).length >= (client.program.sessionsPerWeek || 3)
     && !client.paid;
   const [checkingPaid, setCheckingPaid] = useState(false);
+  const [paidCheckEmpty, setPaidCheckEmpty] = useState(false);
   const onCheckPaid = async () => {
     if (!onReloadClient || checkingPaid) return;
     setCheckingPaid(true);
+    setPaidCheckEmpty(false);
     await onReloadClient();
     setCheckingPaid(false);
+    // Still rendering this card means the answer came back unpaid. Saying so
+    // beats a button that flickers and leaves them guessing.
+    setPaidCheckEmpty(true);
   };
   useEffect(() => {
     if (!awaitingPayment || !onReloadClient) return undefined;
-    const tick = () => { if (document.visibilityState === "visible") onReloadClient(); };
+    const tick = () => { if (document.visibilityState === "visible") onReloadClient({ background: true }); };
     const id = setInterval(tick, 45 * 1000);
     document.addEventListener("visibilitychange", tick);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
@@ -6571,8 +6602,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         {isCurrent && (
           readinessToday ? (
             <div className="hero-readiness-badge">
-              <span className="hero-dot" style={{ background: readinessCopyFor(readinessToday).color }} />
-              {readinessToday.color === "GREEN" ? "Good to go — full session today" : readinessToday.color === "YELLOW" ? "Rough night — session a notch back" : "Rough day — session eased right back"}
+              <span className="hero-dot" style={{ background: readinessCopyFor({ color: effectiveReadinessColor }).color }} />
+              {readinessPattern ? "Below par all week — session eased right back" : effectiveReadinessColor === "GREEN" ? "Good to go — full session today" : effectiveReadinessColor === "YELLOW" ? "Rough night — session a notch back" : "Rough day — session eased right back"}
             </div>
           ) : (
             <>
@@ -6666,7 +6697,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
-              <button className="btn-ghost wide" style={{ marginBottom: 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
+              <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
+              {paidCheckEmpty && !checkingPaid && <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>Not showing as paid yet — your coach has to confirm it on their end. This screen keeps checking on its own.</p>}
               {(coachVenmo || coachCashApp || coachPaymentLink) ? (
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
