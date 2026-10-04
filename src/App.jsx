@@ -5717,11 +5717,15 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </p>
       <label className="labeled-input">
         <span>Competition date (optional)</span>
-        <input type="date" value={client.competitionDate || ""} min={todayStr()}
-          onChange={async (e) => { await onPersist({ ...client, competitionDate: e.target.value || null }); }} />
+        <input type="date" value={client.competitionDate || ""}
+          onChange={async (e) => { await onPersist({ ...client, competitionDate: e.target.value || null, competitionDebriefed: null }); }} />
       </label>
       {client.competitionDate && (
         <>
+          <button className="btn-ghost wide" style={{ marginTop: 0, marginBottom: 10 }}
+            onClick={async () => { await onPersist({ ...client, competitionDate: null, competitionDebriefed: null }); }}>
+            Clear competition date
+          </button>
           <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
             {(() => { const d = daysUntil(client.competitionDate); return d == null ? "" : d < 0 ? "That date has passed — clear it or set a new one." : d === 0 ? "That's today. Go compete." : `${d} day${d === 1 ? "" : "s"} out.`; })()}
           </p>
