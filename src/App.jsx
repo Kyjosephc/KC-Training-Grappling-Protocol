@@ -17,6 +17,10 @@ const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
+// Every escalation in the app — a payment that has not been marked, a report, a
+// deletion request — ended in "ask your coach". That worked when every athlete
+// trained at the same gym. Set VITE_SUPPORT_EMAIL and it becomes a real path.
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "";
 const PROGRAM_PRICE = 15;
 // Promo codes map to a dollar amount off PROGRAM_PRICE. Add more codes here as needed.
 const PROMO_CODES = { INFINITI: 5 };
@@ -376,7 +380,10 @@ async function setCommunityReaction(postId, userId, on) {
 // video is enormous, and free storage is not.
 const COMMUNITY_CLIP_BUCKET = "community-clips";
 const isUploadedClip = (url) => /\/storage\/v1\/object\/public\//.test(String(url || ""));
-const COMMUNITY_CLIP_MAX_BYTES = 100 * 1024 * 1024;
+// Matches the storage bucket's own 50 MB limit. When this was 100 the upload
+// ran to completion over gym wifi and then failed server-side, with an error
+// that never mentioned size.
+const COMMUNITY_CLIP_MAX_BYTES = 50 * 1024 * 1024;
 const COMMUNITY_CLIP_MAX_SECONDS = 70;
 
 // Size alone was a poor stand-in for length: the same minute is 45 MB from one
@@ -413,7 +420,7 @@ async function uploadCommunityClip(file, userId) {
   // wifi and expensive to store and to play back for everyone else.
   if (file.size > COMMUNITY_CLIP_MAX_BYTES) {
     emitToast({ kind: "error", autoDismissMs: 11000,
-      message: `That's ${Math.round(file.size / 1048576)} MB — over the 100 MB limit, usually because the phone is filming in 4K. Record it at 1080p, or put it on YouTube as unlisted and paste the link.` });
+      message: `That's ${Math.round(file.size / 1048576)} MB — over the 50 MB limit, usually because the phone is filming in 4K. Record it at 1080p, or put it on YouTube as unlisted and paste the link.` });
     return { ok: false };
   }
   const ext = (String(file.name || "").match(/\.([A-Za-z0-9]{2,5})$/) || [null, "mp4"])[1].toLowerCase();
@@ -1110,9 +1117,14 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
       : null;
     if (plan) idx = plan[Math.max(0, Math.min(plan.length - 1, weekNumber - phase.weekStart))] % pool.length;
     const chosen = pool[idx];
-    const capped = chosen.maxTriple
+    // The cap exists to pull a true single DOWN to a triple. On a deload the
+    // slot is already lighter than the cap, so applying it raises the week
+    // instead of lowering it — which is how weeks 8 and 12 of Program A came
+    // out at 88 percent under a heading that said Deload.
+    const isDeloadSlot = /deload/i.test(e.quality || "") || /deload/i.test(phase?.name || "");
+    const capped = chosen.maxTriple && !isDeloadSlot
       ? { perSetTargets: meTripleCapSets(), sets: 4, reps: "working sets of 3", rir: 1,
-          cues: "Work up in triples to one heavy top set. This lift stops at a triple on purpose — a true single on a loaded hinge is the one place in this rotation where the risk stops being worth the adaptation. Stop the set the moment your back rounds or the bar speed drops." }
+          cues: `Work up in triples to one heavy top set. ${chosen.name} stops at a triple on purpose — a true single on it is the one place in this rotation where the risk stops being worth the adaptation. Stop the set the moment your technique or your bar speed drops.` }
       : {};
     const merged = { ...e, name: chosen.name, purpose: chosen.notes || e.purpose, videoUrl: chosen.videoUrl || lookupVideo(chosen.name) || "",
       reps: chosen.reps || e.reps, sets: chosen.sets || e.sets, load: chosen.load || e.load, cues: chosen.cues || e.cues,
@@ -1703,12 +1715,12 @@ const rpeProgramCues = {
   "Front Squat": "Elbows stay high and the bar stays on your shoulders, not your hands. The moment the elbows drop the bar rolls forward and your back takes it. Finish the set there.",
   "Bench Press": "Shoulder blades pulled back and down into the bench and kept there. Feet planted. Lower to the same spot on your chest every rep — control the bar down, do not let it drop onto you.",
   "Incline Bench Press": "Shoulder blades set back and down before you unrack. Keep the elbows from flaring straight out to the sides — about 45 degrees from your body keeps the shoulder safe.",
-  "Zercher Squat": "Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
+  "Zercher Squat": "Set the pins so you can dump the bar forward if you miss — this is the one lift here where that matters most. Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
   "Trap Bar Deadlift": "Hips somewhere between a squat and a deadlift, chest up, and push the floor away. The bar comes up in a straight line. Reset your brace on the floor between every rep rather than bouncing them.",
   "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
   "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use around seventy percent of your best pull — a weight you can stand up with easily — and deadlift it normally before you hold. Do not chase the heavier number without pins: the hold is the exercise, and pulling ninety percent off the floor to get into it is where backs go. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
-  "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
+  "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — scrambles, head-position fights and having your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
   "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
   "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
@@ -1768,11 +1780,11 @@ function meRetestSets() {
 }
 function meLowerBlock() {
   return ex({ name: meLowerPool[0].name, rotatingPool: "meLowerPool", sets: 6, reps: "working sets of 3 down to 1", perSetTargets: meWorkingSets(), load: "autoregulated", rir: 0, rest: "3 to 4 minutes", quality: "Max Effort",
-    cues: "Work up in doubles and triples to a heavy top single or triple. This is a true max effort — stop when bar speed or technique breaks down, not at a preset percentage.\n\nNew to barbell training? If you have been lifting seriously for less than about six months, do not chase a true single yet. Work up to a heavy triple that still looks clean and stop there. The max effort method assumes you can read your own bar speed, and that is a skill that takes a while to build. You lose nothing by waiting — a heavy triple drives almost the same adaptation at a fraction of the risk." });
+    cues: "Set the safety pins at a height that lets you bail out of the bottom before your first working set. Squatting or pulling alone with nothing to catch the bar, stop at a heavy triple rather than a single.\n\nWork up in doubles and triples to a heavy top single or triple. This is a true max effort — stop when bar speed or technique breaks down, not at a preset percentage.\n\nNew to barbell training? If you have been lifting seriously for less than about six months, do not chase a true single yet. Work up to a heavy triple that still looks clean and stop there. The max effort method assumes you can read your own bar speed, and that is a skill that takes a while to build. You lose nothing by waiting — a heavy triple drives almost the same adaptation at a fraction of the risk." });
 }
 function meUpperBlock() {
   return ex({ name: meUpperPool[0].name, rotatingPool: "meUpperPool", sets: 6, reps: "working sets of 3 down to 1", perSetTargets: meWorkingSets(), load: "autoregulated", rir: 0, rest: "3 to 4 minutes", quality: "Max Effort",
-    cues: "Work up in doubles and triples to a heavy top single or triple. Stop on any breakdown in bar speed or technique." });
+    cues: "Set the safety pins or the rack arms at chest height before your first working set, or have somebody stand over you. If you are pressing alone with neither, do not take a single — work up to a heavy triple you are certain of and stop there. A missed rep with nothing to catch the bar is the one injury in this program you cannot train around.\n\nWork up in doubles and triples to a heavy top single or triple. Stop on any breakdown in bar speed or technique." });
 }
 function deSquat(pct1rm) {
   return ex({ name: deLowerPool[0].name, rotatingPool: "deLowerPool", deWave: true, deJump: true, deMaxLabel: "trap bar deadlift One-Rep Max", sets: 8, reps: "3", load: "", rir: 4, rest: "60 seconds", quality: "Dynamic Effort", pct1rmFlat: pct1rm,
@@ -1823,7 +1835,7 @@ const meLowerPool = [
   // put a true good-morning single seven days out from competing.
   { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", maxTriple: true, videoUrl: "" },
   { name: "Zercher Squat", notes: "Heavy anterior-loaded trunk bracing — carries over to grappling posture under load", videoUrl: "" },
-  { name: "Trap Bar Deadlift", maxTriple: true, notes: "Neutral grip, lower technical demand heavy pull — the safest way to push a true top single on your own", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
+  { name: "Trap Bar Deadlift", maxTriple: true, notes: "Neutral grip, lower technical demand heavy pull — the safest heavy pull to push on your own, which is why it stops at a triple rather than a single", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
 ];
 const meUpperPool = [
   { name: "Close-Grip Bench Press", notes: "Triceps-dominant press — frame and pummel strength", videoUrl: "https://www.youtube.com/watch?v=FiQUzPtS90E" },
@@ -1958,7 +1970,7 @@ const conjugateProgram = {
                 purpose: "Everything else in the gym is a shaped handle. This is a resisting, badly-balanced load held against your chest, which is the body lock, the double-leg finish, and carrying somebody. It also loads breathing under chest compression, which a farmer carry cannot.",
                 cues: "Hug it high on the chest, elbows underneath rather than out to the sides, ribs down. Short quick steps. Breathe shallow and often — you will not get a full breath and that is part of the exercise. If it slides below your sternum, set it down and reset rather than fighting it.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
-              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
+              ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight. Grappling loads the neck every round — in guard, in a scramble, under a stack — and this builds it with no movement through the joint, which is why it can run every week. The bridge comes in the next block, once this base is there.", cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: scrambles, head-position fights and having your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
@@ -2447,7 +2459,7 @@ function defaultWarmup() {
       { id: uid(), name: "Band External Rotation at 90/90", detail: "12 reps a side, light band. Elbow stays pinned at shoulder height. This is the cuff work that holds the shoulder centred under everything you are about to press — light and controlled, not loaded.", videoUrl: "https://www.youtube.com/shorts/PTi9pfttH64" },
     ]},
     { id: uid(), block: "Durability", duration: "4 minutes", items: [
-      { id: uid(), name: "6-Way Isometric Neck Holds", detail: "15 seconds in each of six directions — forehead, back of the head, each side, then a hand on each temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation and nothing else trains that direction. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop and note it in your check-in.", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" },
+      { id: uid(), name: "6-Way Isometric Neck Holds", detail: "15 seconds in each of six directions — forehead, back of the head, each side, then a hand on each temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: scrambles, head-position fights and getting your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop and note it in your check-in.", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" },
       { id: uid(), name: "90/90 Hip Rotation Lift-Off", detail: "5 per side with a 3 second hold. Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range — if your torso has to rock to make it happen, you have gone past what you own. This is strength at the end of hip rotation, which is guard retention, a knee shield, and every hip escape.", videoUrl: "" },
       { id: uid(), name: "Tibialis Raise", detail: "15 reps. Heels on the floor, toes pulled up toward the shin, slow down. Ankle and shin durability under guard-retention and scrambling loads — two minutes a session is the whole dose.", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" },
     ]},
@@ -2671,7 +2683,7 @@ const WEEKLY_FLOORS = [
     make: () => ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction",
       load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", quality: "Durability",
       purpose: "The neck takes load every single round — in guard, in a scramble, under pressure. Isometric work builds it with no movement through the joint, which is why it can run every week without needing to be backed off.",
-      cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in." }) },
+      cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: scrambles, head-position fights and having your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in." }) },
   { key: "scap", min: 2, deloadMin: 2, match: /face pull|pull-apart|y, t, w|scarecrow|scapular/i,
     make: () => ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2,
       rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
@@ -3847,7 +3859,7 @@ function ClipPicker({ userId, url, onUrl, disabled, onBusy }) {
       {attached ? (
         <span className="clip-chosen">
           <Video size={14} aria-hidden="true" />Clip attached
-          <button type="button" className="link-btn" onClick={() => onUrl("")}>Remove</button>
+          <button type="button" className="link-btn" onClick={() => { const u = url; onUrl(""); if (u) deleteCommunityClip(u); }}>Remove</button>
         </span>
       ) : (
         <button type="button" className="pref-btn" disabled={disabled || busy}
@@ -3856,7 +3868,7 @@ function ClipPicker({ userId, url, onUrl, disabled, onBusy }) {
         </button>
       )}
       {busy && <span className="clip-note">Keep the app open until it finishes.</span>}
-      {!attached && !busy && <span className="clip-note">Up to a minute, 100 MB. Longer than that, put it on YouTube as unlisted and paste the link.</span>}
+      {!attached && !busy && <span className="clip-note">Up to a minute, 50 MB. Longer than that, put it on YouTube as unlisted and paste the link.</span>}
     </div>
   );
 }
@@ -5201,11 +5213,11 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
 
 
 const TERMS_SECTIONS = [
-  { heading: "What this app is", body: "Strength Matrix is a personal strength and conditioning coaching tool operated by Kyle Cox for his own training clients. It isn't a general-purpose fitness product offered to the public at large." },
-  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used only to run and personalize your training — it's never sold, and it isn't shared with anyone outside your coach without your permission." },
+  { heading: "What this app is", body: "Strength Matrix is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
+  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to your coach.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app, not just your coach. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
   { heading: "Payment", body: "The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one. Payment goes directly to your coach; this app does not process, transmit, or store card or bank account numbers, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable — but if something is wrong, tell your coach and he will sort it out with you. There is nothing to cancel: if you stop training, nothing further is charged, and everything you have logged stays in your account." },
   { heading: "Not medical advice", body: "This program is coaching, not medical care. It can't account for an injury, a medical condition, or anything else your coach doesn't know about, so tell your coach about anything relevant and check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you feel, but it can't see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train and you accept that risk as your own." },
-  { heading: "Your data, your call", body: "You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, ask your coach and it will be done." },
+  { heading: "Your data, your call", body: "You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, contact your coach and it will be done. Deleting your account removes your training record and your posts; clips you have already uploaded are removed with them." },
   { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
 ];
 
@@ -5870,6 +5882,15 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
       <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
+      {SUPPORT_EMAIL && (
+        <>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Contact</h3>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
+          </p>
+          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email your coach</a>
+        </>
+      )}
       <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
       {showSafetyCopy && <SafetyScreenModal onClose={() => setShowSafetyCopy(false)} />}
       <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
@@ -6702,7 +6723,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
               <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
-              {paidCheckEmpty && !checkingPaid && <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>Not showing as paid yet — your coach has to confirm it on their end. This screen keeps checking on its own.</p>}
+              {paidCheckEmpty && !checkingPaid && (
+                <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                  Not showing as paid yet — your coach has to confirm it on their end. This screen keeps checking on its own.
+                  {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
+                </p>
+              )}
               {(coachVenmo || coachCashApp || coachPaymentLink) ? (
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
