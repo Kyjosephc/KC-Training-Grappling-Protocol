@@ -601,8 +601,11 @@ function daysSinceLastActivity(client) {
     ...(client.logs || []).map((l) => l.date),
     ...(client.mobilityLogs || []).map((m) => m.date),
   ].filter(Boolean).sort();
-  const last = dates.length ? dates[dates.length - 1] : client.createdAt;
-  if (!last) return 0;
+  // Null, not a number: an athlete who has never trained is not "3 days since
+  // training", and the dashboard already has a branch that says so.
+  if (!dates.length) return null;
+  const last = dates[dates.length - 1];
+  if (!last) return null;
   const lastDate = new Date(last + "T00:00:00");
   const now = new Date(todayStr() + "T00:00:00");
   return Math.max(0, Math.round((now - lastDate) / (1000 * 60 * 60 * 24)));
@@ -1718,9 +1721,35 @@ function exerciseUnitLabel(name, repsText) {
 function needsWeight(name) {
   return !NO_WEIGHT_EXERCISES.has(normalizeExerciseKey(name));
 }
+const rpeProgramCues = {
+  "Back Squat": "Brace before you unrack, not after. Knees track over the middle of the foot the whole way down, and the hips and chest rise together out of the bottom — if the hips shoot up first, that set is done.",
+  "Front Squat": "Elbows stay high and the bar stays on your shoulders, not your hands. The moment the elbows drop the bar rolls forward and your back takes it. Finish the set there.",
+  "Bench Press": "Shoulder blades pulled back and down into the bench and kept there. Feet planted. Lower to the same spot on your chest every rep — control the bar down, do not let it drop onto you.",
+  "Incline Bench Press": "Shoulder blades set back and down before you unrack. Keep the elbows from flaring straight out to the sides — about 45 degrees from your body keeps the shoulder safe.",
+  "Zercher Squat": "Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
+  "Trap Bar Deadlift": "Hips somewhere between a squat and a deadlift, chest up, and push the floor away. The bar comes up in a straight line. Reset your brace on the floor between every rep rather than bouncing them.",
+  "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
+  "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
+  "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
+  "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
+  "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
+  "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
+  "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
+  "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
+  "Renegade Row": "Feet wide for a stable base. The hips are what you are really training here — do not let them rotate as you row. If they twist, go lighter.",
+  "Bulgarian Split Squat (rear foot elevated, dumbbells)": "Far enough forward that the front shin stays near vertical. Drop the back knee straight down. If the front knee caves inward, drop the weight.",
+  "Seal Row": "Chest stays flat on the bench the whole set — no heaving up off it to move the weight. Pull to the bottom of your ribs and squeeze the shoulder blades together at the top.",
+};
+
 function ex(o) {
   const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
   if (!base.videoUrl) base.videoUrl = lookupVideo(base.name);
+  // The safety cues were only reachable from the Program B builders, so Program
+  // A shipped its max-effort singles, Copenhagens and — worst of all — its
+  // weekly maximal sprint with no coaching at all, while the "never sprint
+  // cold, keep week one at eighty-five percent" cue sat unused a few hundred
+  // lines away. Every exercise gets it now.
+  if (!base.cues) base.cues = rpeProgramCues[base.name] || "";
   return base;
 }
 function meWorkingSets() {
@@ -1849,8 +1878,8 @@ const hipPool = [
 // five at white belt and ten at black — and nothing anywhere rehearses producing
 // again after an hour's rest, which is what a medal actually comes down to.
 const matchSpecificPool = [
-  { rir: 1, name: "Assault Bike or Treadmill — Match-Duration Round", notes: "One continuous effort the length of a real match. Every other piece of conditioning in this program is shorter than the thing you are training for, and holding output for eight minutes is a different skill from holding it for three", reps: "1 round of 6 to 8 minutes continuous at 85 to 88 percent of your max heart rate", cues: "Pace it. The mistake everyone makes here is starting at interval pace and falling apart at four minutes, which trains nothing except how to fail. Settle into an output you believe you can hold to the end, and hold it. The check that you paced it right is that the last minute is your hardest effort and not your slowest — if you are fading badly by the halfway point, take ten percent off next time. Match the round length to your belt: six minutes at white and blue, eight at brown and black." },
-  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Two hard rounds separated by a long rest, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "3 rounds of 6 minutes hard, 30 to 40 minutes easy or complete rest between rounds", cues: "Treat these as three separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full rest. Walk, sit down, eat something, do what you would actually do between matches, and match the gap to your own bracket if you know it. The third round is the one that matters, because nobody loses the first: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
+  { rir: 1, name: "Assault Bike or Treadmill — Match-Duration Round", notes: "One continuous effort the length of a real match. Every other piece of conditioning in this program is shorter than the thing you are training for, and holding output for eight minutes is a different skill from holding it for three", reps: "1 round of 6 to 8 minutes continuous at 85 to 88 percent of your max heart rate", cues: "Pace it. The mistake everyone makes here is starting at interval pace and falling apart at four minutes, which trains nothing except how to fail. Settle into an output you believe you can hold to the end, and hold it. The check that you paced it right is that the last minute is your hardest effort and not your slowest — if you are fading badly by the halfway point, take ten percent off next time. Match the round length to your belt: five minutes at white, six at blue, seven at purple, eight at brown and ten at black." },
+  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Three hard rounds separated by long rests, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "3 rounds of 6 minutes hard, 30 to 40 minutes easy or complete rest between rounds", cues: "Treat these as three separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full rest. Walk, sit down, eat something, do what you would actually do between matches, and match the gap to your own bracket if you know it. The third round is the one that matters, because nobody loses the first: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson's aerobic power protocol, kept in the specific block because raising the aerobic ceiling still pays right up to competition — and because it is the closest thing here to the repeated hard exchanges inside a single round", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds." },
 ];
 
@@ -1938,7 +1967,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "8 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
-              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "8", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is the best-evidenced protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
+              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "8", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Sandbag Bear-Hug Carry", sets: 3, reps: "30 meters", load: "heavy — a sandbag, a heavy bag, or a loaded duffel", rir: 1, rest: "90 seconds",
@@ -2002,7 +2031,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
-              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is the best-evidenced protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
+              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
               ex({ name: "Front-Foot-Elevated Split Squat (dumbbells)", sets: 3, reps: "6 per leg", load: "moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — a different single-leg loading angle than the base phase to keep the movement fresh while still training the pattern a sprawl or single-leg takedown defense relies on", quality: "Accessory" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
@@ -2211,25 +2240,6 @@ function withRampSets(e) {
 // technique knowledge in the coach's head rather than on the page. These are the
 // lifts where that gap actually costs someone something, so the cue travels with
 // the exercise instead of having to be repeated at every call site.
-const rpeProgramCues = {
-  "Back Squat": "Brace before you unrack, not after. Knees track over the middle of the foot the whole way down, and the hips and chest rise together out of the bottom — if the hips shoot up first, that set is done.",
-  "Front Squat": "Elbows stay high and the bar stays on your shoulders, not your hands. The moment the elbows drop the bar rolls forward and your back takes it. Finish the set there.",
-  "Bench Press": "Shoulder blades pulled back and down into the bench and kept there. Feet planted. Lower to the same spot on your chest every rep — control the bar down, do not let it drop onto you.",
-  "Incline Bench Press": "Shoulder blades set back and down before you unrack. Keep the elbows from flaring straight out to the sides — about 45 degrees from your body keeps the shoulder safe.",
-  "Zercher Squat": "Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
-  "Trap Bar Deadlift": "Hips somewhere between a squat and a deadlift, chest up, and push the floor away. The bar comes up in a straight line. Reset your brace on the floor between every rep rather than bouncing them.",
-  "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
-  "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
-  "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
-  "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
-  "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
-  "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
-  "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
-  "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
-  "Renegade Row": "Feet wide for a stable base. The hips are what you are really training here — do not let them rotate as you row. If they twist, go lighter.",
-  "Bulgarian Split Squat (rear foot elevated, dumbbells)": "Far enough forward that the front shin stays near vertical. Drop the back knee straight down. If the front knee caves inward, drop the weight.",
-  "Seal Row": "Chest stays flat on the bench the whole set — no heaving up off it to move the weight. Pull to the bottom of your ribs and squeeze the shoulder blades together at the top.",
-};
 // Arms are the one slot where a superset is unarguable: biceps and triceps are
 // opposing muscles with no shared fatigue, so pairing them costs nothing and
 // halves the time the slot takes. Deliberately not routed through ssPair — that
@@ -4953,10 +4963,12 @@ function OnboardingScreen({ onSubmit }) {
           ? `${strengthDays} strength days selected — you're set.`
           : `${strengthDays} of ${REQUIRED_STRENGTH_DAYS} strength days selected. Pick ${REQUIRED_STRENGTH_DAYS - strengthDays} more to continue.`}
       </div>
+      {programVariant === "A" && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
         The speed-work sets are prescribed as a percentage of your one-rep max on the bench press and the trap bar deadlift. You do not need to go test either one — take your best recent heavy set of three to five reps and add about fifteen percent, and that is close enough to start. Week 8 is a good point to re-estimate, because by then the original number will be stale and the speed work will have drifted light.
       </p>
+      </>)}
 
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
@@ -5693,6 +5705,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
   const [showSafetyCopy, setShowSafetyCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
+  const [switched, setSwitched] = useState(false);
   const [schedule, setSchedule] = useState(client?.weeklySchedule || defaultWeeklySchedule());
   const [savedSchedule, setSavedSchedule] = useState(false);
   const [belt, setBelt] = useState(client?.beltLevel || "White");
@@ -5726,7 +5739,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
   const lastSynced = useLastSynced();
 
   const saveSchedule = async () => {
-    await onPersist({ ...client, weeklySchedule: schedule });
+    const saved = await onPersist({ ...client, weeklySchedule: schedule });
+    if (saved && saved.ok === false) return;
     setSavedSchedule(true);
     setTimeout(() => setSavedSchedule(false), 2000);
   };
@@ -5755,7 +5769,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
     setExcluded((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
   };
   const saveExcluded = async () => {
-    await onPersist({ ...client, excludedExercises: excluded });
+    const saved = await onPersist({ ...client, excludedExercises: excluded });
+    if (saved && saved.ok === false) return;
     setSavedExcluded(true);
     setTimeout(() => setSavedExcluded(false), 2000);
   };
@@ -5858,7 +5873,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </p>
       <label className="labeled-input">
         <span>Competition date (optional)</span>
-        <input type="date" value={client.competitionDate || ""}
+        <input type="date" min={todayStr()} value={client.competitionDate || ""}
           onChange={async (e) => { await onPersist({ ...client, competitionDate: e.target.value || null, competitionDebriefed: null }); }} />
       </label>
       {client.competitionDate && (
@@ -5909,10 +5924,13 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
       {["A", "B"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
-        <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setRefreshed(true); }}>
+        <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setSwitched(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>
       ))}
+      {switched && (
+        <div className="adjust-box" style={{ borderColor: "var(--green)" }}>Switched. Your next session comes from the new program.</div>
+      )}
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Veteran Athlete Mode</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -6854,7 +6872,7 @@ function AccomplishmentsPage({ client, onClose }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={volumeSeries}>
                 <CartesianGrid stroke="var(--border)" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={10} />
+                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={10} minTickGap={24} tickFormatter={fmtChartDate} />
                 <YAxis stroke="var(--text-dim)" fontSize={10} tickFormatter={(v) => formatWeight(v)} />
                 <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} formatter={(v) => formatWeight(v)} />
                 <Bar dataKey="volume" fill="var(--accent)" radius={[4, 4, 0, 0]} />
@@ -6908,7 +6926,6 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   ];
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
-      <button className="btn-primary wide" style={{ marginBottom: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
         New or worsening pain isn't a rough day — that's worth a message to your coach rather than a lighter session.
       </p>
@@ -7260,7 +7277,12 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
     let totalVolume = 0; const prNameSet = new Set(); const allExercises = [];
     resolvedSections.forEach((sec) => {
       entriesBySection[sec.id].forEach((en) => {
-        const validSets = en.sets.filter((s) => s.weight !== "" || s.reps !== "");
+        // Reps come pre-filled from the target, so "has a value" is not the same
+        // as "was performed". For anything that takes load, a set with no weight
+        // is a set nobody did — without this, skipping an exercise still wrote
+        // three sets of phantom work into the athlete's permanent history.
+        const takesLoad = needsWeight(en.name);
+        const validSets = en.sets.filter((s) => (takesLoad ? s.weight !== "" : (s.weight !== "" || s.reps !== "")));
         validSets.forEach((s) => { totalVolume += (Number(s.weight) || 0) * (Number(s.reps) || 0); });
         const priorBest = lastAllTimeBest(client, en.name);
         const newBest = bestSetOf(validSets);
@@ -7371,7 +7393,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
       {showFirstSetHelp && (
         <div className="rest-banner" style={{ background: "var(--green)", color: "#101010" }}>
           <Info size={16} />
-          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. Your entries are kept on this phone as you go, so you won't lose them if the app closes mid-session — tap Finish &amp; Save Day at the end to send the session to your account. Effort is already filled in for you — you don't need to touch it. Only tap the trophy if it's a genuine Personal Record.</span>
+          <span>New here? For each set below: type the actual weight you used in the Weight box, then how many reps you actually got in the Reps box. Your entries are kept on this phone as you go, so you won't lose them if the app closes mid-session — tap Finish &amp; Save Day at the end to send the session to your account. Effort is set for you by the program — it is printed in the target line above each exercise, so there is nothing to enter. Only tap the trophy if it's a genuine Personal Record.</span>
           <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
         </div>
       )}
@@ -7380,7 +7402,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
 
       {client.logs.length < 3 && (
         <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
-          <strong>Effort</strong> is your Rate of Perceived Exertion — how hard a set felt, out of 10. It is filled in for you on every set, so there is nothing to enter.
+          <strong>Effort</strong> is Rate of Perceived Exertion — how hard a set should feel, out of 10. The program sets it for you and prints it in the target line above each exercise. There is no Effort box to fill in.
         </div>
       )}
 
@@ -8805,8 +8827,13 @@ function GlobalStyle() {
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
       * { box-sizing: border-box; }
+      /* Fixed, above the session overlay (z-index 50): the one place this
+         message matters is mid-session in a gym basement, and in normal flow it
+         sat underneath the very screen it was written for. */
       .offline-banner { background: var(--amber); color: var(--bg); font-size: 12.5px; font-weight: 600;
-        padding: 8px 16px; text-align: center; flex-shrink: 0; }
+        padding: 8px 16px; text-align: center; flex-shrink: 0;
+        position: fixed; top: 0; left: 0; right: 0; z-index: 55;
+        padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
       .scroll-area { overscroll-behavior-y: contain; flex: 1; overflow-y: auto; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
       .pad { padding: 16px; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
