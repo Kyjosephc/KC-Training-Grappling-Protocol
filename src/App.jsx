@@ -6418,9 +6418,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const daysToComp = isCurrent ? daysUntil(client.competitionDate) : null;
   const tapered = useMemo(() => applyTaper(adjustment.sections, daysToComp), [adjustment.sections, daysToComp]);
   const countdown = competitionCountdown(daysToComp);
-  const awaitingPayment = isCurrent
-    && (client.logs || []).length >= (client.program.sessionsPerWeek || 3)
-    && !client.paid;
+  // The free week is up once they are past week one OR have logged a full
+  // week's worth of sessions. Counting logged sessions alone was skippable:
+  // "Skip ahead — make this my current day" moves the progress marker without
+  // logging anything, so an athlete could land on week two having logged
+  // nothing and never be asked to pay. The week they are actually on is what
+  // decides it, and nothing in the app moves that without their say-so.
+  const livePos = positionAtIndex(client.program, client.sessionsCompleted || 0);
+  const freeWeekUsed = livePos.weekNumber > 1
+    || (client.logs || []).length >= (client.program.sessionsPerWeek || 3);
+  const awaitingPayment = isCurrent && freeWeekUsed && !client.paid;
   const [checkingPaid, setCheckingPaid] = useState(false);
   const [paidCheckEmpty, setPaidCheckEmpty] = useState(false);
   const onCheckPaid = async () => {
@@ -6693,7 +6700,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           </div>
         )}
         {isCurrent ? (
-          (client.logs || []).length >= (client.program.sessionsPerWeek || 3) && !client.paid ? (
+          awaitingPayment ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
