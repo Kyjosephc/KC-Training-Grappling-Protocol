@@ -576,6 +576,41 @@ async function persistClientRecord(userId, updated) {
 }
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
 
+// Whether this athlete has paid. It used to live inside their own training
+// record, which every athlete has full write access to — the Mark as Paid
+// button was the coach's, the flag under it was not. It lives on client_links
+// now, where the policies let the athlete read their row and only a coach
+// change it. Null means the question could not be answered just now, which is
+// deliberately different from false.
+async function fetchPaidFlag(userId) {
+  if (!supabase || !userId) return null;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("client_links")
+      .select("paid").eq("client_user_id", userId).maybeSingle();
+    if (error) throw error;
+    return data;
+  });
+  if (!outcome.ok) return null;
+  // No link row at all is the coach's own account, or a profile the coach made
+  // themselves. Neither is waiting on a payment.
+  if (!outcome.result) return true;
+  return !!outcome.result.paid;
+}
+
+async function setPaidFlag(clientUserId, paid) {
+  if (!supabase || !clientUserId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("client_links")
+      .update({ paid }).eq("client_user_id", clientUserId);
+    if (error) throw error;
+    return true;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't update that athlete's payment status — try again.", autoDismissMs: 6000 });
+  }
+  return { ok: outcome.ok };
+}
+
 // The coach dashboard used to fetch every athlete's entire record — program
 // JSON, every logged session, the profile picture as a data URL — one at a
 // time, two round-trips each. Twenty athletes was forty requests and a few
@@ -4550,8 +4585,11 @@ function MainApp({ userId, onSignOut }) {
       // actually waiting on earns the full-screen connection error — otherwise
       // one bad tick on gym wifi wipes out the session they are mid-way through.
       if (c === LOAD_FAILED) { if (!background) setClientLoadError(true); return; }
+      const linkPaid = await fetchPaidFlag(userId);
+      if (activeIdRef.current !== requestedId) return;
       let healedReadiness = false;
       if (c) {
+        if (linkPaid !== null) c.paid = linkPaid;
         if (!c.bodyweightLog) c.bodyweightLog = [];
         if (!c.mobilityLogs) c.mobilityLogs = [];
         if (!c.prLog) c.prLog = [];
@@ -4569,6 +4607,10 @@ function MainApp({ userId, onSignOut }) {
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
+        // Whatever the record says about payment is ignored. The authority is
+        // the client_links row read above, which the athlete cannot write to.
+        // A failed read leaves them unblocked rather than locking out somebody
+        // who has paid because the network dropped.
         if (c.paid === undefined) c.paid = true;
         if (!c.program) {
           // Nothing sensible to render without a program, and silently throwing
@@ -6182,16 +6224,18 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
       // their own and got linked here.
       const owners = [userId];
       const emails = {};
+      // Payment is answered by the link row, not by the athlete's own record.
+      const paidByOwner = {};
       if (userId === COACH_USER_ID && supabase) {
         const linkRes = await withRetry(async () => {
           const { data, error } = await supabase.from("client_links")
-            .select("client_user_id, client_email").eq("coach_user_id", userId);
+            .select("client_user_id, client_email, paid").eq("coach_user_id", userId);
           if (error) throw error;
           return data || [];
         });
         (linkRes.ok ? linkRes.result : []).forEach((l) => {
           if (l.client_user_id && l.client_user_id !== userId) owners.push(l.client_user_id);
-          if (l.client_user_id) emails[l.client_user_id] = l.client_email;
+          if (l.client_user_id) { emails[l.client_user_id] = l.client_email; paidByOwner[l.client_user_id] = !!l.paid; }
         });
       }
 
@@ -6210,7 +6254,8 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
           loadFailed: false,
           // Everything the collapsed row shows, and nothing else. The full
           // record arrives when the row is opened.
-          summary: { name: r.nm, beltLevel: r.belt, paid: !!r.paid, createdAt: r.created,
+          summary: { name: r.nm, beltLevel: r.belt,
+            paid: r.user_id === userId ? true : !!paidByOwner[r.user_id], createdAt: r.created,
             sessionsCompleted: done, lastActivity: r.last || null, waiver: r.waiver || null,
             weekNumber: Math.max(1, Math.floor(done / perWeek) + 1) },
           full: r.full || null,
@@ -6256,7 +6301,9 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   };
 
   const togglePaid = async (id, full, ownerId) => {
-    if (!full) return;
+    // The record is fetched below, not passed in — the list no longer carries
+    // one. Guarding on `full` here made every Mark as Paid a no-op.
+    if (!id) return;
     setBusyId(id);
     // Re-read first. `full` was fetched when this dashboard opened, and every
     // write here replaces the whole client record — so writing it back would
@@ -6268,15 +6315,23 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
       return;
     }
     full = fresh;
-    const updated = { ...full, paid: !full.paid };
-    const saved = (id === activeId && ownerId === userId)
-      ? await onPersistActive(updated)
-      : await setClient(ownerId, id, updated);
+    // The flag lives on client_links now. Writing it here is the only place in
+    // the app that can, and only a coach's policies allow it.
+    const row = records && records.find((r) => r.id === id && r.ownerId === ownerId);
+    const nextPaid = !(row && row.summary ? row.summary.paid : full.paid);
+    const saved = ownerId === userId
+      ? await (async () => {
+          // A profile on the coach's own account has no link row to write to.
+          const updatedSelf = { ...full, paid: nextPaid };
+          return id === activeId ? onPersistActive(updatedSelf) : setClient(ownerId, id, updatedSelf);
+        })()
+      : await setPaidFlag(ownerId, nextPaid);
+    const updated = { ...full, paid: nextPaid };
     // Do not flip the pill on a write that did not land — kvSet has already
     // shown its own toast, and a wrong "Paid" here is worse than no change.
     if (saved && saved.ok === false) { setBusyId(null); return; }
     setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId
-      ? { ...r, full: updated, summary: r.summary ? { ...r.summary, paid: updated.paid } : r.summary }
+      ? { ...r, full: updated, summary: r.summary ? { ...r.summary, paid: nextPaid } : r.summary }
       : r)));
     await markReviewed(ownerId);
     setBusyId(null);
