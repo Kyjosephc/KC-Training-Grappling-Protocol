@@ -172,10 +172,22 @@ function embedFor(url) {
 const COMMUNITY_BASE_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
 const COMMUNITY_COLS = `${COMMUNITY_BASE_COLS}, channel`;
 // Set to false the first time the database tells us the column is not there, so
-// the app falls back to the single-feed behaviour instead of breaking. It flips
-// back on its own at the next reload once the migration has run.
-let CHANNELS_READY = true;
-function channelsAreReady() { return CHANNELS_READY; }
+// the app falls back to the single-feed behaviour instead of breaking.
+//
+// It expires rather than sticking for the life of the page: somebody running the
+// migration with the app already open — which is exactly how this gets run —
+// would otherwise see no change until a full reload, and a phone resumed from
+// the app switcher never does one. Worst case this costs one failed query a
+// minute, which is nothing; best case the feed splits itself a minute after the
+// SQL lands, with nobody touching anything.
+const CHANNEL_RETRY_MS = 60 * 1000;
+let channelsMissingSince = 0;
+function channelsAreReady() {
+  if (!channelsMissingSince) return true;
+  if (Date.now() - channelsMissingSince > CHANNEL_RETRY_MS) { channelsMissingSince = 0; return true; }
+  return false;
+}
+function markChannelsMissing() { channelsMissingSince = Date.now(); }
 // PostgREST reports an unknown column as 42703, and its schema cache as PGRST204.
 // Matching the message as well, because the code is not always populated.
 function isMissingChannelColumn(error) {
@@ -219,10 +231,10 @@ async function fetchCommunityFeed(pages, channel) {
       if (withChannel) q = q.eq("channel", channel || DEFAULT_CHANNEL);
       return q.order("created_at", { ascending: false }).limit(limit + 1);
     };
-    let { data, error } = await roots_(CHANNELS_READY);
-    if (error && CHANNELS_READY && isMissingChannelColumn(error)) {
+    let { data, error } = await roots_(channelsAreReady());
+    if (error && isMissingChannelColumn(error)) {
       // The build is ahead of the database. Serve one feed rather than none.
-      CHANNELS_READY = false;
+      markChannelsMissing();
       ({ data, error } = await roots_(false));
     }
     if (error) throw error;
@@ -231,7 +243,7 @@ async function fetchCommunityFeed(pages, channel) {
     const page = more ? roots.slice(0, limit) : roots;
     if (!page.length) return { posts: [], more: false };
     const { data: kids, error: kidsErr } = await supabase.from("community_posts")
-      .select(CHANNELS_READY ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
+      .select(channelsAreReady() ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
       .is("deleted_at", null)
       .in("parent_id", page.map((p) => p.id))
       .order("created_at", { ascending: true });
@@ -278,17 +290,17 @@ async function createCommunityPost(post) {
       const cols = withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS;
       return supabase.from("community_posts").insert(withChannel ? row : withoutChannel).select(cols).single();
     };
-    let { data, error } = await send(CHANNELS_READY);
-    if (error && CHANNELS_READY && isMissingChannelColumn(error)) {
+    let { data, error } = await send(channelsAreReady());
+    if (error && isMissingChannelColumn(error)) {
       // Same reason as the feed: post it into the one feed that exists rather
       // than refusing, and stop claiming the connection is at fault.
-      CHANNELS_READY = false;
+      markChannelsMissing();
       ({ data, error } = await send(false));
     }
     if (error) {
       if (error.code === "23505") {
         const { data: already } = await supabase.from("community_posts")
-          .select(CHANNELS_READY ? COMMUNITY_COLS : COMMUNITY_BASE_COLS).eq("id", row.id).maybeSingle();
+          .select(channelsAreReady() ? COMMUNITY_COLS : COMMUNITY_BASE_COLS).eq("id", row.id).maybeSingle();
         if (already) return already;
       }
       throw error;
