@@ -1775,7 +1775,7 @@ function meUpperBlock() {
     cues: "Work up in doubles and triples to a heavy top single or triple. Stop on any breakdown in bar speed or technique." });
 }
 function deSquat(pct1rm) {
-  return ex({ name: deLowerPool[0].name, rotatingPool: "deLowerPool", deWave: true, deJump: true, deMaxLabel: "trap bar deadlift One-Rep Max", sets: 8, reps: "3", load: "", rir: 4, rest: "90 seconds", quality: "Dynamic Effort", pct1rmFlat: pct1rm,
+  return ex({ name: deLowerPool[0].name, rotatingPool: "deLowerPool", deWave: true, deJump: true, deMaxLabel: "trap bar deadlift One-Rep Max", sets: 8, reps: "3", load: "", rir: 4, rest: "60 seconds", quality: "Dynamic Effort", pct1rmFlat: pct1rm,
     cues: "This is a jump, so it stays light — the percentage is off your trap bar deadlift max, not your squat. Sit the hips back, explode into a jump, land soft through the whole foot and reset fully between reps. If you are not clearing the floor, or you are landing flat and loud, take weight off. Stop the set the moment jump height drops.",
     purpose: "Rate of force development — loaded triple extension directly transferable to shots, sprawls, and scrambles" });
 }
@@ -1973,7 +1973,8 @@ const conjugateProgram = {
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
-            { id: uid(), type: "arms_core", name: "Core", exercises: [
+            { id: uid(), type: "arms_core", name: "Arms & Core", exercises: [
+              ...armSuperset(1, 2),
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, rotated every 2 weeks through three variations", quality: "Core" }),
             ]},
           ]},
@@ -2031,7 +2032,8 @@ const conjugateProgram = {
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "30 to 40 seconds, shoulders active", load: "bodyweight", rir: 3, rest: "90 seconds", purpose: "Support grip — kept low volume, grappling already fatigues grip", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work", quality: "Durability" }),
             ]},
-            { id: uid(), type: "arms_core", name: "Core", exercises: [
+            { id: uid(), type: "arms_core", name: "Arms & Core", exercises: [
+              ...armSuperset(1, 2),
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, rotated every 2 weeks through three variations", quality: "Core" }),
             ]},
           ]},
@@ -2214,6 +2216,31 @@ function withRampSets(e) {
 // technique knowledge in the coach's head rather than on the page. These are the
 // lifts where that gap actually costs someone something, so the cue travels with
 // the exercise instead of having to be repeated at every call site.
+// Arms are the one slot where a superset is unarguable: biceps and triceps are
+// opposing muscles with no shared fatigue, so pairing them costs nothing and
+// halves the time the slot takes. Deliberately not routed through ssPair — that
+// tags the first exercise as Strength and waves its RPE, which would hand a
+// bicep curl build-up sets and a percentage-of-1RM target.
+//
+// Once a week, on the upper day, and nowhere else. Five sessions of arm
+// isolation in a three-day concurrent program was the clearest sign of a
+// program built to look complete; one slot on the day the arms already worked
+// costs five minutes, keeps the elbow tendons healthy in a sport that loads
+// them hard, and the Zottman earns its place on grip alone.
+function armSuperset(num, sets) {
+  return [
+    ex({ name: "Inverse Zottman Curl", supersetLabel: `${num}A`, sets, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2,
+      rest: "none — straight into the pushdown",
+      purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.",
+      cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.",
+      quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
+    ex({ name: "Cable Triceps Pushdown", supersetLabel: `${num}B`, sets, reps: "12", load: "moderate", rir: 2,
+      rest: "60 to 90 seconds, then back to the curl",
+      purpose: "The other half of the arm. Paired with the curl rather than run on its own because opposing muscles do not compete for recovery — you lose nothing by alternating, and the slot takes half as long. Direct elbow work also keeps the tendon healthy in a sport that loads it hard every session.",
+      cues: "Elbows tucked and still. Lock out without leaning over the bar to help it down — if you are using your bodyweight, the weight is too heavy.",
+      quality: "Arms" }),
+  ];
+}
 function ssPair(num, aName, aPre, bName, bPre) {
   return [
     ex({ name: aName, supersetLabel: `${num}A`, rpeWave: true, cues: aPre.cues || rpeProgramCues[aName] || "", load: aPre.load || "", sets: aPre.sets, reps: aPre.reps, tempo: aPre.tempo || "", rir: 10 - aPre.rpe, rest: "as needed between the paired exercises, 2 to 3 minutes after both are done", quality: "Strength", pct1rmFlat: takesPercentTarget(aName, aPre.reps) ? pctFromRpeReps(aPre.rpe, aPre.reps) : null }),
@@ -2253,6 +2280,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
           ...ssPair(3, "Weighted Pull-Up", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
           ssSingle(4, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }, "Trunk"),
+          ...armSuperset(5, 2),
         ]},
       ]},
       { name: "Single-Leg Hinge & Carries", intent: "Single-leg hinge and pressing day, finishing on a loaded carry for anti-lateral-flexion core strength.", sections: [
@@ -2279,7 +2307,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Trap Bar Deadlift", { sets: 4, reps: "5", tempo: "2/1/X", rpe: 8 }, "Banded Clamshell", { sets: 4, reps: "8 each side", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
-          ssSingle(4, "6-Way Isometric Neck Holds", { sets: 3, reps: "30 seconds each way", rpe: 6 }, "Durability"),
+          ssSingle(4, "6-Way Isometric Neck Holds", { sets: 2, reps: "15 seconds each way", rpe: 6 }, "Durability"),
           ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
         ]},
       ]},
@@ -2297,7 +2325,8 @@ function buildProgramCContent() {
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
-          ssSingle(5, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
+          ...armSuperset(5, 2),
+          ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
           ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
