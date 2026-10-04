@@ -655,71 +655,48 @@ function bodyweightAdvisory(client, daysToComp) {
 // Reads a deadline rather than counting ticks, because a browser throttles
 // setInterval in a background tab: the old mobility timer barely moved while the
 // phone was locked, which is precisely when a rest timer is running.
-function useRestTimer() {
-  const [endsAt, setEndsAt] = useState(null);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!endsAt) return undefined;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    const onVisible = () => setNow(Date.now());
-    document.addEventListener("visibilitychange", onVisible);
-    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
-  }, [endsAt]);
-  const remaining = endsAt ? Math.max(0, Math.round((endsAt - now) / 1000)) : null;
-  useEffect(() => { if (remaining === 0) setEndsAt(null); }, [remaining]);
-  return {
-    remaining,
-    running: remaining !== null && remaining > 0,
-    start: (seconds) => setEndsAt(Date.now() + seconds * 1000),
-    stop: () => setEndsAt(null),
-  };
-}
-// The first number in a rest prescription, in seconds. "90 seconds" is 90,
-// "3 to 4 minutes" is 180 — the shorter end, because a rest timer that runs long
-// is one people stop trusting.
-function restSecondsFrom(text) {
-  const t = String(text || "").toLowerCase();
-  const m = t.match(/(\d+)\s*([a-z]*)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!n) return null;
-  // The unit attached to the first number, not the first unit anywhere in the
-  // string. "90 seconds to 2 minutes" is ninety seconds; reading the "minutes"
-  // off the far end of that sentence put a 90 minute clock on nearly every
-  // main lift in Program B.
-  const unit = m[2];
-  if (unit.startsWith("min") || unit === "m") return n * 60;
-  if (unit.startsWith("sec") || unit === "s") return n;
-  return /min/.test(t) ? n * 60 : n;
-}
-function fmtClock(total) {
-  const m = Math.floor(total / 60);
-  const sec = total % 60;
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
 // Holds the screen awake while a session is open. Re-acquired on visibility
 // change because the browser releases it whenever the tab is hidden.
+// Holds the screen awake for as long as the caller says. The browser drops the
+// lock on its own whenever the tab is hidden — and after the athlete locks the
+// phone and unlocks it again — so this re-takes it on every opportunity rather
+// than asking once and assuming it held. Locking the phone by hand still works;
+// nothing here overrides that.
 function useScreenWakeLock(active) {
   useEffect(() => {
     if (!active || typeof navigator === "undefined" || !navigator.wakeLock) return undefined;
     let lock = null;
     let cancelled = false;
     const acquire = async () => {
+      if (cancelled || lock) return;
       try {
         if (document.visibilityState !== "visible") return;
-        lock = await navigator.wakeLock.request("screen");
-        if (cancelled) { try { await lock.release(); } catch {} lock = null; }
+        const next = await navigator.wakeLock.request("screen");
+        if (cancelled) { try { await next.release(); } catch {} return; }
+        lock = next;
+        // Released by the system — a phone locked by hand, a low battery, the
+        // tab going to the background. Clear it so the next chance re-takes it.
+        next.addEventListener("release", () => { if (lock === next) lock = null; });
       } catch {
         // Refused (low battery, unsupported, not a user-visible failure).
       }
     };
     acquire();
-    const onVisible = () => { if (document.visibilityState === "visible") acquire(); };
-    document.addEventListener("visibilitychange", onVisible);
+    const retry = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", retry);
+    // Any tap is a fresh user gesture, which is the moment a browser that
+    // refused the first request is most likely to grant one.
+    window.addEventListener("focus", retry);
+    document.addEventListener("click", retry, true);
+    document.addEventListener("touchstart", retry, true);
     return () => {
       cancelled = true;
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", retry);
+      window.removeEventListener("focus", retry);
+      document.removeEventListener("click", retry, true);
+      document.removeEventListener("touchstart", retry, true);
       try { if (lock) lock.release(); } catch {}
+      lock = null;
     };
   }, [active]);
 }
@@ -7181,9 +7158,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const totalSections = 2 + resolvedSections.length;
   const completedCount = Object.values(complete).filter(Boolean).length;
   const percent = totalSections ? (completedCount / totalSections) * 100 : 0;
-  const restTimer = useRestTimer();
-  // The screen used to sleep between every set, and unlocking risked the tab
-  // having been discarded with the session in it.
+  // The screen stays awake for the whole session. It used to sleep between
+  // every set, and unlocking risked the tab having been discarded with the
+  // session in it. The athlete can still lock the phone themselves.
   useScreenWakeLock(!finished);
 
   const updateSet = (sectionId, exIdx, setIdx, field, value) => setEntriesBySection((prev) => {
@@ -7360,14 +7337,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   return (
     <ModalShell onClose={onClose} dismissOnEscape={false} title={`Day ${day.label} — ${mainLift}`}
       headerLeftExtra={<button className="icon-btn" onClick={() => setConfirmingReset(true)} title="Clear every input for this session" aria-label="Clear every input for this session"><RotateCcw size={16} /></button>}
-      headerRight={
-        restTimer.running
-          ? <button type="button" className="rest-countdown" onClick={restTimer.stop}
-              aria-label={`Rest timer, ${restTimer.remaining} seconds left. Tap to stop.`}>
-              {fmtClock(restTimer.remaining)}
-            </button>
-          : <ProgressBadge percent={percent} />
-      } fullscreen>
+      headerRight={<ProgressBadge percent={percent} />} fullscreen>
       {restoredNotice && !finished && (
         <div className="adjust-box" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }}>Picked up where you left off — everything you'd already entered for this session is back. Finish and save it when you're done.</span>
@@ -7490,12 +7460,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     </div>
                   )}
                   {en.target.rest && (
-                    restSecondsFrom(en.target.rest)
-                      ? <button type="button" className="rest-note-btn"
-                          onClick={() => restTimer.start(restSecondsFrom(en.target.rest))}>
-                          Rest: {en.target.rest} · tap to time it
-                        </button>
-                      : <div className="rest-note-static">Rest: {en.target.rest}</div>
+                    <div className="rest-note-static">Rest: {en.target.rest}</div>
                   )}
                   {sec.type !== "conditioning" && (en.target.purpose || en.target.cues) && (
                     <details className="coaching-notes">
@@ -7746,6 +7711,8 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
   const [done, setDone] = useState(false);
   const [notes, setNotes] = useState("");
   const timerRef = useRef(null);
+  // Same as a training session: the screen stays on while it is open.
+  useScreenWakeLock(!done);
 
   const totalSeconds = segments.reduce((s, seg) => s + seg.seconds, 0);
   const elapsedBefore = segments.slice(0, idx).reduce((s, seg) => s + seg.seconds, 0);
@@ -9160,12 +9127,6 @@ function GlobalStyle() {
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
-      .rest-note-btn { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; background: var(--bg);
-        border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px; min-height: 40px; cursor: pointer; text-align: left; }
-      .rest-note-btn:hover { border-color: var(--accent); color: var(--text); }
-      .rest-countdown { font-family: 'Oswald', sans-serif; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
-        background: var(--accent); color: var(--accent-text); border: none; border-radius: 999px; padding: 8px 14px;
-        min-height: 40px; min-width: 64px; cursor: pointer; }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
       .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 10px; margin: -4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
