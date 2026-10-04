@@ -169,9 +169,30 @@ function embedFor(url) {
   return { kind: "link", href: u, host };
 }
 
-const COMMUNITY_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
+const COMMUNITY_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at, channel";
+const COMMUNITY_CHANNELS = [
+  { id: "general", label: "General",
+    blurb: "Questions about the app, the program, how to log something, or anything else.",
+    placeholder: "Ask anything — about a lift, the app, or the week you are having." },
+  { id: "technique", label: "Technique",
+    blurb: "Instructionals, breakdowns and clips. Post what you are working on and what you want eyes on.",
+    placeholder: "Share a clip or a detail you are drilling. What do you want eyes on?" },
+];
+const DEFAULT_CHANNEL = "general";
+function channelMeta(id) {
+  return COMMUNITY_CHANNELS.find((c) => c.id === id) || COMMUNITY_CHANNELS[0];
+}
+// Read state per channel. Athletes from before channels existed carry a single
+// lastSeenAt, which seeds both so nothing they had already read comes back.
+function lastSeenMap(prefs) {
+  const p = prefs || {};
+  const legacy = p.lastSeenAt || "1970-01-01";
+  const map = {};
+  COMMUNITY_CHANNELS.forEach((c) => { map[c.id] = (p.lastSeen && p.lastSeen[c.id]) || legacy; });
+  return map;
+}
 
-async function fetchCommunityFeed(pages) {
+async function fetchCommunityFeed(pages, channel) {
   if (!supabase) return LOAD_FAILED;
   const limit = Math.min(pages || 1, COMMUNITY_MAX_PAGES) * COMMUNITY_PAGE;
   const outcome = await withRetry(async () => {
@@ -179,6 +200,7 @@ async function fetchCommunityFeed(pages) {
       .select(COMMUNITY_COLS)
       .is("deleted_at", null)
       .is("parent_id", null)
+      .eq("channel", channel || DEFAULT_CHANNEL)
       .order("created_at", { ascending: false })
       .limit(limit + 1);
     if (error) throw error;
@@ -230,11 +252,11 @@ async function createCommunityPost(post) {
   const row = { id: newId(), ...post };
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("community_posts").insert(row)
-      .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at").single();
+      .select(COMMUNITY_COLS).single();
     if (error) {
       if (error.code === "23505") {
         const { data: already } = await supabase.from("community_posts")
-          .select("id, author_id, author_name, author_belt, body, video_url, parent_id, created_at").eq("id", row.id).maybeSingle();
+          .select(COMMUNITY_COLS).eq("id", row.id).maybeSingle();
         if (already) return already;
       }
       throw error;
@@ -3581,7 +3603,12 @@ function useCommunityUnread(prefs, userId, enabled) {
   const lastNotified = useRef(null);
   const seeded = useRef(false);
   const p = prefs || {};
-  const lastSeen = p.lastSeenAt || "1970-01-01";
+  const seenBy = lastSeenMap(prefs);
+  // One query for both channels, filtered from whichever was read longer ago,
+  // then counted per channel. A badge that counted a channel you had already
+  // read would send people looking for something that was not there.
+  const lastSeen = Object.values(seenBy).sort()[0];
+  const seenKey = JSON.stringify(seenBy);
   const muted = !!p.muted;
   useEffect(() => {
     if (!enabled || !supabase || !userId) { setCount(0); return undefined; }
@@ -3590,15 +3617,16 @@ function useCommunityUnread(prefs, userId, enabled) {
       if (document.visibilityState === "hidden") return;
       try {
         const { data, error } = await supabase.from("community_posts")
-          .select("id, author_name, body, video_url, created_at")
+          .select("id, author_name, body, video_url, created_at, channel")
           .is("deleted_at", null)
           .gt("created_at", lastSeen)
           .neq("author_id", userId)
           .order("created_at", { ascending: false })
           .limit(30);
         if (error || cancelled || !data) return;
-        setCount(data.length);
-        const newest = data[0];
+        const unseen = data.filter((row) => row.created_at > (seenBy[row.channel] || lastSeen));
+        setCount(unseen.length);
+        const newest = unseen[0];
         // Seed on the very first check whatever came back, including nothing.
         // Doing it only when there was a backlog meant the first genuinely new
         // post of every session counted as backlog and was never announced.
@@ -3616,7 +3644,7 @@ function useCommunityUnread(prefs, userId, enabled) {
     const onVis = () => { if (document.visibilityState === "visible") check(); };
     document.addEventListener("visibilitychange", onVis);
     return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
-  }, [enabled, userId, lastSeen, muted]);
+  }, [enabled, userId, seenKey, muted]); // eslint-disable-line
   return count;
 }
 
@@ -3836,6 +3864,11 @@ function ReplyComposer({ userId, onSend }) {
 }
 
 function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
+  // Which channel is open. Remembered per person so somebody who lives in
+  // Technique does not land in General every time they open the tab.
+  const [channel, setChannel] = useState(() => (
+    COMMUNITY_CHANNELS.some((c) => c.id === prefs?.channel) ? prefs.channel : DEFAULT_CHANNEL
+  ));
   const [posts, setPosts] = useState(null);
   const [reactions, setReactions] = useState([]);
   const [failed, setFailed] = useState(false);
@@ -3865,9 +3898,11 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const mutations = useRef(0);
   const pagesRef = useRef(1);
   useEffect(() => { pagesRef.current = pages; }, [pages]);
+  const channelRef = useRef(channel);
+  useEffect(() => { channelRef.current = channel; }, [channel]);
   const load = useCallback(async () => {
     const at = mutations.current;
-    const feed = await fetchCommunityFeed(pagesRef.current);
+    const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current);
     if (feed === LOAD_FAILED) { setFailed(true); return; }
     const reacts = await fetchCommunityReactions(feed.posts.map((p) => p.id));
     if (mutations.current !== at) return;
@@ -3879,6 +3914,20 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     if (bl !== LOAD_FAILED) setBlocks(bl);
     setReports(await fetchCommunityReports());
   }, []);
+
+  const switchChannel = (next) => {
+    if (next === channel) return;
+    // Leaving a channel marks it read, the same as leaving the tab does.
+    if (loadedRef.current) savePrefs({ lastSeen: { ...lastSeenMap(prefs), [channel]: new Date().toISOString() } });
+    markedRef.current = false;
+    mutations.current += 1;
+    pagesRef.current = 1;
+    setPages(1);
+    setPosts(null);
+    setChannel(next);
+    if (savePrefs) savePrefs({ channel: next });
+  };
+  useEffect(() => { load(); }, [channel]); // eslint-disable-line
 
   const loadOlder = async () => {
     setLoadingMore(true);
@@ -3902,8 +3951,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   useEffect(() => {
     if (markedRef.current || !posts || !posts.length) return;
     markedRef.current = true;
-    savePrefs({ lastSeenAt: new Date().toISOString() });
-  }, [posts, savePrefs]);
+    savePrefs({ lastSeen: { ...lastSeenMap(prefs), [channel]: new Date().toISOString() } });
+  }, [posts, savePrefs]); // eslint-disable-line
 
   // And again on the way out, so anything that arrived while you were sitting
   // here reading does not come back as unread the moment you switch tabs. Only
@@ -3913,8 +3962,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const loadedRef = useRef(false);
   useEffect(() => { savePrefsRef.current = savePrefs; }, [savePrefs]);
   useEffect(() => { if (posts && posts.length) loadedRef.current = true; }, [posts]);
+  const seenOnExitRef = useRef(null);
+  useEffect(() => { seenOnExitRef.current = { ...lastSeenMap(prefs), [channel]: new Date().toISOString() }; }, [prefs, channel]);
   useEffect(() => () => {
-    if (loadedRef.current) savePrefsRef.current({ lastSeenAt: new Date().toISOString() });
+    if (loadedRef.current && seenOnExitRef.current) savePrefsRef.current({ lastSeen: seenOnExitRef.current });
   }, []);
 
   const roots = useMemo(() => (posts || []).filter((p) => !p.parent_id), [posts]);
@@ -3941,6 +3992,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       body: text || null,
       video_url: vid || null,
       parent_id: parentId || null,
+      // A reply lives in its parent's channel, so a thread can never be split
+      // across two tabs.
+      channel: parentId ? (posts || []).find((p) => p.id === parentId)?.channel || channel : channel,
     };
     mutations.current += 1;
     const res = await createCommunityPost(payload);
@@ -4030,10 +4084,19 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         <div>
           <h2 className="program-title" style={{ margin: 0 }}>Community</h2>
           <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>
-            Everyone training with Kyle. Share a roll, a technique clip, a question — or just say how the week went.
+            Everyone training with Kyle.
           </p>
         </div>
       </div>
+
+      <div className="view-toggle-row" role="tablist" aria-label="Channels">
+        {COMMUNITY_CHANNELS.map((c) => (
+          <button key={c.id} role="tab" aria-selected={channel === c.id}
+            className={`view-toggle-btn ${channel === c.id ? "active" : ""}`}
+            onClick={() => switchChannel(c.id)}>{c.label}</button>
+        ))}
+      </div>
+      <p className="muted" style={{ margin: "-6px 0 14px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
 
       <div className="community-prefs" role="group" aria-label="Community settings">
         {notifyState === "granted" ? (
@@ -4073,7 +4136,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       <div className="composer">
         <label className="sr-only" htmlFor="post-body">Write a post</label>
         <textarea id="post-body" className="composer-text" rows={3} value={body} maxLength={COMMUNITY_MAX_CHARS}
-          placeholder="Share something with the group…" onChange={(e) => setBody(e.target.value)} />
+          placeholder={channelMeta(channel).placeholder} onChange={(e) => setBody(e.target.value)} />
         {!isUploadedClip(videoUrl) && (
           <>
             <label className="sr-only" htmlFor="post-video">Video link</label>
@@ -4117,8 +4180,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       )}
       {posts === null && !failed && <p className="muted">Loading…</p>}
       {posts !== null && roots.length === 0 && !failed && (
-        <Card title="Nothing here yet">
-          <p className="muted">Be the first. Post a clip you're working on, or a question about something that isn't clicking.</p>
+        <Card title={`Nothing in ${channelMeta(channel).label} yet`}>
+          <p className="muted">{channel === "technique"
+            ? "Be the first. Post a clip of something you're drilling, or a detail you want eyes on."
+            : "Be the first. Ask about a lift, the app, or anything that isn't clicking."}</p>
         </Card>
       )}
 
