@@ -1706,7 +1706,7 @@ const rpeProgramCues = {
   "Zercher Squat": "Bar in the crease of your elbows, not out on your forearms. Use a towel or a pad for the first few sessions — what limits you here is the discomfort, not your legs. Elbows tucked in and high, chest up, and set the pins so you can dump it forward if you miss.",
   "Trap Bar Deadlift": "Hips somewhere between a squat and a deadlift, chest up, and push the floor away. The bar comes up in a straight line. Reset your brace on the floor between every rep rather than bouncing them.",
   "Split Stance Trap Bar Deadlift": "Front foot flat, back foot up on the toes taking maybe a fifth of the weight. Hips stay square — the back hip wants to open and that is the thing to stop.",
-  "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use a weight you can comfortably stand up with, around ninety percent of your best pull, and deadlift it normally before you hold. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
+  "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use around seventy percent of your best pull — a weight you can stand up with easily — and deadlift it normally before you hold. Do not chase the heavier number without pins: the hold is the exercise, and pulling ninety percent off the floor to get into it is where backs go. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
   "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
   "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
@@ -1715,7 +1715,7 @@ const rpeProgramCues = {
   "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
   "Renegade Row": "Feet wide for a stable base. The hips are what you are really training here — do not let them rotate as you row. If they twist, go lighter.",
   "Bulgarian Split Squat (rear foot elevated, dumbbells)": "Far enough forward that the front shin stays near vertical. Drop the back knee straight down. If the front knee caves inward, drop the weight.",
-  "Seal Row": "Chest stays flat on the bench the whole set — no heaving up off it to move the weight. Pull to the bottom of your ribs and squeeze the shoulder blades together at the top.",
+  "Seal Row": "No seal row bench? A chest-supported dumbbell row on a steep incline bench trains the same thing — use that rather than skipping it. Chest stays flat on the bench the whole set — no heaving up off it to move the weight. Pull to the bottom of your ribs and squeeze the shoulder blades together at the top.",
 };
 
 function ex(o) {
@@ -1834,9 +1834,17 @@ const meUpperPool = [
   { name: "Wide-Grip Bench Press", maxTriple: true, notes: "Chest-dominant press variation", videoUrl: "" },
   { name: "Pendlay Row", maxTriple: true, notes: "Dead-stop barbell row from the floor every rep — a true heavy pulling variation, rotated in so the Max Effort Upper day occasionally builds pulling strength instead of always pressing", videoUrl: "https://www.youtube.com/shorts/0PSfteHhUtg" },
 ];
+// Direct wrist work was cut. That session already stacks weighted pull-ups,
+// dead hangs and loaded carries, and the athlete grips a gi three to five
+// nights a week — dead forearms on the mat is a worse outcome than slightly
+// weaker wrists.
+// Direct wrist curls were cut. That session already stacks weighted pull-ups,
+// dead hangs and loaded carries, and the athlete grips a gi three to five
+// nights a week — dead forearms on the mat is a worse outcome than slightly
+// weaker wrists. Pinch grip is the one hand quality grappling does not already
+// hammer, and it needs nothing but two plates.
 const wristPool = [
-  { name: "Barbell Wrist Curl and Reverse Wrist Curl (Flexors and Extensors)", notes: "Direct forearm strength through both wrist flexion and extension — the flexor and extensor work back to back", reps: "12 per direction", videoUrl: "https://www.youtube.com/shorts/xENVg7RX_O8" },
-  { name: "Rice Bucket Grip Drills", notes: "Dig, twist, and squeeze through a bucket of rice — forearm and wrist rotator conditioning that also toughens the hands", reps: "20 seconds each direction" },
+  { name: "Plate Pinch Hold (each hand)", notes: "Pinch two smooth plates together between thumb and fingers and hold. Thumb-side grip is what fails first on a gi lapel and it is the one grip the bar work above does not train", reps: "20 to 30 seconds each hand", load: "two light smooth plates", videoUrl: "" },
 ];
 const coreAntiPool = [
   { name: "Heavy Pallof Press Hold (each side)", reps: "15 to 20 seconds per side", notes: "Anti-rotation under real load — resisting a cable trying to rotate your trunk is a far closer match to what grapplers actually get exposed to live than a bicep curl ever was", cues: "Stand side-on to the cable, press the handle straight out from your chest and hold. Do not let your ribs or hips turn toward the machine. If your torso rotates, the weight is too heavy." },
@@ -1845,7 +1853,6 @@ const coreAntiPool = [
 ];
 const hipPool = [
   { name: "Copenhagen Plank (each side)", notes: "Adductor strength and durability — directly protective for guard retention and hip health", reps: "20 to 30 seconds per side", load: "bodyweight", videoUrl: "" },
-  { name: "Hip Abduction Machine", notes: "Direct, loaded hip abductor and glute medius strength — the frontal-plane counterpart to the Copenhagen Plank, protective for single-leg stability, sprawling, and scrambling under fatigue", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/S_FGYHNHJ_c" },
   { name: "Hip Adduction Machine", notes: "Direct, loaded adductor strength through a full range of motion — a machine-based complement to the Copenhagen Plank for groin and guard-retention durability", reps: "12 to 15", load: "moderate, machine stack", videoUrl: "https://www.youtube.com/shorts/BmMmt-c9aNM" },
 ];
 // Block 3 is the competition-specific block, so its conditioning stops being
@@ -1856,12 +1863,12 @@ const hipPool = [
 // again after an hour's rest, which is what a medal actually comes down to.
 const matchSpecificPool = [
   { rir: 1, name: "Assault Bike or Treadmill — Match-Duration Round", notes: "One continuous effort the length of a real match. Every other piece of conditioning in this program is shorter than the thing you are training for, and holding output for eight minutes is a different skill from holding it for three", reps: "1 round of 6 to 8 minutes continuous at 85 to 88 percent of your max heart rate", cues: "Pace it. The mistake everyone makes here is starting at interval pace and falling apart at four minutes, which trains nothing except how to fail. Settle into an output you believe you can hold to the end, and hold it. The check that you paced it right is that the last minute is your hardest effort and not your slowest — if you are fading badly by the halfway point, take ten percent off next time. Match the round length to your belt: five minutes at white, six at blue, seven at purple, eight at brown and ten at black." },
-  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Three hard rounds separated by long rests, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "3 rounds of 6 minutes hard, 30 to 40 minutes easy or complete rest between rounds", cues: "Treat these as three separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full rest. Walk, sit down, eat something, do what you would actually do between matches, and match the gap to your own bracket if you know it. The third round is the one that matters, because nobody loses the first: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
+  { rir: 0, name: "Assault Bike or Treadmill — Multi-Match Day Simulation", notes: "Three hard rounds separated by long rests, which is the shape of a competition day. Nobody loses the first match of the day — they lose the third, when they have not recovered enough to produce again. This is the only session in the program that rehearses that", reps: "3 rounds of 5 minutes hard, 10 to 12 minutes easy between rounds", cues: "Treat these as three separate matches, not one long session. Go hard on the first — properly hard, the way you would in a real first round — then take the full rest. Walk, sit down, have a drink, do what you would actually do between matches. The real gap at a tournament is longer; ten to twelve minutes is the version that fits in an evening and still makes you produce again on tired legs. The third round is the one that matters, because nobody loses the first: it should land within about ten percent of the first. If it falls well short, that is useful information about your day rather than a failure, and it is exactly the gap this session exists to close. Do this one on a day you have time for it." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson's aerobic power protocol, kept in the specific block because raising the aerobic ceiling still pays right up to competition — and because it is the closest thing here to the repeated hard exchanges inside a single round", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate rather than off how hard it feels. Aim to be at 88 to 92 percent by about the ninety-second mark and hold it to the end of the round. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds." },
 ];
 
 const conditioningIntervalPool = [
-  { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "30 to 40 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time. The test is that you could hold a full conversation the whole way through without gasping — if you can only manage short sentences, you are going too fast for what this session trains. If you have a heart rate monitor, 130 to 150 beats per minute is the band; the talk test comes first and the number is just the check. This is meant to feel almost boring. That's correct.\n\nDo this one at the end of today's session, and then do one or two more like it across the rest of the week, off your lifting days — a brisk walk, an easy bike, a ruck with the dog. That is the part that actually builds the base, and it costs you no gym time and no recovery. One session a week will not do it; three easy ones will." },
+  { rir: 7, name: "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)", notes: "Low and slow aerobic base training. This is the foundation everything else sits on top of — it builds mitochondrial density and the ability to recover between hard rounds on the mat, without adding any real fatigue going into your next lift or roll", reps: "20 to 25 minutes, continuous, easy pace", cues: "This should feel genuinely easy the entire time. The test is that you could hold a full conversation the whole way through without gasping — if you can only manage short sentences, you are going too fast for what this session trains. If you have a heart rate monitor, 130 to 150 beats per minute is the band; the talk test comes first and the number is just the check. This is meant to feel almost boring. That's correct.\n\nDo this one at the end of today's session, and then do one or two more like it across the rest of the week, off your lifting days — a brisk walk, an easy bike, a ruck with the dog. That is the part that actually builds the base, and it costs you no gym time and no recovery. One session a week will not do it; three easy ones will." },
   { rir: 1, name: "Assault Bike or Treadmill — Aerobic Power Intervals", notes: "Jamieson-style aerobic power work for raising the ceiling on your aerobic system — hard, honest intervals with equal-time recovery, shorter and more frequent than a straight endurance-sport VO2max protocol so the work-to-rest pattern mirrors a real exchange on the mat instead of one long grind", reps: "4 rounds of 2 to 3 minutes at 88 to 92 percent of your max heart rate, equal time easy between each round", cues: "Pace this off heart rate, not off how hard it feels. You are aiming to be at 88 to 92 percent of your max heart rate by about the ninety-second mark and to hold it there to the end of the round — hard and honest, but deliberately below what you could manage for a single round, because you have to do it four times. The check that you paced it right: the last round should be within about five percent of the first. If round four falls off a cliff, you went out too hard and turned an aerobic session into an anaerobic one. Take the full equal-time recovery between rounds, easy movement or complete rest." },
   { rir: 2, name: "Assault Bike + Gi Grip — Repeat Effort Under Fatigue", notes: "Grip and conditioning are trained all through this program and never in the same place, which is not how a gi match works — your hands fail while your heart rate is high, not while you are fresh. This puts the two demands together, which is the only way to train the thing that actually gives out", reps: "6 rounds of 25 seconds hard on the bike straight into a 20 second hard grip hold, 2 minutes easy between rounds", cues: "Go straight from the bike to the hold with no pause — the whole point is that the grip work starts while you are already breathing hard. Use two towels over the pull-up bar, a gi sleeve, or a heavy dumbbell in each hand; whichever you use, hold it until your hand genuinely opens rather than until it starts to burn. If you can hold comfortably for the full 20 seconds, go heavier or move to one towel. The short effort and the long rest are deliberate: this is a repeat-effort session, so every round should look like the first one. If the last two rounds fall apart, you went too hard on the first two rather than pacing it wrong." },
   { rir: 3, name: "Assault Bike or Treadmill — Repeated-Effort Tempo", notes: "Jamieson's extensive tempo method — short, hard-but-controlled efforts with incomplete recovery between them. This trains the specific gap most conditioning programs skip: the ability to fire off another hard scramble, shot, or transition without a full rest first, which is exactly what a real match actually demands round after round", reps: "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds", cues: "Hard means genuinely pushing — not an all-out sprint, but well past comfortable. Your breathing should climb during each 15-second effort and only partially settle during the 45 seconds of recovery, the same incomplete-recovery pattern as the gap between exchanges in a real round. If you feel fully recovered before the next effort starts, you're not pushing hard enough on the work." },
@@ -1886,7 +1893,7 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
     intensityNote: "No Dynamic Effort work this week at all. Max Effort days cap out at a moderate double or triple, at least 2 reps in reserve — never a true top single. Durability, arm and core, and agility work are trimmed or dropped entirely.",
     days: [
       { id: uid(), label: "1", name: "Max Effort Lower — Deload",
-        intent: "Stay light on purpose. This is recovery, not a second max-effort day — leave real reps in the tank on every set.",
+        intent: "Stay light on purpose. This is recovery, not a second max-effort day — leave real reps in the tank on every set. A short session this week is the point rather than a mistake.",
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
@@ -1943,8 +1950,8 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
-              ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "8 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
-              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "8", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
+              ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "6 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
+              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Sandbag Bear-Hug Carry", sets: 3, reps: "30 meters", load: "heavy — a sandbag, a heavy bag, or a loaded duffel", rir: 1, rest: "90 seconds",
@@ -1952,7 +1959,6 @@ const conjugateProgram = {
                 cues: "Hug it high on the chest, elbows underneath rather than out to the sides, ribs down. Short quick steps. Breathe shallow and often — you will not get a full breath and that is part of the exercise. If it slides below your sternum, set it down and reset rather than fighting it.", quality: "Grip/Trunk" }),
               ex({ name: hipPool[0].name, rotatingPool: "hipPool", sets: 2, reps: hipPool[0].reps, load: hipPool[0].load, rir: 3, rest: "60 seconds", purpose: hipPool[0].notes, quality: "Durability" }),
               ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 2, rest: "45 seconds", purpose: "Builds the neck before anything asks it to carry bodyweight — close to non-negotiable for anyone taking regular guillotine and choke pressure. The bridge comes in the next block, once this base is there.", cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
-              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin strength and durability — protects the ankle joint under guard-retention and scrambling loads", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
@@ -1965,14 +1971,10 @@ const conjugateProgram = {
               ex({ name: "Cable Face Pull", sets: 3, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", purpose: "Shoulder and scapular health", quality: "Prehab" , videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "Chin-Up Hold at 90 Degrees", sets: 3, reps: "15 to 20 seconds", load: "bodyweight — add a towel over the bar in each hand for the gi version", rir: 3, rest: "90 seconds",
-                purpose: "A dead hang trains a passive grip. This trains the pull with the elbow bent, which is the collar tie, the arm drag, and breaking a closed guard — grip, lat and elbow-flexor tendon at once, in the position heavy gi gripping actually demands.",
-                cues: "Pull up until your elbows are at about ninety degrees and hold there, chest proud, shoulders pulled down away from your ears. The moment you start sinking the set is over — do not grind down to a dead hang.", quality: "Grip" }),
               ex({ name: wristPool[0].name, rotatingPool: "wristPool", sets: 2, reps: wristPool[0].reps, load: "light", rir: 2, rest: "45 seconds", purpose: "Direct wrist flexor and extensor strength, alternated every 2 weeks with rice bucket grip work for tendon health and grip conditioning", quality: "Durability" }),
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength — resisting rotation and side-bending under load, a closer match to what grapplers actually get exposed to live than isolated arm work, rotated every 2 weeks through three variations", quality: "Core" }),
-              ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Anti-extension and loaded trunk flexion — resisting being straightened out is what guard retention and defending a stack actually are, and it is the one trunk quality the anti-rotation work above does not touch. Doubles as grip time on the bar.", cues: "No swinging. Start with knees to chest and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -1986,9 +1988,6 @@ const conjugateProgram = {
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power — hip-to-shoulder force transfer directly relevant to underhooks, throws, and scrambles", quality: "Rotational Power" }),
               ex({ name: "Heavy Landmine Anti-Rotation Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort, not light", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded rotation — grappling is a rotational sport, and this is the missing piece next to the rotational power work above: real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" }),
-            ]},
-            { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
-              ...armSuperset(1, 3),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
               ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
@@ -2017,7 +2016,6 @@ const conjugateProgram = {
               ex({ name: "Wall Neck Hold (feet walked out)", sets: 3, reps: "20 to 30 seconds per position", load: "as much of your bodyweight as you choose to lean in", rir: 4, rest: "60 seconds", quality: "Durability",
                 purpose: "The step between pressing against your own hand and carrying real load on the neck. You set the load by how far you walk your feet out, so it rises a few centimetres at a time instead of in one jump. Tolerating compression is what a stack actually demands, and it is the one thing the isometric holds cannot build on their own.",
                 cues: "Fold a towel against a wall and rest the back of your head on it, then walk your feet away until you feel real weight through your neck. Stay near vertical for the first week. Head stays in line with your spine — you are holding a position, not pushing into extension — and you never turn your head while you are loaded. Walk the feet out a little further only once the current position feels easy. Anything that pinches or travels down an arm, come off it." }),
-              ex({ name: "Tibialis Raise", sets: 2, reps: "15", load: "bodyweight or a light plate", rir: 2, rest: "45 seconds", purpose: "Ankle and shin durability", quality: "Durability" , videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" }),
             ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper + Durability + Core",
@@ -2035,7 +2033,6 @@ const conjugateProgram = {
             ]},
             { id: uid(), type: "arms_core", name: "Core", exercises: [
               ex({ name: coreAntiPool[0].name, rotatingPool: "coreAntiPool", sets: 3, reps: "10 per side", load: "moderate", rir: 2, rest: "60 seconds", purpose: "Anti-rotation and anti-lateral-flexion core strength, rotated every 2 weeks through three variations", quality: "Core" }),
-              ex({ name: "Hanging Leg Raise", sets: 2, reps: "8 to 12", load: "bodyweight", rir: 2, rest: "60 seconds", purpose: "Anti-extension and loaded trunk flexion — resisting being straightened out is what guard retention and defending a stack actually are, and it is the one trunk quality the anti-rotation work above does not touch. Doubles as grip time on the bar.", cues: "No swinging. Start with knees to chest and only straighten the legs once you can do that without the body rocking. Lower under control — the way down is the half that counts.", quality: "Trunk" }),
             ]},
           ]},
         { id: uid(), label: "3", name: "Speed & Agility + Rotational Power + Conditioning",
@@ -2049,9 +2046,6 @@ const conjugateProgram = {
             { id: uid(), type: "power", name: "Grappling Power", exercises: [
               ex({ name: "Landmine Rotational Press (each side)", sets: 3, reps: "6 per side", load: "light to moderate", rir: 1, rest: "90 seconds", purpose: "Loaded rotational power for throws and scrambles", quality: "Rotational Power" }),
               ex({ name: "Half-Kneeling Landmine Press Hold (each side)", sets: 3, reps: "15 to 20 seconds per side, genuinely heavy", load: "heavy — this should be a real grinding effort", rir: 1, rest: "90 seconds", purpose: "True max-effort loaded anti-rotation from a different base than the standing version in the base phase — real heavy resistance to rotation, not just moving fast against light load", quality: "Rotational Strength" , videoUrl: "https://www.youtube.com/watch?v=fx6lSVNvu-4" }),
-            ]},
-            { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
-              ...armSuperset(1, 3),
             ]},
             { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
               ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 7, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
@@ -2085,9 +2079,6 @@ const conjugateProgram = {
           intent: "Same — hard top set, minimal accessory. This late in the block, more volume doesn't make you stronger, it just makes you tired.",
           sections: [
             { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperBlock() ]},
-            { id: uid(), type: "arms_core", name: "Arm Isolation", exercises: [
-              ...armSuperset(1, 2),
-            ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", purpose: "Scapular retraction and posterior shoulder health. Pressing volume only climbs from here, so this is the counterweight that keeps the shoulder centred.", cues: "Rope to the bridge of your nose, elbows high, finish with your knuckles pointing back behind you. Hold the end position for a full second.", quality: "Prehab", videoUrl: "https://www.youtube.com/shorts/lbt7obncwVs" }),
               ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Horizontal pulling, kept through the peak block at a reduced dose. Pressing volume does not drop here and neither should the thing balancing it — and this is the pattern you actually use to break posture and drag an arm.", cues: "Chest on the pad, pull to the bottom of your ribs, hold for a beat.", quality: "Pull" }),
@@ -2126,7 +2117,7 @@ const conjugateProgram = {
       intensityNote: "No Dynamic Effort work this week. Every other exercise is done at low volume too. Nothing this week should feel like a grind — if a set feels harder than it should at 50 to 60 percent, that's useful information for your readiness check-in, not a reason to push through it.",
       days: [
         { id: uid(), label: "1", name: "Max Effort Lower — Deload",
-          intent: "Stay light on purpose — every set here is 50 to 60 percent of your last known max. This is recovery, not a test.",
+          intent: "Stay light on purpose — every set here is 50 to 60 percent of your last known max. This is recovery, not a test, and the short session is the point rather than a mistake.",
           sections: [
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meLowerBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max — this is deliberately light, not a build-up to anything heavy." }),
@@ -2143,7 +2134,7 @@ const conjugateProgram = {
             ]},
           ]},
         { id: uid(), label: "3", name: "Recovery & Easy Conditioning",
-          intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered.",
+          intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered. Yes, this is the whole session — it is meant to look this short.",
           sections: [
             { id: uid(), type: "conditioning", name: "Aerobic Base — Deload", exercises: [
               ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Zone 2)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 130 to 150 beats per minute — easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
@@ -2170,6 +2161,9 @@ function takesPercentTarget(name, reps) {
   // percentage of, so the number printed is a percentage of a lift the athlete
   // is not doing.
   if (/single leg|single arm|split stance|each side|offset|bulgarian|renegade/i.test(name || "")) return false;
+  // Bodyweight-anchored lifts. The athlete's own mass is the floor, so there is
+  // no percentage of a one-rep max that means anything on the bar.
+  if (/pull-up|chin-up|push-up|\bdip\b|toes to bar|dead hang/i.test(name || "")) return false;
   return !/\b(hold|plank|bridge|carry|grip|neck|pull-through|roll out)\b/i.test(name || "");
 }
 // A lift written as "4 sets of 6" with 80 percent printed next to it is an
@@ -2197,7 +2191,10 @@ function rampSetsFor(workPct) {
 // Light shoulder and hip prehab carries a percentage target only because the
 // rep-and-effort maths hands one to everything. Nobody builds up to a Y, T, W
 // with five-pound plates, so these are left as written.
-const RAMP_EXCLUDED_NAMES = /\bY, T, W|abduction|adduction|face pull|external rotation|raise\b/i;
+// Bodyweight-anchored lifts are excluded too: forty percent of a weighted
+// pull-up max is lighter than the athlete, so the build-up set it prints cannot
+// be performed, and the percentage is of a number nobody has.
+const RAMP_EXCLUDED_NAMES = /\bY, T, W|abduction|adduction|face pull|external rotation|raise\b|pull-up|chin-up|push-up|\bdip\b|toes to bar|dead hang/i;
 function withRampSets(e) {
   // Already ramped (every Max Effort lift is), or speed work, or nothing to ramp to.
   if (e.perSetTargets || e.deWave || !e.pct1rmFlat) return e;
@@ -2217,25 +2214,6 @@ function withRampSets(e) {
 // technique knowledge in the coach's head rather than on the page. These are the
 // lifts where that gap actually costs someone something, so the cue travels with
 // the exercise instead of having to be repeated at every call site.
-// Arms are the one slot where a superset is unarguable: biceps and triceps are
-// opposing muscles with no shared fatigue, so pairing them costs nothing and
-// halves the time the slot takes. Deliberately not routed through ssPair — that
-// tags the first exercise as Strength and waves its RPE, which would hand a
-// bicep curl build-up sets and a percentage-of-1RM target.
-function armSuperset(num, sets) {
-  return [
-    ex({ name: "Inverse Zottman Curl", supersetLabel: `${num}A`, sets, reps: "10 to 12", load: "light to moderate dumbbells", rir: 2,
-      rest: "none — straight into the pushdown",
-      purpose: "Curl up with a reverse, palms-down grip, then rotate to palms-up on the way down. It trains the biceps, the brachioradialis and the forearm rotators in one movement — which for a grappler is wrist-control and gi-grip work as much as it is arm work, and it is why this is here instead of a standard curl.",
-      cues: "Start palms-down and curl to the top, rotate to palms-up, then lower slowly. Elbows stay pinned to your sides — if they drift forward you are swinging the weight up rather than curling it. Go lighter than you would on a normal curl: the reverse grip is the limiter, and that is the point.",
-      quality: "Arms", videoUrl: "https://www.youtube.com/shorts/FljBpJ5gQo0" }),
-    ex({ name: "Cable Triceps Pushdown", supersetLabel: `${num}B`, sets, reps: "12", load: "moderate", rir: 2,
-      rest: "60 to 90 seconds, then back to the curl",
-      purpose: "The other half of the arm. Paired with the curl rather than run on its own because opposing muscles do not compete for recovery — you lose nothing by alternating, and the slot takes half as long. Direct elbow work also keeps the tendon healthy in a sport that loads it hard every session.",
-      cues: "Elbows tucked and still. Lock out without leaning over the bar to help it down — if you are using your bodyweight, the weight is too heavy.",
-      quality: "Arms" }),
-  ];
-}
 function ssPair(num, aName, aPre, bName, bPre) {
   return [
     ex({ name: aName, supersetLabel: `${num}A`, rpeWave: true, cues: aPre.cues || rpeProgramCues[aName] || "", load: aPre.load || "", sets: aPre.sets, reps: aPre.reps, tempo: aPre.tempo || "", rir: 10 - aPre.rpe, rest: "as needed between the paired exercises, 2 to 3 minutes after both are done", quality: "Strength", pct1rmFlat: takesPercentTarget(aName, aPre.reps) ? pctFromRpeReps(aPre.rpe, aPre.reps) : null }),
@@ -2266,7 +2244,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
           ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8 each side", tempo: "1/2/X", rpe: 8 }, "Scapular Push-Up", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
           ssSingle(4, "6-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
-          ...ssPair(5, "Hip Abduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }),
+          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
         ]},
       ]},
       { name: "Zercher & Overhead — Grip & Trunk", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
@@ -2274,9 +2252,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Zercher Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Supine Hamstring Single Leg Glute Bridge (ball or slides)", { sets: 4, reps: "8 each side", tempo: "2/0/X", rpe: 8 }),
           ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
           ...ssPair(3, "Weighted Pull-Up", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
-          ...ssPair(4, "Toes to Bar", { sets: 2, reps: "10", tempo: "3/0/1", rpe: 8 }, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }),
-          ...armSuperset(6, 2),
-          ssSingle(5, "Rice Bucket Grip Drills", { sets: 2, reps: "20 seconds each direction", rpe: 6 }, "Grip"),
+          ssSingle(4, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }, "Trunk"),
         ]},
       ]},
       { name: "Single-Leg Hinge & Carries", intent: "Single-leg hinge and pressing day, finishing on a loaded carry for anti-lateral-flexion core strength.", sections: [
@@ -2321,7 +2297,6 @@ function buildProgramCContent() {
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
-          ...armSuperset(6, 2),
           ssSingle(5, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -2341,14 +2316,14 @@ function buildProgramCContent() {
           ...ssPair(1, "Split Stance Trap Bar Deadlift", { sets: 6, reps: "3 each side", tempo: "2/0/X", rpe: 8 }, "Glute Hip Thrust with Medicine Ball", { sets: 3, reps: "6 each side", tempo: "3/1/X", rpe: 7 }),
           ssSingle(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(3, "Incline Chest-Supported Dumbbell Row", { sets: 3, reps: "8", tempo: "2/0/X", rpe: 8 }, "Strength"),
-          ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max — heavy, but a weight you can genuinely stand up with", rpe: 7 }, "Yielding Strength"),
+          ssSingle(4, "Trap Bar Static Hold (Quarter Squat)", { sets: 2, reps: "one 10 second hold", load: "about 90 percent of your trap bar deadlift max taken off rack pins — or about 70 percent if you have to pull it off the floor", rpe: 7 }, "Yielding Strength"),
           ssSingle(5, "Wall Neck Hold (feet walked out)", { sets: 3, reps: "20 to 30 seconds per position", rpe: 6 }, "Durability"),
 
         ]},
       ]},
       { name: "Front Squat — Speed Triples", intent: "Front squat for speed, then supporting single-effort accessory work.", sections: [
         { id: uid(), type: "power", name: "Working Sets", exercises: [
-          ...ssPair(1, "Front Squat", { sets: 6, reps: "3", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
+          ...ssPair(1, "Front Squat", { sets: 5, reps: "3", tempo: "2/0/X", rpe: 7 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
           ssSingle(2, "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(3, "Renegade Row", { sets: 3, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7 }, "Durability"),
@@ -2394,7 +2369,6 @@ function buildProgramCContent() {
         { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
           ...ssPair(1, weekNum === 4 ? "Zercher Squat" : "Front Squat", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "2/2/2", rpe: 6 }),
           ssSingle(2, weekNum === 4 ? "Standing Barbell Overhead Press" : weekNum === 8 ? "Incline Bench Press" : "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 6 }, "Strength"),
-          ssSingle(3, "Rice Bucket Grip Drills", { sets: 2, reps: "20 seconds each direction", rpe: 5 }, "Grip"),
         ]},
       ]},
       { name: "Day 3 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
@@ -2435,13 +2409,18 @@ function programIsOutOfDate(client) {
 function defaultWarmup() {
   return [
     { id: uid(), block: "Raise", duration: "3 minutes", items: [
-      { id: uid(), name: "Assault Bike", detail: "3 minutes. Easy for the first minute, moderate for the second, then add three or four 5-second surges. Drive the arms through the handles rather than letting them get pushed around — that is the half of you a treadmill never warms up. The cue is temperature, not the clock: you want to be lightly sweating before you touch a bar. If you finish this breathing hard, you went too hard.", videoUrl: "" },
+      { id: uid(), name: "Assault Bike, Rower, or Incline Treadmill", detail: "3 minutes. Easy for the first minute, moderate for the second, then add three or four 5-second surges. Drive the arms through the handles rather than letting them get pushed around — that is the half of you a treadmill never warms up. The cue is temperature, not the clock: you want to be lightly sweating before you touch a bar. If you finish this breathing hard, you went too hard.", videoUrl: "" },
     ]},
     { id: uid(), block: "Activate", duration: "3 minutes", items: [
       { id: uid(), name: "Banded Lateral Step", detail: "30 seconds each direction. Band above the knees, small athletic stance, stay low — no bobbing up and down between steps.", videoUrl: "https://www.youtube.com/watch?v=RW4ZvH22l48" },
       { id: uid(), name: "Single Leg Glute Bridge", detail: "8 reps a side. Ribs down, squeeze at the top for a beat. If you feel it in your hamstring cramping, you are pushing through the heel too far forward.", videoUrl: "https://www.youtube.com/shorts/qB_bC7-CQjI" },
       { id: uid(), name: "Band Pull-Apart", detail: "15 reps. Light band, straight arms, pull to the chest and squeeze the shoulder blades together.", videoUrl: "https://www.youtube.com/shorts/SuvO4TBwSu4" },
       { id: uid(), name: "Band External Rotation at 90/90", detail: "12 reps a side, light band. Elbow stays pinned at shoulder height. This is the cuff work that holds the shoulder centred under everything you are about to press — light and controlled, not loaded.", videoUrl: "https://www.youtube.com/shorts/PTi9pfttH64" },
+    ]},
+    { id: uid(), block: "Durability", duration: "4 minutes", items: [
+      { id: uid(), name: "6-Way Isometric Neck Holds", detail: "15 seconds in each of six directions — forehead, back of the head, each side, then a hand on each temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation and nothing else trains that direction. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop and note it in your check-in.", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" },
+      { id: uid(), name: "90/90 Hip Rotation Lift-Off", detail: "5 per side with a 3 second hold. Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range — if your torso has to rock to make it happen, you have gone past what you own. This is strength at the end of hip rotation, which is guard retention, a knee shield, and every hip escape.", videoUrl: "" },
+      { id: uid(), name: "Tibialis Raise", detail: "15 reps. Heels on the floor, toes pulled up toward the shin, slow down. Ankle and shin durability under guard-retention and scrambling loads — two minutes a session is the whole dose.", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" },
     ]},
     { id: uid(), block: "Mobilise", duration: "3 minutes", items: [
       { id: uid(), name: "World's Greatest Stretch", detail: "3 reps a side. Hip flexor, adductor and thoracic rotation in one movement — move through it rather than holding.", videoUrl: "https://www.youtube.com/watch?v=-CiWQ2IvY34" },
@@ -2659,8 +2638,8 @@ function videoRegistry() {
 // a lighter version of the week, it's a different week, and it drops the two
 // things that were already thinnest.
 const WEEKLY_FLOORS = [
-  { key: "neck", min: 3, deloadMin: 2, match: /neck/i,
-    make: () => ex({ name: "6-Way Isometric Neck Holds", sets: 3, reps: "20 seconds each direction",
+  { key: "neck", min: 2, deloadMin: 2, match: /neck/i,
+    make: () => ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction",
       load: "bodyweight or manual resistance", rir: 2, rest: "45 seconds", quality: "Durability",
       purpose: "The neck takes load every single round — in guard, in a scramble, under pressure. Isometric work builds it with no movement through the joint, which is why it can run every week without needing to be backed off.",
       cues: "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: a guillotine and a stack both load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not actually move — you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop the set and note it in your check-in." }) },
@@ -2669,23 +2648,6 @@ const WEEKLY_FLOORS = [
       rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
       purpose: "Rear delts and the muscles that hold the shoulder blade down and back. Grappling spends all day pulling the shoulders forward — gripping, framing, posting — and this is the cheapest insurance against that there is.",
       cues: "Pull to your forehead with the elbows high and finish with the knuckles facing behind you. Light enough that the shoulder blades do the work rather than the arms." }) },
-  { key: "hiprot", min: 2, deloadMin: 0, match: /90\/90|hip rotation|hip internal|hip external/i,
-    make: () => ex({ name: "90/90 Hip Rotation Lift-Off (each side)", sets: 2, reps: "5 per side with a 3 second hold", load: "bodyweight, or an ankle weight once it is easy", rir: 3,
-      rest: "60 seconds", quality: "Durability",
-      purpose: "Strength at the end of hip rotation, which is guard retention, a knee shield, shin-to-shin, and every hip escape. The cool-down stretches this range; nothing until now trained it under load, and a range you can only reach passively is one you lose first.",
-      cues: "Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range. If your torso has to rock to make it happen, you have gone past what you own." }) },
-  { key: "soleus", min: 2, deloadMin: 0, match: /calf raise|soleus|seated heel/i,
-    make: () => ex({ name: "Seated Calf Raise (soleus)", sets: 2, reps: "12 to 15", load: "moderate", rir: 2,
-      rest: "60 seconds", quality: "Durability",
-      purpose: "The soleus is the largest force-absorbing tissue you have in landing and sprinting, and this program asks for a lot of both. Bent knee is what takes the gastrocnemius out and leaves the soleus to do the work.",
-      cues: "Knee bent to about ninety so the calf cannot cheat with the upper half. Full stretch at the bottom, pause at the top. Slow — this one is pointless fast.",
-      videoUrl: "https://www.youtube.com/shorts/NwA1N_EFTtk",
-      videoUrl2: "https://www.youtube.com/shorts/OZlYFWLZ3cw" }) },
-  { key: "cuff", min: 2, deloadMin: 0, match: /external rotation|side-lying er/i,
-    make: () => ex({ name: "Side-Lying External Rotation (each side)", sets: 2, reps: "12 to 15 per side", load: "light — 2 to 5 kg is plenty", rir: 3,
-      rest: "45 seconds", quality: "Prehab",
-      purpose: "The rotator cuff at the length a kimura threatens. Face pulls train the shoulder blade and the rear delt; they do not train the cuff in the position that actually gets you hurt, and this is the cheapest insurance against that there is.",
-      cues: "Lie on your side, elbow pinned to your ribs at ninety degrees, and rotate the forearm up only as far as it goes without the shoulder shrugging. Light. If you need to throw it, it is too heavy." }) },
   { key: "adductor", min: 2, deloadMin: 0, match: /copenhagen|adduction|adductor/i,
     make: () => ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 3,
       rest: "45 seconds", quality: "Durability",
@@ -2695,7 +2657,7 @@ const WEEKLY_FLOORS = [
   // sprinting every week. In the peak block the sprinting is already reduced and
   // the point of the block is freshness, so two maintenance sets is the honest
   // dose — which is exactly what that phase's own text promises.
-  { key: "post", min: 5, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
+  { key: "post", min: 3, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
       purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
@@ -2707,7 +2669,11 @@ const WEEKLY_FLOORS = [
       cues: "Chest stays on the pad. Pull to the bottom of the ribs and squeeze the shoulder blades together at the top." }) },
 ];
 
+// Walks forward every time a floor has to add work, so consecutive additions
+// land on different days instead of stacking on the first one.
+const FLOOR_HOST_ROTATION = { n: 0 };
 function weeklyFloorPass(program) {
+  FLOOR_HOST_ROTATION.n = 0;
   (program.phases || []).forEach((phase) => {
     const isDeload = /deload/i.test(phase.name || "");
     const isPeak = /peak|compete|realization/i.test(phase.name || "");
@@ -2735,10 +2701,13 @@ function weeklyFloorPass(program) {
       // Nothing of the kind in the week at all, so it has to be added. The
       // durability block is where this work belongs and where the athlete
       // already expects to find it.
-      const host = days.map((d) => (d.sections || []).find((sec) => sec.type === "durability"))
-        .find(Boolean)
-        || days.map((d) => (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0]).find(Boolean);
-      if (!host) return;
+      // Round-robin across the week rather than always the first day. Hosting
+      // every missing pattern on day one is how day one grew to eleven
+      // exercises while day three sat at eight.
+      const hosts = days.map((d) => (d.sections || []).find((sec) => sec.type === "durability")
+        || (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0]).filter(Boolean);
+      if (!hosts.length) return;
+      const host = hosts[FLOOR_HOST_ROTATION.n++ % hosts.length];
       const added = floor.make();
       added.sets = Math.max(1, want);
       host.exercises = [...(host.exercises || []), added];
@@ -5083,6 +5052,8 @@ const TUTORIAL_PAGES = [
   { title: "Welcome", variant: "A", body: "Your program is a twelve-week conjugate strength program built specifically for grapplers. A handful of terms show up throughout it — here's what they actually mean, in plain language, before you dive in." },
   { title: "Max Effort", variant: "A", body: "A day where you build up to the heaviest weight you can honestly lift for a single rep or a few reps, that day. It isn't a fixed number written in advance — you find it based on how you feel." },
   { title: "Dynamic Effort", variant: "A", body: "Using a lighter weight and moving it as explosively as possible. This is about building speed and power, not raw strength — the weight is intentionally light so you can move it fast." },
+  { title: "Where These Sessions Go", body: "Three lifts a week, on top of three to five nights on the mat. Put them on days you are already training rather than on your rest days — lift first and roll later if you can, or at least a few hours apart. Guarding your actual rest days is what makes twelve weeks of this survivable. Keep the heaviest lower-body day as far from your hardest wrestling or takedown night as the week allows, because that is the one that shows up in your legs the next evening. And if a session has to be cut short, do the first three exercises and leave — the top of every session is the part that matters, and it is ordered that way on purpose." },
+  { title: "If You Only Have Forty Minutes", body: "Some nights you will not have time for the whole thing. Do not skip the session — shorten it. Warm up, do the first two or three exercises as written, and stop. That is a real training session and it is logged as one. The sessions are ordered so the work that drives the result sits at the top and the maintenance work sits at the bottom, which means a short session loses the least important part. A shortened week beats a missed one every time, and missing one is how people quietly stop." },
   { title: "Reps in Reserve", body: "How many more reps you could have done before failing. Zero reps in reserve means you truly couldn't have done another rep — that's a genuine maximum effort. Two or three reps in reserve is a comfortably hard set." },
   { title: "Rate of Perceived Exertion", body: "A one-to-ten scale for how hard a set felt, with ten being an all-out maximum. This app calculates it automatically from your reps in reserve, so you never have to think about the two separately." },
   { title: "One-Rep Max Calculator", body: "Tap the calculator icon next to the help button at the top of the screen any time. Enter a weight you lifted, how many reps you got with it, and your reps in reserve, and it estimates your true one-rep max and shows you exact weights for every percentage of it — handy for planning a lift without doing the math yourself." },
