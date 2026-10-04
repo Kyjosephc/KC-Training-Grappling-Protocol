@@ -560,13 +560,80 @@ function mergeStoredHistory(stored, next) {
 }
 // Used by every write of a client record, so the merge happens in one place
 // rather than at each of the couple of dozen call sites.
+// The newest date this athlete did anything, kept on the record so the coach
+// dashboard can show "12 days since training" without downloading every log.
+function lastActivityOf(c) {
+  const dates = [...((c.logs || []).map((l) => l.date)), ...((c.mobilityLogs || []).map((m) => m.date))]
+    .filter(Boolean).sort();
+  return dates.length ? dates[dates.length - 1] : null;
+}
 async function persistClientRecord(userId, updated) {
   const stored = await getClient(userId, updated.id);
-  const merged = stored === LOAD_FAILED || !stored ? updated : mergeStoredHistory(stored, updated);
+  let merged = stored === LOAD_FAILED || !stored ? updated : mergeStoredHistory(stored, updated);
+  merged = { ...merged, lastActivity: lastActivityOf(merged) };
   const res = await setClient(userId, updated.id, merged);
   return { ...res, record: merged };
 }
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
+
+// The coach dashboard used to fetch every athlete's entire record — program
+// JSON, every logged session, the profile picture as a data URL — one at a
+// time, two round-trips each. Twenty athletes was forty requests and a few
+// megabytes; five hundred would have been a thousand requests and most of a
+// gigabyte, and since marking somebody paid only happens from this screen, a
+// dashboard that will not load is a dashboard that cannot take money.
+//
+// This asks Postgres for the handful of fields the collapsed list actually
+// shows, for every athlete, in one request. The full record is fetched only
+// when a row is opened.
+const COACH_SUMMARY_SELECT = [
+  "user_id", "key",
+  "nm:value->>name",
+  "belt:value->>beltLevel",
+  "paid:value->paid",
+  "created:value->>createdAt",
+  "done:value->sessionsCompleted",
+  "last:value->>lastActivity",
+  "waiver:value->waiver",
+  "perweek:value->program->>sessionsPerWeek",
+].join(", ");
+
+// Older PostgREST versions reject the arrow syntax above. If that happens the
+// dashboard falls back to whole records rather than showing nothing — slower,
+// but never broken.
+async function fetchCoachSummaries(ownerIds) {
+  if (!supabase || !ownerIds.length) return { rows: [], ok: true, projected: true };
+  const ids = [...new Set(ownerIds)].filter(Boolean);
+  const out = [];
+  // Chunked so the id list never outgrows the URL.
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const attempt = await withRetry(async () => {
+      const { data, error } = await supabase.from("kv_store")
+        .select(COACH_SUMMARY_SELECT).in("user_id", chunk).like("key", "sc-app:client:%");
+      if (error) throw error;
+      return data || [];
+    });
+    if (!attempt.ok) {
+      const plain = await withRetry(async () => {
+        const { data, error } = await supabase.from("kv_store")
+          .select("user_id, key, value").in("user_id", chunk).like("key", "sc-app:client:%");
+        if (error) throw error;
+        return data || [];
+      });
+      if (!plain.ok) return { rows: out, ok: false, projected: false };
+      plain.result.forEach((r) => {
+        const v = r.value || {};
+        out.push({ user_id: r.user_id, key: r.key, nm: v.name, belt: v.beltLevel, paid: v.paid,
+          created: v.createdAt, done: v.sessionsCompleted, last: v.lastActivity,
+          waiver: v.waiver, perweek: v.program && v.program.sessionsPerWeek, full: v });
+      });
+      continue;
+    }
+    attempt.result.forEach((r) => out.push(r));
+  }
+  return { rows: out, ok: true, projected: true };
+}
 async function getSettings(userId) { const v = await kvGet(userId, SETTINGS_KEY); return (!v || v === LOAD_FAILED) ? { theme: "dark" } : v; }
 async function setSettings(userId, s) { return kvSet(userId, SETTINGS_KEY, s); }
 // Muted / left / last-read, kept apart from the client record on purpose: these
@@ -603,6 +670,14 @@ const fmtChartDate = (d) => {
 // is not much of a record.
 const fmtDateTime = (iso) => { try { return new Date(iso).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }); } catch { return String(iso || ""); } };
 
+// The summary rows carry a date rather than a whole training history.
+function daysSinceDate(dateStr) {
+  if (!dateStr) return null;
+  const then = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(then.getTime())) return null;
+  const now = new Date(todayStr() + "T00:00:00");
+  return Math.max(0, Math.round((now - then) / (1000 * 60 * 60 * 24)));
+}
 function daysSinceLastActivity(client) {
   const dates = [
     ...(client.logs || []).map((l) => l.date),
@@ -6097,53 +6172,74 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const [openRow, setOpenRow] = useState(null);
   const [reviewed, setReviewed] = useState(null);
   const [reviewedLoadFailed, setReviewedLoadFailed] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ownList = await Promise.all(clients.map(async (c) => {
-        const got = await getClient(userId, c.id);
-        // A failed read is not an empty client. Keep them apart, or the coach is
-        // shown "Unpaid, no waiver" for someone who is paid and has signed.
-        return { id: c.id, name: c.name, full: got === LOAD_FAILED ? null : got, loadFailed: got === LOAD_FAILED, ownerId: userId };
-      }));
-      let linkedList = [];
-      // If this is the coach's own account, also pull in every client who signed up
-      // for their own account and got auto-linked to this coach — those clients' data
-      // lives under their own separate accounts, so it has to be fetched separately.
+      // Who to ask about: this account, plus every athlete who signed up on
+      // their own and got linked here.
+      const owners = [userId];
+      const emails = {};
       if (userId === COACH_USER_ID && supabase) {
-        try {
-          const { data: links } = await supabase.from("client_links").select("client_user_id, client_email").eq("coach_user_id", userId);
-          for (const link of links || []) {
-            const clientProfiles = await getClientList(link.client_user_id);
-            // A Symbol is truthy and has no .length, so the old check fell through
-            // to the for-of below, threw, and was swallowed by the catch — taking
-            // every remaining linked athlete with it, silently.
-            if (clientProfiles === LOAD_FAILED) {
-              linkedList.push({ id: null, name: link.client_email || "Couldn't load", full: null, ownerId: link.client_user_id, loadFailed: true });
-              continue;
-            }
-            if (!clientProfiles || clientProfiles.length === 0) {
-              linkedList.push({ id: null, name: link.client_email || "New client", full: null, ownerId: link.client_user_id, pending: true });
-              continue;
-            }
-            for (const c of clientProfiles) {
-              const got = await getClient(link.client_user_id, c.id);
-              linkedList.push({ id: c.id, name: c.name || link.client_email,
-                full: got === LOAD_FAILED ? null : got, loadFailed: got === LOAD_FAILED, ownerId: link.client_user_id });
-            }
-          }
-        } catch {}
+        const linkRes = await withRetry(async () => {
+          const { data, error } = await supabase.from("client_links")
+            .select("client_user_id, client_email").eq("coach_user_id", userId);
+          if (error) throw error;
+          return data || [];
+        });
+        (linkRes.ok ? linkRes.result : []).forEach((l) => {
+          if (l.client_user_id && l.client_user_id !== userId) owners.push(l.client_user_id);
+          if (l.client_user_id) emails[l.client_user_id] = l.client_email;
+        });
       }
-      // Same Symbol trap: setting state to it made `reviewed.includes(...)` throw
-      // during render, which handed the coach the error boundary instead of a
-      // dashboard every time this one read timed out.
+
+      const { rows, ok } = await fetchCoachSummaries(owners);
+      if (cancelled) return;
+
+      const seen = new Set();
+      const list = rows.map((r) => {
+        seen.add(r.user_id);
+        const id = String(r.key || "").replace("sc-app:client:", "");
+        const perWeek = Number(r.perweek) || 3;
+        const done = Number(r.done) || 0;
+        return {
+          id, ownerId: r.user_id,
+          name: r.nm || emails[r.user_id] || "Athlete",
+          loadFailed: false,
+          // Everything the collapsed row shows, and nothing else. The full
+          // record arrives when the row is opened.
+          summary: { name: r.nm, beltLevel: r.belt, paid: !!r.paid, createdAt: r.created,
+            sessionsCompleted: done, lastActivity: r.last || null, waiver: r.waiver || null,
+            weekNumber: Math.max(1, Math.floor(done / perWeek) + 1) },
+          full: r.full || null,
+        };
+      });
+      // Someone linked but with no record yet has signed up and not finished
+      // setting up — they still need to appear, or the coach never sees them.
+      owners.forEach((o) => {
+        if (o === userId || seen.has(o)) return;
+        list.push({ id: null, ownerId: o, name: emails[o] || "New client", pending: true, loadFailed: !ok, summary: null, full: null });
+      });
+
       const rawRev = await kvGet(userId, REVIEWED_SIGNUPS_KEY);
       const rev = (rawRev === LOAD_FAILED || !Array.isArray(rawRev)) ? [] : rawRev;
-      if (!cancelled) { setRecords([...ownList, ...linkedList]); setReviewed(rev); setReviewedLoadFailed(rawRev === LOAD_FAILED); }
+      if (!cancelled) { setRecords(list); setReviewed(rev); setReviewedLoadFailed(rawRev === LOAD_FAILED); setLoadFailed(!ok); }
     })();
     return () => { cancelled = true; };
   }, [clients, userId]);
+
+  // Opening a row is what pulls that athlete's whole record. One at a time,
+  // only the ones the coach actually looks at.
+  const openRecord = useCallback(async (rowKey, ownerId, id) => {
+    if (!id) return;
+    setRecords((prev) => prev && prev.map((r) => (`${r.ownerId}:${r.id || "pending"}` === rowKey ? { ...r, loading: true } : r)));
+    const got = await getClient(ownerId, id);
+    setRecords((prev) => prev && prev.map((r) => (`${r.ownerId}:${r.id || "pending"}` === rowKey
+      ? { ...r, loading: false, full: got === LOAD_FAILED ? null : got, loadFailed: got === LOAD_FAILED }
+      : r)));
+  }, []);
 
   // Marking a sign-up reviewed is what clears it off the badge. Deciding on
   // payment counts as reviewing them, so that happens automatically below.
@@ -6179,12 +6275,14 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
     // Do not flip the pill on a write that did not land — kvSet has already
     // shown its own toast, and a wrong "Paid" here is worse than no change.
     if (saved && saved.ok === false) { setBusyId(null); return; }
-    setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId ? { ...r, full: updated } : r)));
+    setRecords((prev) => prev.map((r) => (r.id === id && r.ownerId === ownerId
+      ? { ...r, full: updated, summary: r.summary ? { ...r.summary, paid: updated.paid } : r.summary }
+      : r)));
     await markReviewed(ownerId);
     setBusyId(null);
   };
 
-  const paidCount = records ? records.filter((r) => r.full?.paid).length : 0;
+  const paidCount = records ? records.filter((r) => r.summary?.paid).length : 0;
   // Only self-registered athletes are sign-ups; profiles the coach made
   // themselves were never waiting on a decision.
   const newSignups = (records && reviewed)
@@ -6211,21 +6309,21 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                 <div key={`${r.ownerId}-${r.id || "pending"}`} className="signup-review-card">
                   <div style={{ fontWeight: 700, marginBottom: 2 }}>{r.name}</div>
                   <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-                    {r.full
-                      ? `Signed up — currently marked ${r.full.paid ? "paid" : "unpaid"}`
+                    {r.summary
+                      ? `Signed up — currently marked ${r.summary.paid ? "paid" : "unpaid"}`
                       : "Signed up but hasn't finished setting up their profile yet"}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {r.full && !r.full.paid && (
+                    {r.summary && !r.summary.paid && (
                       <button className="btn-primary" style={{ flex: "1 1 160px", padding: "8px 12px", fontSize: 13 }}
                         disabled={busyId === r.id}
-                        onClick={() => togglePaid(r.id, r.full, r.ownerId)}>
+                        onClick={() => togglePaid(r.id, null, r.ownerId)}>
                         {busyId === r.id ? "Saving…" : "Mark paid — grandfather in"}
                       </button>
                     )}
                     <button className="btn-ghost" style={{ flex: "1 1 160px", marginTop: 0, justifyContent: "center" }}
                       onClick={() => markReviewed(r.ownerId)}>
-                      {r.full && r.full.paid ? "Got it" : "Leave unpaid for now"}
+                      {r.summary && r.summary.paid ? "Got it" : "Leave unpaid for now"}
                     </button>
                   </div>
                 </div>
@@ -6233,17 +6331,32 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
             </div>
           )}
 
-          <button className="btn-ghost wide" style={{ marginBottom: 14 }} onClick={() => downloadWaiverRecord(records)}>
-            <Download size={14} /> Download waiver record ({records.filter((r) => r.full?.waiver?.at).length} signed)
+          {loadFailed && (
+            <div className="adjust-box" style={{ marginBottom: 12, borderColor: "var(--red)" }}>
+              Some athletes could not be read just now — check your connection and reopen this screen before acting on what you see.
+            </div>
+          )}
+          <button className="btn-ghost wide" style={{ marginBottom: 14 }} disabled={exporting} onClick={async () => {
+            setExporting(true);
+            const signed = records.filter((r) => r.summary?.waiver?.at && r.id);
+            const withFull = [];
+            for (const r of signed) {
+              const got = r.full || await getClient(r.ownerId, r.id);
+              withFull.push({ ...r, full: got === LOAD_FAILED ? null : got });
+            }
+            downloadWaiverRecord(withFull);
+            setExporting(false);
+          }}>
+            <Download size={14} /> {exporting ? "Gathering…" : `Download waiver record (${records.filter((r) => r.summary?.waiver?.at).length} signed)`}
           </button>
           <p className="muted" style={{ marginBottom: 6 }}>{paidCount} of {records.length} athlete{records.length === 1 ? "" : "s"} marked paid.</p>
 
           {(() => {
             // A coach opening this wants one question answered first: who needs
             // me today. Everything else can wait behind a tap.
-            const needsPay = records.filter((r) => r.full && !r.full.paid && !r.loadFailed).length;
-            const needsWaiver = records.filter((r) => r.full && !r.full.waiver?.at && !r.loadFailed).length;
-            const stale = records.filter((r) => r.full && daysSinceLastActivity(r.full) !== null && daysSinceLastActivity(r.full) >= 10).length;
+            const needsPay = records.filter((r) => r.summary && !r.summary.paid).length;
+            const needsWaiver = records.filter((r) => r.summary && !r.summary.waiver?.at).length;
+            const stale = records.filter((r) => { const d = r.summary && daysSinceDate(r.summary.lastActivity); return d !== null && d >= 10; }).length;
             const failed = records.filter((r) => r.loadFailed).length;
             const chips = [
               needsPay && { k: "pay", label: `${needsPay} unpaid`, tone: "amber" },
@@ -6257,25 +6370,25 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
 
           {records.map((r) => {
             const full = r.full;
-            const perWeek = full?.program?.sessionsPerWeek || 3;
-            const weekNumber = full ? Math.max(1, Math.floor((full.sessionsCompleted || 0) / perWeek) + 1) : null;
+            const sum = r.summary;
+            const weekNumber = sum ? sum.weekNumber : null;
             const recentPR = full?.prLog?.length ? [...full.prLog].sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
             const recentBW = full?.bodyweightLog?.length ? full.bodyweightLog[full.bodyweightLog.length - 1] : null;
             const recentReadiness = full ? Object.values(full.readiness || {}).sort((a, b) => (a.date < b.date ? 1 : -1))[0] : null;
-            const quiet = full ? daysSinceLastActivity(full) : null;
+            const quiet = sum ? daysSinceDate(sum.lastActivity) : null;
             const rowKey = `${r.ownerId}:${r.id || "pending"}`;
             const open = openRow === rowKey;
             const lastLine = r.pending
               ? "Signed up — profile not set up yet"
               : r.loadFailed
                 ? "Could not be read — check your connection"
-                : full
+                : sum
                   ? `Week ${weekNumber} · ${quiet === null ? "not trained yet" : quiet === 0 ? "trained today" : quiet === 1 ? "trained yesterday" : `${quiet} days since training`}`
                   : "No profile yet";
             return (
               <div key={rowKey} className="dash-row">
-                <button className="dash-row-head" onClick={() => setOpenRow(open ? null : rowKey)} aria-expanded={open}>
-                  {full && <BeltEmblem level={full.beltLevel} size={24} title={null} />}
+                <button className="dash-row-head" onClick={() => { const next = open ? null : rowKey; setOpenRow(next); if (next && !r.full && !r.loading) openRecord(rowKey, r.ownerId, r.id); }} aria-expanded={open}>
+                  {sum && <BeltEmblem level={sum.beltLevel} size={24} title={null} />}
                   <div className="dash-row-main">
                     <div className="dash-row-name">
                       {r.name}
@@ -6286,17 +6399,18 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                   <div className="dash-row-pills">
                     {r.loadFailed
                       ? <span className="pill pill-alert">Couldn't load</span>
-                      : <>
-                          {!full?.waiver?.at && <span className="pill pill-alert">No waiver</span>}
-                          {!full?.paid && <span className="pill pill-unpaid">Unpaid</span>}
-                          {full?.paid && full?.waiver?.at && <span className="pill pill-paid">All set</span>}
-                        </>}
+                      : sum ? <>
+                          {!sum.waiver?.at && <span className="pill pill-alert">No waiver</span>}
+                          {!sum.paid && <span className="pill pill-unpaid">Unpaid</span>}
+                          {sum.paid && sum.waiver?.at && <span className="pill pill-paid">All set</span>}
+                        </> : null}
                   </div>
                   <ChevronRight size={17} className={open ? "chev-open" : ""} />
                 </button>
 
                 {open && (
                   <div className="dash-row-body">
+                    {r.loading && <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Loading their record…</div>}
                     {full?.waiver?.at && (
                       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
                         Waiver signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)}
@@ -6323,12 +6437,12 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                       />
                     </div>
                     <button
-                      className={full?.paid ? "btn-ghost wide" : "btn-primary wide"}
+                      className={sum?.paid ? "btn-ghost wide" : "btn-primary wide"}
                       style={{ marginTop: 10 }}
-                      disabled={busyId === r.id || !full || r.loadFailed}
-                      onClick={() => togglePaid(r.id, full, r.ownerId)}
+                      disabled={busyId === r.id || !r.id || r.loadFailed}
+                      onClick={() => togglePaid(r.id, null, r.ownerId)}
                     >
-                      {busyId === r.id ? "Updating…" : full?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
+                      {busyId === r.id ? "Updating…" : sum?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
                     </button>
                   </div>
                 )}
