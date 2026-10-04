@@ -2400,7 +2400,9 @@ function buildProgramCContent() {
       { name: "Day 3 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
         { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
           ...ssPair(1, weekNum === 4 ? "Single Leg Romanian Deadlift" : "Split Stance Romanian Deadlift", { sets: 3, reps: "6 each side", tempo: "2/0/1", rpe: 6 }, "Valslide Hamstring Curls", { sets: 3, reps: "6", rpe: 6 }),
-          ssSingle(2, weekNum === 4 ? "Weighted Push-Ups" : "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 6 }, "Strength"),
+          weekNum === 4
+            ? ssSingle(2, "Weighted Push-Ups", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 6 }, "Strength")
+            : ssSingle(2, "Single Leg Glute Bridge Dumbbell Floor Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 6 }, "Strength"),
           ssSingle(3, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 5 }, "Core"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
@@ -7583,7 +7585,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                               : !isFirstRun
                                 ? ""
                                 : loggedSessions === 0
-                                  ? " \u2014 log this one and the next time it comes round you will get a suggested weight"
+                                  ? " \u2014 first time on this lift: start light and add weight each set until the last rep is hard but you could still manage the reps-in-reserve above. Log it and you will get a suggested weight from here on."
                                   : ""}
                           </div>
                         )}
