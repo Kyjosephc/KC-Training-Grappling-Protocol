@@ -7870,9 +7870,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
             const inferredPoolKey = en.target.rotatingPool || null;
             const poolOptions = inferredPoolKey ? (client.program.conjugate?.[inferredPoolKey] || []) : [];
             const displayName = en.name || poolOptions[0]?.name || "Exercise unavailable";
-            const filledSetCount = en.sets.filter((s) => (needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "")).length;
-            const allSetsFilled = en.sets.length > 0 && filledSetCount === en.sets.length;
-            const exOpen = exCollapseOverride[en.exerciseId] !== undefined ? exCollapseOverride[en.exerciseId] : !allSetsFilled;
+            const exOpen = exCollapseOverride[en.exerciseId] !== undefined ? exCollapseOverride[en.exerciseId] : true;
             const collapsedSummary = exOpen ? "" : loggedSummaryFor(en, displayName);
             return (
               <div className={`section-ex-block${/^\d+A$/.test(en.target.supersetLabel || "") ? " ss-a" : /^\d+B$/.test(en.target.supersetLabel || "") ? " ss-b" : ""}`} key={en.exerciseId}>
