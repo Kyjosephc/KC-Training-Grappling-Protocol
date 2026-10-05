@@ -576,6 +576,114 @@ async function persistClientRecord(userId, updated) {
 }
 async function deleteClientStorage(userId, id) { return kvDelete(userId, clientKey(id)); }
 
+/* ============================== LEADERBOARD ============================== */
+// The leaderboard row holds a display name and two numbers. Nothing about
+// anyone's training is reachable through it — the policies keep kv_store shut,
+// and this table is the only thing one athlete can see about another.
+//
+// Both totals are recomputed from the athlete's own logs every time they are
+// published, rather than incremented. An increment that fails once is wrong
+// for ever; a recompute is right again the next time anyone finishes a session.
+
+// Weeks are anchored to Monday by weekStartOf, defined further down — a
+// training week starts Monday, and a Sunday session counted into "last week"
+// is how a leaderboard loses people's trust.
+
+function leaderboardTotalsFor(client) {
+  const logs = (client && client.logs) || [];
+  const thisWeek = weekStartOf(todayStr());
+  let total = 0;
+  let week = 0;
+  logs.forEach((l) => {
+    const v = Math.max(0, Math.round(l.totalVolume || 0));
+    total += v;
+    if (l.date && weekStartOf(l.date) === thisWeek) week += v;
+  });
+  return { total, week, weekStart: thisWeek };
+}
+
+// First name plus last initial. A leaderboard has to name people or it is not
+// one, but it does not have to publish a full legal name to strangers.
+function leaderboardNameFor(client) {
+  const first = String((client && client.firstName) || "").trim();
+  const last = String((client && client.lastName) || "").trim();
+  if (first) return last ? `${first} ${last[0].toUpperCase()}.` : first;
+  const whole = String((client && client.name) || "").trim();
+  if (!whole) return "Athlete";
+  const parts = whole.split(/\s+/);
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.` : parts[0];
+}
+
+async function publishStanding(userId, client) {
+  if (!supabase || !userId || !client) return { ok: false };
+  const { total, week, weekStart } = leaderboardTotalsFor(client);
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("leaderboard").upsert({
+      user_id: userId, display_name: leaderboardNameFor(client),
+      total_lbs: total, week_lbs: week, week_start: weekStart,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (error) throw error;
+    return true;
+  });
+  // Silent on failure. A standing that did not publish is worth nothing to
+  // interrupt a session over, and the next finish republishes it.
+  return { ok: outcome.ok };
+}
+
+async function fetchLeaderboard() {
+  if (!supabase) return LOAD_FAILED;
+  const thisWeek = weekStartOf(todayStr());
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("leaderboard")
+      .select("user_id, display_name, total_lbs, week_lbs, week_start")
+      .order("total_lbs", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    return data || [];
+  });
+  if (!outcome.ok) return LOAD_FAILED;
+  const rows = outcome.result;
+  const allTime = rows.filter((r) => (r.total_lbs || 0) > 0).slice(0, 5);
+  // A stale week_start means that athlete has not trained since the week
+  // turned over, so their weekly total is zero rather than last week's number.
+  const weekly = rows
+    .map((r) => ({ ...r, week_lbs: r.week_start === thisWeek ? (r.week_lbs || 0) : 0 }))
+    .filter((r) => r.week_lbs > 0)
+    .sort((a, b) => b.week_lbs - a.week_lbs)
+    .slice(0, 5);
+  return { allTime, weekly, weekStart: thisWeek };
+}
+
+// Removes everything the app holds about one athlete: their training record,
+// their roster entry, their settings, their standing, and the link that put
+// them on the coach's dashboard. Their login still exists — deleting that needs
+// a server-side key the browser must never hold — so if they sign in again they
+// land on a fresh signup with nothing attached.
+async function deleteAthleteCompletely(clientUserId) {
+  if (!supabase || !clientUserId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("kv_store").delete().eq("user_id", clientUserId);
+    if (error) throw error;
+    return true;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't remove that athlete's data — nothing was deleted. Try again.", autoDismissMs: 7000 });
+    return { ok: false };
+  }
+  // Best-effort from here. The training data is the part that matters and it
+  // is already gone; a leftover link row just means they reappear as an empty
+  // row, which the coach can remove again.
+  await removeStanding(clientUserId);
+  try { await supabase.from("client_links").delete().eq("client_user_id", clientUserId); } catch {}
+  return { ok: true };
+}
+
+async function removeStanding(clientUserId) {
+  if (!supabase || !clientUserId) return;
+  try { await supabase.from("leaderboard").delete().eq("user_id", clientUserId); } catch {}
+}
+
 // Whether this athlete has paid. It used to live inside their own training
 // record, which every athlete has full write access to — the Mark as Paid
 // button was the coach's, the flag under it was not. It lives on client_links
@@ -4419,11 +4527,79 @@ const TABS = [
 // been one place to look.
 const PROGRESS_VIEWS = [
   { id: "charts", label: "Charts" },
+  { id: "board", label: "Leaders" },
   { id: "sessions", label: "Sessions" },
   { id: "records", label: "Records" },
   { id: "notes", label: "Notes" },
 ];
-function ProgressHub({ client, onPersist }) {
+
+const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+
+function BoardList({ rows, field, youId, empty }) {
+  if (!rows.length) return <p className="muted" style={{ marginBottom: 0 }}>{empty}</p>;
+  return (
+    <ol className="board-list">
+      {rows.map((r, i) => (
+        <li key={r.user_id} className={`board-row${r.user_id === youId ? " board-you" : ""}`}>
+          <span className="board-rank">{MEDALS[i] || i + 1}</span>
+          <span className="board-name">{r.display_name || "Athlete"}{r.user_id === youId ? " (you)" : ""}</span>
+          <span className="board-lbs">{formatWeight(r[field] || 0)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// The only screen in the app where one athlete sees another. It shows a name
+// and a number, and there is nothing else behind it to open.
+function LeaderboardTab({ client, userId }) {
+  const [board, setBoard] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(async () => {
+    const res = await fetchLeaderboard();
+    if (res === LOAD_FAILED) { setFailed(true); return; }
+    setFailed(false);
+    setBoard(res);
+  }, []);
+  useEffect(() => {
+    load();
+    const onVis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [load]);
+
+  const mine = useMemo(() => leaderboardTotalsFor(client), [client]);
+
+  return (
+    <div className="pad">
+      <div className="stat-chip-row" style={{ marginBottom: 14 }}>
+        <StatChip label="Your total" value={mine.total ? formatWeight(mine.total) : "\u2014"} />
+        <StatChip label="Your week" value={mine.week ? formatWeight(mine.week) : "\u2014"} />
+      </div>
+
+      {failed && (
+        <div className="adjust-box" style={{ marginBottom: 12 }}>
+          Couldn't load the standings just now — your own numbers above are still right.
+        </div>
+      )}
+
+      <Card title="This Week" subtitle="Resets every Monday">
+        {board ? <BoardList rows={board.weekly} field="week_lbs" youId={userId}
+          empty="Nobody has logged a session yet this week. Be the first." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
+      </Card>
+
+      <Card title="All Time" subtitle="Total weight lifted since joining">
+        {board ? <BoardList rows={board.allTime} field="total_lbs" youId={userId}
+          empty="No sessions logged yet." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
+      </Card>
+
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Weight lifted is every working set you log — the weight times the reps, added up. Only your name and these two numbers are shared; nobody can see your sessions, your bodyweight or anything else you log.
+      </p>
+    </div>
+  );
+}
+function ProgressHub({ client, onPersist, userId }) {
   const [view, setView] = useState("charts");
   return (
     <>
@@ -4434,6 +4610,7 @@ function ProgressHub({ client, onPersist }) {
         ))}
       </div>
       {view === "charts" && <ProgressTab client={client} />}
+      {view === "board" && <LeaderboardTab client={client} userId={userId} />}
       {view === "sessions" && <HistoryTab client={client} onPersist={onPersist} />}
       {view === "records" && <PRsTab client={client} />}
       {view === "notes" && <BJJNotesTab client={client} onPersist={onPersist} />}
@@ -4681,6 +4858,10 @@ function MainApp({ userId, onSignOut }) {
       }
       if (activeIdRef.current !== requestedId) return;
       setClientState(c);
+      // Publishes this athlete's standing on load, so somebody who has been
+      // training for weeks appears on the board the first time they open the
+      // app after it exists, rather than after their next session.
+      if (c) publishStanding(userId, c);
     }
   }, [activeId, userId]);
 
@@ -4872,7 +5053,7 @@ function MainApp({ userId, onSignOut }) {
         {/* history / bjj / prs are kept as routes so a bookmark or a deep link
             from an older build still lands somewhere sensible. */}
         {(tab === "progress" || tab === "history" || tab === "bjj" || tab === "prs") && (
-          <ProgressHub client={client} onPersist={persistClient} />
+          <ProgressHub client={client} onPersist={persistClient} userId={userId} />
         )}
         {tab === "community" && communityOpen && (
           <CommunityTab client={client} userId={userId} isCoach={isCoach}
@@ -4915,7 +5096,9 @@ function MainApp({ userId, onSignOut }) {
             const nextCompleted = (client.sessionsCompleted || 0) + 1;
             const updated = { ...client, logs: [...client.logs, session], sessionsCompleted: nextCompleted,
               maxSessionsReached: Math.max(client.maxSessionsReached || 0, nextCompleted) };
-            return persistClient(updated);
+            const saved = await persistClient(updated);
+            if (!saved || saved.ok !== false) publishStanding(userId, saved?.record || updated);
+            return saved;
           }}
           onRecordPR={async (entry) => {
             const newRecord = { id: uid(), date: todayStr(), ...entry };
@@ -6216,6 +6399,8 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const [reviewedLoadFailed, setReviewedLoadFailed] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(null);
+  const [removingId, setRemovingId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -6499,6 +6684,32 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     >
                       {busyId === r.id ? "Updating…" : sum?.paid ? "Mark as Unpaid" : "Mark as Paid — Grandfather In"}
                     </button>
+
+                    {confirmRemove === rowKey ? (
+                      <div className="adjust-box" style={{ marginTop: 10, borderColor: "var(--red)" }}>
+                        This permanently deletes {r.name}'s training record, every session and record they have logged, and their place on the leaderboard. It cannot be undone.
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13, background: "var(--red)" }}
+                            disabled={removingId === rowKey}
+                            onClick={async () => {
+                              setRemovingId(rowKey);
+                              const res = await deleteAthleteCompletely(r.ownerId);
+                              if (res.ok) {
+                                setRecords((prev) => prev.filter((x) => `${x.ownerId}:${x.id || "pending"}` !== rowKey));
+                                emitToast({ kind: "info", message: `${r.name} has been removed.`, autoDismissMs: 5000 });
+                              }
+                              setRemovingId(null);
+                              setConfirmRemove(null);
+                            }}>{removingId === rowKey ? "Removing…" : "Yes, remove them"}</button>
+                          <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+                            onClick={() => setConfirmRemove(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="link-btn" style={{ marginTop: 10 }} onClick={() => setConfirmRemove(rowKey)}>
+                        Remove this athlete
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
