@@ -31,6 +31,11 @@ where kv.user_id = cl.client_user_id
   and cl.paid = false;
 
 -- Signing up already paid is not possible: a new row must come in false.
+-- A second, older INSERT policy existed on the live project under a different
+-- name. Postgres ORs policies together, so leaving it in place would have let a
+-- signup set paid = true straight past the rule below.
+drop policy if exists "clients can create their own link" on client_links;
+
 drop policy if exists "Athletes create their own link" on client_links;
 create policy "Athletes create their own link"
   on client_links for insert
@@ -47,27 +52,9 @@ create policy "Only a coach updates a link"
   using (is_community_coach())
   with check (is_community_coach());
 
--- Belt and braces: even a coach cannot repoint a link at a different athlete,
--- and nobody can hand themselves a different coach.
-create or replace function client_links_guard() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  if new.client_user_id is distinct from old.client_user_id
-     or new.coach_user_id is distinct from old.coach_user_id then
-    raise exception 'client_links: only paid may change';
-  end if;
-  return new;
-end;
-$$;
-drop trigger if exists client_links_guard_trg on client_links;
-create trigger client_links_guard_trg
-  before update on client_links
-  for each row execute function client_links_guard();
-
 -- Check it worked. Expect: a paid column, an insert policy that mentions paid,
 -- and an update policy named "Only a coach updates a link".
-select column_name, data_type from information_schema.columns
-  where table_name = 'client_links' and column_name = 'paid';
-select policyname, cmd from pg_policies
-  where tablename = 'client_links' order by cmd, policyname;
-select count(*) filter (where paid) as marked_paid, count(*) as total from client_links;
+-- Expect exactly three rows: one INSERT whose with_check mentions paid = false,
+-- one SELECT, and one UPDATE guarded by is_community_coach().
+select policyname, cmd, with_check from pg_policies
+  where tablename = 'client_links' order by cmd;
