@@ -6914,9 +6914,20 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           <p className="muted" style={{ marginBottom: 14 }}>
             You've finished Block {client.blockNumber || 1} of "{client.program.name}". Every workout, check-in, and Personal Record you logged is saved permanently — review Progress and Records, then start the next block whenever you're ready. Nothing gets deleted.
           </p>
-          <p className="muted" style={{ marginBottom: 14 }}>
-            Block {(client.blockNumber || 1) + 1} keeps the same structure but moves your Max Effort rotation forward, so Week 1 won't repeat the exact same exercises as this block's Week 1 did.
-          </p>
+          {(client.program?.variant || "B") === "A" ? (
+            <p className="muted" style={{ marginBottom: 14 }}>
+              Block {(client.blockNumber || 1) + 1} keeps the same structure but moves your Max Effort rotation forward, so Week 1 won't repeat the exact same exercises this block's Week 1 did.
+            </p>
+          ) : (
+            <>
+              <p className="muted" style={{ marginBottom: 14 }}>
+                Block {(client.blockNumber || 1) + 1} is the same twelve weeks again, and that is the design — this program progresses by load, not by swapping exercises. You go back to Week 1 stronger than you started it, and the same sets and reps now sit on heavier bars. That is what the charts and your records are for.
+              </p>
+              <p className="muted" style={{ marginBottom: 14 }}>
+                If you want different lifts rather than heavier ones, switch to {PROGRAM_VARIANT_LABELS.A} in Settings before you start. It rotates its main lifts every block, so no two blocks open the same way. Your logs, records and leaderboard standing carry over either way.
+              </p>
+            </>
+          )}
           <button className="btn-primary wide" onClick={async () => { await onPersist({ ...client, sessionsCompleted: 0, blockNumber: (client.blockNumber || 1) + 1 }); }}>
             Start New Twelve-Week Block
           </button>
