@@ -13,14 +13,25 @@
 -- Safe to run more than once.
 -- ---------------------------------------------------------------------------
 
+-- Ranked by weight lifted relative to bodyweight, so a 135 lb athlete and a
+-- 220 lb athlete are compared on work done rather than on how big they are.
+-- The raw pounds are kept alongside, for display.
 create table if not exists leaderboard (
   user_id      uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default 'Athlete',
   total_lbs    bigint not null default 0,
   week_lbs     bigint not null default 0,
+  bodyweight   numeric,
+  total_ratio  numeric not null default 0,
+  week_ratio   numeric not null default 0,
   week_start   date,
   updated_at   timestamptz not null default now()
 );
+
+-- Existing installs get the new columns.
+alter table leaderboard add column if not exists bodyweight  numeric;
+alter table leaderboard add column if not exists total_ratio numeric not null default 0;
+alter table leaderboard add column if not exists week_ratio  numeric not null default 0;
 
 alter table leaderboard enable row level security;
 
@@ -48,8 +59,8 @@ create policy "Remove your own standing, or a coach removes it"
   on leaderboard for delete
   using (auth.uid() = user_id or is_community_coach());
 
-create index if not exists leaderboard_total_idx on leaderboard (total_lbs desc);
-create index if not exists leaderboard_week_idx on leaderboard (week_start, week_lbs desc);
+create index if not exists leaderboard_total_idx on leaderboard (total_ratio desc);
+create index if not exists leaderboard_week_idx on leaderboard (week_start, week_ratio desc);
 
 -- ---------------------------------------------------------------------------
 -- The coach can now remove an athlete's data entirely.

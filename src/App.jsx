@@ -589,6 +589,19 @@ async function deleteClientStorage(userId, id) { return kvDelete(userId, clientK
 // training week starts Monday, and a Sunday session counted into "last week"
 // is how a leaderboard loses people's trust.
 
+// Ranked relative to bodyweight, so a 135 lb athlete and a 220 lb athlete are
+// compared on work done rather than on how big they are. The number people see
+// is "times bodyweight" — a 180 lb athlete who moves 90,000 lb in a week is at
+// 500x. Somebody with no bodyweight logged has no ratio and sits out the
+// boards until they enter one; a made-up fallback would rank them wrongly.
+function latestBodyweight(client) {
+  const log = (client && client.bodyweightLog) || [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const w = Number(log[i] && log[i].weight);
+    if (Number.isFinite(w) && w > 0) return w;
+  }
+  return null;
+}
 function leaderboardTotalsFor(client) {
   const logs = (client && client.logs) || [];
   const thisWeek = weekStartOf(todayStr());
@@ -599,7 +612,18 @@ function leaderboardTotalsFor(client) {
     total += v;
     if (l.date && weekStartOf(l.date) === thisWeek) week += v;
   });
-  return { total, week, weekStart: thisWeek };
+  const bw = latestBodyweight(client);
+  return {
+    total, week, weekStart: thisWeek, bodyweight: bw,
+    totalRatio: bw ? total / bw : 0,
+    weekRatio: bw ? week / bw : 0,
+  };
+}
+// "500x bodyweight". Below ten it is worth a decimal; above it, never.
+function fmtRatio(r) {
+  const n = Number(r) || 0;
+  if (n <= 0) return "\u2014";
+  return `${n >= 10 ? Math.round(n).toLocaleString() : n.toFixed(1)}\u00d7`;
 }
 
 // First name plus last initial. A leaderboard has to name people or it is not
@@ -616,12 +640,13 @@ function leaderboardNameFor(client) {
 
 async function publishStanding(userId, client) {
   if (!supabase || !userId || !client) return { ok: false };
-  const { total, week, weekStart } = leaderboardTotalsFor(client);
+  const { total, week, weekStart, bodyweight, totalRatio, weekRatio } = leaderboardTotalsFor(client);
   const outcome = await withRetry(async () => {
     const { error } = await supabase.from("leaderboard").upsert({
       user_id: userId, display_name: leaderboardNameFor(client),
-      total_lbs: total, week_lbs: week, week_start: weekStart,
-      updated_at: new Date().toISOString(),
+      total_lbs: total, week_lbs: week, bodyweight,
+      total_ratio: Number(totalRatio.toFixed(2)), week_ratio: Number(weekRatio.toFixed(2)),
+      week_start: weekStart, updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
     if (error) throw error;
     return true;
@@ -636,21 +661,21 @@ async function fetchLeaderboard() {
   const thisWeek = weekStartOf(todayStr());
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("leaderboard")
-      .select("user_id, display_name, total_lbs, week_lbs, week_start")
-      .order("total_lbs", { ascending: false })
+      .select("user_id, display_name, total_lbs, week_lbs, bodyweight, total_ratio, week_ratio, week_start")
+      .order("total_ratio", { ascending: false })
       .limit(200);
     if (error) throw error;
     return data || [];
   });
   if (!outcome.ok) return LOAD_FAILED;
   const rows = outcome.result;
-  const allTime = rows.filter((r) => (r.total_lbs || 0) > 0).slice(0, 5);
+  const allTime = rows.filter((r) => (r.total_ratio || 0) > 0).slice(0, 5);
   // A stale week_start means that athlete has not trained since the week
   // turned over, so their weekly total is zero rather than last week's number.
   const weekly = rows
-    .map((r) => ({ ...r, week_lbs: r.week_start === thisWeek ? (r.week_lbs || 0) : 0 }))
-    .filter((r) => r.week_lbs > 0)
-    .sort((a, b) => b.week_lbs - a.week_lbs)
+    .map((r) => (r.week_start === thisWeek ? r : { ...r, week_lbs: 0, week_ratio: 0 }))
+    .filter((r) => (r.week_ratio || 0) > 0)
+    .sort((a, b) => (b.week_ratio || 0) - (a.week_ratio || 0))
     .slice(0, 5);
   return { allTime, weekly, weekStart: thisWeek };
 }
@@ -4535,15 +4560,18 @@ const PROGRESS_VIEWS = [
 
 const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
-function BoardList({ rows, field, youId, empty }) {
+function BoardList({ rows, ratioField, lbsField, youId, empty }) {
   if (!rows.length) return <p className="muted" style={{ marginBottom: 0 }}>{empty}</p>;
   return (
     <ol className="board-list">
       {rows.map((r, i) => (
         <li key={r.user_id} className={`board-row${r.user_id === youId ? " board-you" : ""}`}>
           <span className="board-rank">{MEDALS[i] || i + 1}</span>
-          <span className="board-name">{r.display_name || "Athlete"}{r.user_id === youId ? " (you)" : ""}</span>
-          <span className="board-lbs">{formatWeight(r[field] || 0)}</span>
+          <span className="board-name">
+            {r.display_name || "Athlete"}{r.user_id === youId ? " (you)" : ""}
+            <span className="board-sub">{formatWeight(r[lbsField] || 0)}</span>
+          </span>
+          <span className="board-lbs">{fmtRatio(r[ratioField])}</span>
         </li>
       ))}
     </ol>
@@ -4573,9 +4601,15 @@ function LeaderboardTab({ client, userId }) {
   return (
     <div className="pad">
       <div className="stat-chip-row" style={{ marginBottom: 14 }}>
-        <StatChip label="Your total" value={mine.total ? formatWeight(mine.total) : "\u2014"} />
-        <StatChip label="Your week" value={mine.week ? formatWeight(mine.week) : "\u2014"} />
+        <StatChip label="Your week" value={fmtRatio(mine.weekRatio)} />
+        <StatChip label="Your all time" value={fmtRatio(mine.totalRatio)} />
       </div>
+
+      {!mine.bodyweight && (
+        <div className="adjust-box" style={{ marginBottom: 12 }}>
+          <strong>You are not on the boards yet.</strong> They rank everyone by weight lifted relative to their own bodyweight, so a lighter athlete is never out-ranked for being lighter. Add your bodyweight in a check-in and you appear from your next session.
+        </div>
+      )}
 
       {failed && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -4583,18 +4617,18 @@ function LeaderboardTab({ client, userId }) {
         </div>
       )}
 
-      <Card title="This Week" subtitle="Resets every Monday">
-        {board ? <BoardList rows={board.weekly} field="week_lbs" youId={userId}
+      <Card title="This Week" subtitle="Times your bodyweight · resets every Monday">
+        {board ? <BoardList rows={board.weekly} ratioField="week_ratio" lbsField="week_lbs" youId={userId}
           empty="Nobody has logged a session yet this week. Be the first." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
       </Card>
 
-      <Card title="All Time" subtitle="Total weight lifted since joining">
-        {board ? <BoardList rows={board.allTime} field="total_lbs" youId={userId}
+      <Card title="All Time" subtitle="Times your bodyweight, since you joined">
+        {board ? <BoardList rows={board.allTime} ratioField="total_ratio" lbsField="total_lbs" youId={userId}
           empty="No sessions logged yet." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
       </Card>
 
       <p className="muted" style={{ fontSize: 12.5 }}>
-        Weight lifted is every working set you log — the weight times the reps, added up. Only your name and these two numbers are shared; nobody can see your sessions, your bodyweight or anything else you log.
+Everyone is ranked on weight moved relative to their own bodyweight, so the boards are not simply a list of the heaviest people. Weight moved is every working set you log — the weight times the reps — divided by what you weigh. Only your name and your two numbers are shared: nobody can see your sessions, your records, or anything else you log.
       </p>
     </div>
   );
@@ -9535,6 +9569,15 @@ function GlobalStyle() {
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
+      .board-list { list-style: none; margin: 0; padding: 0; }
+      .board-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+      .board-row:last-child { border-bottom: none; }
+      .board-rank { font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 600; min-width: 26px; text-align: center; color: var(--text-dim); flex-shrink: 0; }
+      .board-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; overflow: hidden; }
+      .board-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }
+      .board-lbs { font-family: 'Oswald', sans-serif; font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+      .board-you { background: var(--card); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
+      .board-you .board-name { color: var(--accent); }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
       .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 10px; margin: -4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
