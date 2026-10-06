@@ -209,7 +209,7 @@ const COMMUNITY_CHANNELS = [
     placeholder: "Ask anything — about a lift, the app, or the week you are having." },
   { id: "technique", label: "Technique",
     blurb: "Instructionals, breakdowns and clips. Post what you are working on and what you want eyes on.",
-    placeholder: "Share a clip or a detail you are drilling. What do you want eyes on?" },
+    placeholder: "Name the technique first — berimbolo, knee cut, heel hook — then say what you want eyes on. Naming it is how people find your clip later." },
 ];
 const DEFAULT_CHANNEL = "general";
 function channelMeta(id) {
@@ -4596,6 +4596,11 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         <label className="sr-only" htmlFor="post-body">Write a post</label>
         <textarea id="post-body" className="composer-text" rows={3} value={body} maxLength={COMMUNITY_MAX_CHARS}
           placeholder={channelMeta(channel).placeholder} onChange={(e) => setBody(e.target.value)} />
+        {channel === "technique" && (
+          <p className="composer-hint">
+            Start with the name of the technique. The search box above only finds what people wrote, so an unnamed clip is a clip nobody finds again.
+          </p>
+        )}
         {!isUploadedClip(videoUrl) && (
           <>
             <label className="sr-only" htmlFor="post-video">Video link</label>
@@ -9762,6 +9767,7 @@ function GlobalStyle() {
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
+      .composer-hint { font-size: 12px; color: var(--text-dim); margin: -4px 0 8px; line-height: 1.45; }
       .tech-search { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
       .tech-search-icon { position: absolute; left: 12px; color: var(--text-dim); pointer-events: none; }
       .tech-search-input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 999px;
