@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video, Flag, ShieldOff } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video, Flag, ShieldOff, Search } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -224,6 +224,74 @@ function lastSeenMap(prefs) {
   COMMUNITY_CHANNELS.forEach((c) => { map[c.id] = (p.lastSeen && p.lastSeen[c.id]) || legacy; });
   return map;
 }
+
+// A technique library is only a library if you can find anything in it. This
+// searches the whole channel on the server rather than the pages already
+// loaded — somebody looking for a berimbolo clip from four months ago should
+// not have to tap "load older posts" eleven times to reach it.
+const COMMUNITY_SEARCH_LIMIT = 60;
+async function searchCommunityPosts(term, channel) {
+  if (!supabase) return LOAD_FAILED;
+  const q = String(term || "").trim();
+  if (q.length < 2) return { posts: [], term: q };
+  // PostgREST passes this through to ILIKE, so the wildcards are ours to add
+  // and the user's own % and _ have to stop being wildcards.
+  const safe = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const outcome = await withRetry(async () => {
+    const run = async (withChannel) => {
+      let sel = supabase.from("community_posts")
+        .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
+        .is("deleted_at", null)
+        .is("parent_id", null)
+        .ilike("body", `%${safe}%`);
+      if (withChannel) sel = sel.eq("channel", channel || DEFAULT_CHANNEL);
+      return sel.order("created_at", { ascending: false }).limit(COMMUNITY_SEARCH_LIMIT);
+    };
+    let { data, error } = await run(channelsAreReady());
+    if (error && isMissingChannelColumn(error)) { markChannelsMissing(); ({ data, error } = await run(false)); }
+    if (error) throw error;
+    return data || [];
+  });
+  if (!outcome.ok) return LOAD_FAILED;
+  return { posts: outcome.result, term: q };
+}
+
+// Suggestions come from two places: the techniques people actually post about,
+// which is this list, and whatever words already exist in the channel. The list
+// exists so the search is useful on day one, when there is nothing to mine.
+const TECHNIQUE_TERMS = [
+  // Guards
+  "closed guard", "open guard", "half guard", "deep half", "butterfly guard", "spider guard",
+  "de la riva", "reverse de la riva", "lasso guard", "x guard", "single leg x", "k guard",
+  "shin to shin", "collar sleeve", "rubber guard", "z guard", "knee shield", "worm guard",
+  // Passing
+  "guard pass", "torreando", "knee cut", "knee slice", "over under pass", "double under",
+  "leg drag", "smash pass", "stack pass", "body lock pass", "long step", "folding pass",
+  "headquarters", "x pass", "pressure passing",
+  // Sweeps and takedowns
+  "scissor sweep", "hip bump", "flower sweep", "butterfly sweep", "berimbolo", "kiss of the dragon",
+  "single leg", "double leg", "high crotch", "blast double", "ankle pick", "arm drag",
+  "snap down", "duck under", "fireman's carry", "uchi mata", "osoto gari", "seoi nage",
+  "harai goshi", "tani otoshi", "foot sweep", "sumi gaeshi",
+  // Top and control
+  "mount", "side control", "north south", "knee on belly", "back control", "back take",
+  "turtle", "crucifix", "kesa gatame", "body triangle", "seatbelt", "truck",
+  // Submissions
+  "armbar", "triangle", "kimura", "americana", "omoplata", "rear naked choke", "guillotine",
+  "darce", "anaconda", "north south choke", "bow and arrow", "cross collar choke", "ezekiel",
+  "loop choke", "baseball choke", "clock choke", "paper cutter", "arm triangle", "head and arm",
+  "heel hook", "inside heel hook", "kneebar", "toe hold", "straight ankle lock", "calf slicer",
+  "wrist lock", "bicep slicer", "estima lock", "aoki lock",
+  // Escapes and defense
+  "guard retention", "hip escape", "shrimp", "bridge and roll", "upa", "elbow escape",
+  "granby roll", "wrestle up", "sprawl", "whizzer", "underhook", "overhook", "frame",
+  "mount escape", "side control escape", "back escape", "leg lock defense",
+  // Drills and conditioning
+  "shrimping", "technical stand up", "breakfall", "solo drill", "positional sparring",
+  "flow roll", "takedown drill", "guard retention drill", "grip fighting", "pummeling",
+  // Gi and no-gi context
+  "gi", "no gi", "lapel", "collar grip", "sleeve grip", "pistol grip", "spider lasso",
+];
 
 async function fetchCommunityFeed(pages, channel) {
   if (!supabase) return LOAD_FAILED;
@@ -4214,6 +4282,53 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     setReports(await fetchCommunityReports());
   }, []);
 
+  // --- technique search ---------------------------------------------------
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState(null);   // null = not searching
+  const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const searchSeq = useRef(0);
+
+  // Suggestions: the technique list first, then any word people have actually
+  // used in this channel that the list does not know about.
+  const postedWords = useMemo(() => {
+    const seen = new Map();
+    (posts || []).forEach((p) => String(p.body || "").toLowerCase()
+      .replace(/[^a-z0-9\s'-]/g, " ").split(/\s+/)
+      .forEach((w) => { if (w.length > 3) seen.set(w, (seen.get(w) || 0) + 1); }));
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([w]) => w);
+  }, [posts]);
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const starts = TECHNIQUE_TERMS.filter((t) => t.startsWith(q));
+    const contains = TECHNIQUE_TERMS.filter((t) => !t.startsWith(q) && t.includes(q));
+    const fromPosts = postedWords.filter((w) => w.includes(q)
+      && !TECHNIQUE_TERMS.some((t) => t.includes(w)));
+    return [...starts, ...contains, ...fromPosts].slice(0, 6);
+  }, [query, postedWords]);
+
+  const runSearch = useCallback(async (term) => {
+    const q = String(term || "").trim();
+    setQuery(q);
+    if (q.length < 2) { setResults(null); setSearchFailed(false); return; }
+    const mine = ++searchSeq.current;
+    setSearching(true);
+    const res = await searchCommunityPosts(q, channel);
+    // A slower earlier search must never overwrite a newer one's results.
+    if (mine !== searchSeq.current) return;
+    setSearching(false);
+    if (res === LOAD_FAILED) { setSearchFailed(true); setResults([]); return; }
+    setSearchFailed(false);
+    setResults(res.posts);
+  }, [channel]);
+
+  const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); };
+
+  // Leaving a channel abandons the search with it.
+  useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
+
   const switchChannel = (next) => {
     if (next === channel) return;
     // Leaving a channel marks it read, the same as leaving the tab does.
@@ -4396,7 +4511,44 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
             onClick={() => switchChannel(c.id)}>{c.label}</button>
         ))}
       </div>
-      <p className="muted" style={{ margin: "-6px 0 14px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
+      <p className="muted" style={{ margin: "-6px 0 12px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
+
+      <div className="tech-search">
+        <Search size={15} className="tech-search-icon" aria-hidden="true" />
+        <input
+          className="tech-search-input"
+          type="search"
+          value={query}
+          placeholder={channel === "technique" ? "Search techniques — berimbolo, knee cut, heel hook…" : "Search this channel"}
+          aria-label="Search posts"
+          onChange={(e) => {
+            const v = e.target.value;
+            setQuery(v);
+            if (v.trim().length < 2) { searchSeq.current++; setResults(null); setSearchFailed(false); setSearching(false); }
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(query); } }}
+        />
+        {query && (
+          <button type="button" className="tech-search-clear" onClick={clearSearch} aria-label="Clear search">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {suggestions.length > 0 && results === null && (
+        <div className="tech-suggests" role="listbox" aria-label="Suggestions">
+          {suggestions.map((sug) => (
+            <button key={sug} type="button" role="option" aria-selected={false}
+              className="tech-suggest" onClick={() => runSearch(sug)}>{sug}</button>
+          ))}
+        </div>
+      )}
+
+      {query.trim().length >= 2 && results === null && !searching && (
+        <p className="muted" style={{ fontSize: 12.5, marginTop: -2, marginBottom: 12 }}>
+          Press enter to search, or pick one above.
+        </p>
+      )}
       {isCoach && posts && !channelsAreReady() && (
         <div className="adjust-box" style={{ marginBottom: 14 }}>
           Both tabs are showing the same posts because the channel column is not in the database yet.
@@ -4485,8 +4637,40 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
           Couldn't load the feed. <button className="link-btn" onClick={load}>Try again</button>
         </div>
       )}
-      {posts === null && !failed && <p className="muted">Loading…</p>}
-      {posts !== null && roots.length === 0 && !failed && (
+      {results !== null && (
+        <div className="search-results">
+          <div className="search-results-head">
+            <span>{searching ? "Searching…" : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}”`}</span>
+            <button type="button" className="link-btn" onClick={clearSearch}>Back to the feed</button>
+          </div>
+          {searchFailed && (
+            <div className="adjust-box" style={{ marginBottom: 12 }}>
+              Couldn't run that search — check your connection and try again.
+            </div>
+          )}
+          {!searching && !searchFailed && results.length === 0 && (
+            <Card title="Nothing found">
+              <p className="muted" style={{ marginBottom: 0 }}>
+                No posts in {channelMeta(channel).label} mention “{query.trim()}”. Try a shorter word, or post the question yourself — somebody here will have it.
+              </p>
+            </Card>
+          )}
+          <div className="feed" aria-live="polite">
+            {results.map((p) => (
+              <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
+                onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
+                reactedBy={reactedBy[p.id] || []} onReact={react}
+                onReply={(parentId, text, vid) => send(text, vid, parentId)}
+                onHide={(post) => setConfirmHide(post)}
+                replyOpen={replyOpen === p.id}
+                onToggleReply={(id) => setReplyOpen((cur) => (cur === id ? null : id))} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {results === null && posts === null && !failed && <p className="muted">Loading…</p>}
+      {results === null && posts !== null && roots.length === 0 && !failed && (
         <Card title={`Nothing in ${channelMeta(channel).label} yet`}>
           <p className="muted">{channel === "technique"
             ? "Be the first. Post a clip of something you're drilling, or a detail you want eyes on."
@@ -4494,8 +4678,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         </Card>
       )}
 
-      <div className="feed" aria-live="polite">
-        {roots.map((p) => (
+      <div className="feed" aria-live="polite" hidden={results !== null}>
+        {results === null && roots.map((p) => (
           <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
             onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
             reactedBy={reactedBy[p.id] || []} onReact={react}
@@ -9578,6 +9762,21 @@ function GlobalStyle() {
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
+      .tech-search { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
+      .tech-search-icon { position: absolute; left: 12px; color: var(--text-dim); pointer-events: none; }
+      .tech-search-input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+        padding: 11px 38px 11px 36px; color: var(--text); font-size: 16px; font-family: inherit; min-height: 44px; }
+      .tech-search-input::-webkit-search-cancel-button { display: none; }
+      .tech-search-input:focus { outline: none; border-color: var(--accent); }
+      .tech-search-clear { position: absolute; right: 6px; background: none; border: none; color: var(--text-dim);
+        cursor: pointer; padding: 10px; display: inline-flex; align-items: center; }
+      .tech-suggests { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+      .tech-suggest { background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+        padding: 8px 13px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--text);
+        cursor: pointer; text-transform: capitalize; }
+      .tech-suggest:hover { border-color: var(--accent); color: var(--accent); }
+      .search-results-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; color: var(--text-dim); font-weight: 600; }
       .board-list { list-style: none; margin: 0; padding: 0; }
       .board-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
       .board-row:last-child { border-bottom: none; }
