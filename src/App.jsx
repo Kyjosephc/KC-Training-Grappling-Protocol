@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
 import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video, Flag, ShieldOff, Search } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -3201,6 +3202,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     weeklySchedule: weeklySchedule || defaultWeeklySchedule(),
     beltLevel: beltLevel || "White",
     bjjNotes: [],
+    rulesProgress: emptyRulesProgress(),
     paid: false,
     promoDiscount: promoDiscount || 0,
     excludedExercises: [],
@@ -4733,6 +4735,7 @@ const TABS = [
   { id: "today", label: "Today", icon: Home },
   { id: "program", label: "Program", icon: CalendarDays },
   { id: "progress", label: "Progress", icon: TrendingUp },
+  { id: "rules", label: "Rules", icon: BookOpen },
   { id: "community", label: "Group", icon: MessageCircle },
 ];
 // The four views that used to be their own tabs. Charts, sessions, records and
@@ -5007,6 +5010,7 @@ function MainApp({ userId, onSignOut }) {
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
+        if (!c.rulesProgress) c.rulesProgress = emptyRulesProgress();
         // Whatever the record says about payment is ignored. The authority is
         // the client_links row read above, which the athlete cannot write to.
         // A failed read leaves them unblocked rather than locking out somebody
@@ -5273,6 +5277,11 @@ function MainApp({ userId, onSignOut }) {
             onReloadClient={loadActiveClient} />
         )}
         {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
+        {tab === "rules" && (
+          <RulesGame
+            progress={client.rulesProgress || emptyRulesProgress()}
+            onProgress={(next) => persistClient({ ...client, rulesProgress: next })} />
+        )}
         {/* history / bjj / prs are kept as routes so a bookmark or a deep link
             from an older build still lands somewhere sensible. */}
         {(tab === "progress" || tab === "history" || tab === "bjj" || tab === "prs") && (
@@ -9767,6 +9776,64 @@ function GlobalStyle() {
       .log-exercise-target-wrap { margin-bottom: 10px; }
       .log-exercise-target { font-size: 13px; color: var(--text); font-weight: 600; margin-top: 4px; }
       .rest-note-static { font-size: 13px; color: var(--text-dim); margin-top: 6px; font-weight: 600; }
+      /* ---- Rules Game ---- */
+      .rg-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--text-dim); font-weight: 600; margin-bottom: 8px; }
+      .rg-streak { color: var(--accent); }
+      .rg-progress { height: 4px; background: var(--border); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+      .rg-progress-fill { height: 100%; background: var(--accent); transition: width .25s ease; }
+      .rg-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+      .rg-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+        color: var(--accent); margin-bottom: 8px; }
+      .rg-prompt { font-size: 16.5px; line-height: 1.45; font-weight: 600; margin: 0 0 16px; }
+      .rg-options { display: flex; flex-direction: column; gap: 9px; }
+      .rg-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+        background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 14px 15px;
+        min-height: 52px; font-size: 15px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
+      .rg-option:disabled { cursor: default; }
+      .rg-option.right { border-color: var(--green); color: var(--green); }
+      .rg-option.wrong { border-color: var(--red); color: var(--red); }
+      .rg-option.dim { opacity: .45; }
+      .rg-explain { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; line-height: 1.5; }
+      .rg-explain strong { color: var(--red); }
+      .rg-explain.ok strong { color: var(--green); }
+      .rg-explain p { margin: 8px 0; color: var(--text-dim); }
+      .rg-wrongnote { font-size: 13px; }
+      .rg-cite { font-size: 12px; color: var(--text-dim); background: var(--bg); border-left: 2px solid var(--accent);
+        padding: 8px 10px; border-radius: 0 6px 6px 0; margin-top: 8px !important; }
+      .rg-cite-inline { display: block; font-size: 11px; color: var(--text-dim); opacity: .8; margin-top: 2px; }
+      .rg-result { text-align: center; padding: 26px 0 18px; }
+      .rg-big { font-family: 'Oswald', sans-serif; font-size: 42px; font-weight: 600; margin: 8px 0 2px; }
+      .rg-rank { margin-top: 10px; font-weight: 600; color: var(--accent); font-size: 13.5px; }
+      .rg-hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px; margin: 12px 0 14px; }
+      .rg-rank-big { font-family: 'Oswald', sans-serif; font-size: 21px; font-weight: 600; }
+      .rg-hero-stats { display: flex; gap: 18px; }
+      .rg-hero-stats div { text-align: right; }
+      .rg-hero-stats strong { display: block; font-family: 'Oswald', sans-serif; font-size: 19px; color: var(--accent); }
+      .rg-hero-stats span { font-size: 11px; color: var(--text-dim); }
+      .rg-chiprow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+      .tech-suggest.on { border-color: var(--accent); color: var(--accent); }
+      .rg-mode { display: flex; align-items: center; gap: 13px; width: 100%; background: var(--card);
+        border: 1px solid var(--border); border-radius: 13px; padding: 15px; margin-bottom: 9px;
+        color: var(--text); cursor: pointer; text-align: left; min-height: 62px; }
+      .rg-mode > div { flex: 1; min-width: 0; }
+      .rg-mode strong { display: block; font-size: 15px; }
+      .rg-mode span { display: block; font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+      .rg-mode:hover { border-color: var(--accent); }
+      .rg-rule { padding: 9px 0; border-bottom: 1px solid var(--border); }
+      .rg-rule:last-child { border-bottom: none; }
+      .rg-rule-head { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+      .rg-rule-head strong { color: var(--accent); font-family: 'Oswald', sans-serif; }
+      .rg-ol { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+      .rg-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 12px 0; }
+      .rg-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 420px; }
+      .rg-table th, .rg-table td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+      .rg-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
+      .rg-table .rg-num { text-align: center; font-family: 'Oswald', sans-serif; font-size: 15px; font-weight: 600; }
+      .rg-table tr.rg-differs .rg-num { color: var(--accent); }
+      .rg-table tr.rg-differs td:first-child { font-weight: 600; }
+      .rg-disclaimer { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 18px;
+        padding: 11px 13px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
       .composer-hint { font-size: 12px; color: var(--text-dim); margin: -4px 0 8px; line-height: 1.45; }
       .tech-search { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
       .tech-search-icon { position: absolute; left: 12px; color: var(--text-dim); pointer-events: none; }
