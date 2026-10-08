@@ -773,127 +773,6 @@ async function deleteAthleteCompletely(clientUserId) {
   return { ok: true };
 }
 
-/* ============================== DIRECT MESSAGES ============================== */
-// A message is readable by exactly two people. The coach cannot read anyone's
-// DMs — that is the point of them being direct. Finding somebody uses the
-// leaderboard table, which already carries a display name per athlete and is
-// already readable by members, so this exposes nothing new.
-
-const DM_PAGE = 40;
-
-// Who can I message? Anyone who has opened the app, which is what puts them on
-// the leaderboard. Searching is by the name they already show publicly.
-async function searchMembers(term, meId) {
-  if (!supabase) return LOAD_FAILED;
-  const q = String(term || "").trim();
-  const safe = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-  const outcome = await withRetry(async () => {
-    let sel = supabase.from("leaderboard").select("user_id, display_name");
-    if (q.length >= 1) sel = sel.ilike("display_name", `%${safe}%`);
-    const { data, error } = await sel.order("display_name", { ascending: true }).limit(40);
-    if (error) throw error;
-    return data || [];
-  });
-  if (!outcome.ok) return LOAD_FAILED;
-  return outcome.result.filter((r) => r.user_id !== meId);
-}
-
-// Nothing is ever deleted or expired — `pages` only controls how much of the
-// history is pulled at once. Ask for more and you get more, back to the first
-// message either of you ever sent.
-async function fetchConversation(meId, themId, pages = 1) {
-  if (!supabase || !meId || !themId) return LOAD_FAILED;
-  const limit = Math.max(1, pages) * DM_PAGE;
-  const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("direct_messages")
-      .select("id, sender_id, recipient_id, sender_name, body, link_url, created_at, read_at")
-      .is("deleted_at", null)
-      .or(`and(sender_id.eq.${meId},recipient_id.eq.${themId}),and(sender_id.eq.${themId},recipient_id.eq.${meId})`)
-      .order("created_at", { ascending: false })
-      .limit(limit + 1);
-    if (error) throw error;
-    return data || [];
-  });
-  if (!outcome.ok) return LOAD_FAILED;
-  const rows = outcome.result;
-  const more = rows.length > limit;
-  // Fetched newest-first so the limit takes the most recent; shown oldest-first.
-  return { msgs: (more ? rows.slice(0, limit) : rows).reverse(), more };
-}
-
-// Everyone I have a thread with, newest first, with the unread count.
-async function fetchInbox(meId) {
-  if (!supabase || !meId) return LOAD_FAILED;
-  const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("direct_messages")
-      .select("id, sender_id, recipient_id, sender_name, body, link_url, created_at, read_at")
-      .is("deleted_at", null)
-      .or(`sender_id.eq.${meId},recipient_id.eq.${meId}`)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
-    return data || [];
-  });
-  if (!outcome.ok) return LOAD_FAILED;
-  const threads = new Map();
-  outcome.result.forEach((m) => {
-    const them = m.sender_id === meId ? m.recipient_id : m.sender_id;
-    const t = threads.get(them) || { userId: them, name: null, last: null, unread: 0 };
-    if (!t.last) { t.last = m; t.name = m.sender_id === meId ? null : m.sender_name; }
-    if (!t.name && m.sender_id !== meId) t.name = m.sender_name;
-    if (m.recipient_id === meId && !m.read_at) t.unread += 1;
-    threads.set(them, t);
-  });
-  return [...threads.values()];
-}
-
-async function sendDirectMessage(meId, myName, themId, body, linkUrl) {
-  if (!supabase || !meId || !themId) return { ok: false };
-  const row = {
-    id: uid(), sender_id: meId, recipient_id: themId,
-    sender_name: (myName || "Athlete").trim(),
-    body: String(body || "").trim().slice(0, 2000),
-    link_url: String(linkUrl || "").trim() || null,
-  };
-  if (!row.body && !row.link_url) return { ok: false };
-  const outcome = await withRetry(async () => {
-    const { error } = await supabase.from("direct_messages").insert(row);
-    // A retry after a lost response must not post the message twice — the id is
-    // ours, so the duplicate-key error means the first attempt landed.
-    if (error && error.code !== "23505") throw error;
-    return true;
-  });
-  if (!outcome.ok) {
-    emitToast({ kind: "error", message: "Couldn't send that message — check your connection.", autoDismissMs: 6000 });
-    return { ok: false };
-  }
-  return { ok: true, row };
-}
-
-async function markConversationRead(meId, themId) {
-  if (!supabase || !meId || !themId) return;
-  try {
-    await supabase.from("direct_messages").update({ read_at: new Date().toISOString() })
-      .eq("recipient_id", meId).eq("sender_id", themId).is("read_at", null);
-  } catch {}
-}
-
-// Both halves of "you have messages" in one request: the exact total for the
-// badge, and the newest few rows so a banner can say who sent what. head:true
-// would skip the rows, and a second query to get them would double the cost of
-// a poll that runs for the whole session.
-async function fetchUnreadDMs(meId) {
-  if (!supabase || !meId) return { count: 0, rows: [] };
-  try {
-    const { data, count, error } = await supabase.from("direct_messages")
-      .select("id,sender_id,sender_name,body", { count: "exact" })
-      .eq("recipient_id", meId).is("read_at", null).is("deleted_at", null)
-      .order("created_at", { ascending: false }).limit(12);
-    if (error) throw error;
-    return { count: count || 0, rows: data || [] };
-  } catch { return { count: 0, rows: [] }; }
-}
-
 async function removeStanding(clientUserId) {
   if (!supabase || !clientUserId) return;
   try { await supabase.from("leaderboard").delete().eq("user_id", clientUserId); } catch {}
@@ -4163,33 +4042,6 @@ function notifyNewPost(post) {
   } catch { /* Safari throws constructing these outside a service worker */ }
 }
 
-// Clock time only — the day is already shown by the separator above the run.
-function fmtTime(iso) {
-  try {
-    if (!iso) return "";
-    const d = new Date(iso);
-    // A bad timestamp should leave a blank gap, not print "Invalid Date"
-    // under somebody's message.
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  } catch { return ""; }
-}
-
-let openDmPeer = null;
-
-function notifyNewMessage(m) {
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    new Notification(`${m.sender_name || "Someone"} sent you a message`, {
-      body: String(m.body || "").trim().slice(0, 140) || "Sent a link",
-      icon: "/icon-192.png",
-      // One tag per conversation, so five messages from the same person
-      // replace each other instead of stacking five banners.
-      tag: `strength-matrix-dm-${m.sender_id}`,
-    });
-  } catch { /* Safari throws constructing these outside a service worker */ }
-}
-
 function VideoEmbed({ url }) {
   const [playing, setPlaying] = useState(false);
   const e = embedFor(url);
@@ -4380,279 +4232,7 @@ function ReplyComposer({ userId, onSend }) {
   );
 }
 
-// Direct messages: an inbox, a people search, and a thread. Links paste in and
-// render the same way they do in the group feed, so an instructional drops
-// straight into a conversation.
-function MessagesTab({ client, userId, onUnreadChanged }) {
-  const [view, setView] = useState("inbox");
-  const [inbox, setInbox] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [query, setQuery] = useState("");
-  const [people, setPeople] = useState(null);
-  const [searching, setSearching] = useState(false);
-  const [thread, setThread] = useState(null);      // { userId, name }
-  const [msgs, setMsgs] = useState(null);
-  const [more, setMore] = useState(false);
-  const [pages, setPages] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const endRef = useRef(null);
-  const seenIds = useRef(new Set());
-  const [body, setBody] = useState("");
-
-  // Leaving the messages screen any other way — the Back to the group link, a
-  // tab change — has to release the "don't notify me about this person" flag,
-  // or they'd go quiet for the rest of the session.
-  useEffect(() => () => { openDmPeer = null; }, []);
-  const [link, setLink] = useState("");
-  const [sending, setSending] = useState(false);
-  const [showLink, setShowLink] = useState(false);
-  const seq = useRef(0);
-
-  const myName = leaderboardNameFor(client);
-
-  const loadInbox = useCallback(async () => {
-    const res = await fetchInbox(userId);
-    if (res === LOAD_FAILED) { setFailed(true); return; }
-    setFailed(false); setInbox(res);
-    if (onUnreadChanged) onUnreadChanged(res.reduce((n, t) => n + t.unread, 0));
-  }, [userId, onUnreadChanged]);
-
-  useEffect(() => { loadInbox(); }, [loadInbox]);
-  useEffect(() => {
-    const id = setInterval(() => { if (document.visibilityState === "visible" && view === "inbox") loadInbox(); }, 30000);
-    return () => clearInterval(id);
-  }, [loadInbox, view]);
-
-  const runSearch = useCallback(async (term) => {
-    const mine = ++seq.current;
-    setSearching(true);
-    const res = await searchMembers(term, userId);
-    if (mine !== seq.current) return;
-    setSearching(false);
-    setPeople(res === LOAD_FAILED ? [] : res);
-  }, [userId]);
-
-  const openThread = async (them) => {
-    openDmPeer = them?.userId || null;
-    setThread(them); setView("thread"); setMsgs(null); setPages(1); setMore(false);
-    const res = await fetchConversation(userId, them.userId, 1);
-    const list = res === LOAD_FAILED ? [] : res.msgs;
-    seenIds.current = new Set(list.map((m) => m.id));
-    setMsgs(list); setMore(res === LOAD_FAILED ? false : res.more);
-    await markConversationRead(userId, them.userId);
-    loadInbox();
-  };
-
-  const loadOlder = async () => {
-    if (!thread || loadingMore) return;
-    setLoadingMore(true);
-    const next = pages + 1;
-    const res = await fetchConversation(userId, thread.userId, next);
-    setLoadingMore(false);
-    if (res === LOAD_FAILED) return;
-    setPages(next); setMsgs(res.msgs); setMore(res.more);
-    seenIds.current = new Set(res.msgs.map((m) => m.id));
-  };
-
-  // While a thread is open, new messages arrive on their own and anything from
-  // them is marked read straight away — which is what drives their read tick.
-  useEffect(() => {
-    if (view !== "thread" || !thread) return undefined;
-    const tick = async () => {
-      if (document.visibilityState !== "visible") return;
-      const res = await fetchConversation(userId, thread.userId, pages);
-      if (res === LOAD_FAILED) return;
-      const fresh = res.msgs.filter((m) => !seenIds.current.has(m.id));
-      if (fresh.length) {
-        fresh.forEach((m) => seenIds.current.add(m.id));
-        setMsgs(res.msgs);
-        if (fresh.some((m) => m.sender_id !== userId)) {
-          markConversationRead(userId, thread.userId);
-          loadInbox();
-        }
-      } else {
-        setMsgs(res.msgs);   // keeps read ticks current on messages I sent
-      }
-    };
-    const id = setInterval(tick, 8000);
-    document.addEventListener("visibilitychange", tick);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
-  }, [view, thread, userId, pages, loadInbox]);
-
-  // Stick to the newest message, the way every messaging app does.
-  useEffect(() => { if (endRef.current) endRef.current.scrollIntoView({ block: "end" }); }, [msgs]);
-
-  const send = async () => {
-    if (sending || (!body.trim() && !link.trim())) return;
-    setSending(true);
-    const res = await sendDirectMessage(userId, myName, thread.userId, body, link);
-    setSending(false);
-    if (!res.ok) return;
-    const sent = { ...res.row, created_at: new Date().toISOString() };
-    seenIds.current.add(sent.id);
-    setMsgs((prev) => [...(prev || []), sent]);
-    setBody(""); setLink(""); setShowLink(false);
-    loadInbox();
-  };
-
-  // ---- thread ----
-  if (view === "thread" && thread) {
-    const initials = (thread.name || "A").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-    // The last message I sent that they have read — the only one that carries
-    // a "Read" tick, the way Messenger does it.
-    let lastReadMine = null;
-    (msgs || []).forEach((m) => { if (m.sender_id === userId && m.read_at) lastReadMine = m.id; });
-
-    return (
-      <div className="dm-screen">
-        <div className="dm-top">
-          <button className="dm-back" onClick={() => { openDmPeer = null; setView("inbox"); setThread(null); loadInbox(); }} aria-label="Back to messages">
-            <ChevronLeft size={20} />
-          </button>
-          <div className="dm-avatar">{initials}</div>
-          <div className="dm-top-name">{thread.name || "Athlete"}</div>
-        </div>
-
-        <div className="dm-scroll">
-          {msgs === null ? <p className="muted" style={{ padding: "0 16px" }}>Loading…</p> : (
-            <>
-              {more && (
-                <button className="dm-older" onClick={loadOlder} disabled={loadingMore}>
-                  {loadingMore ? "Loading…" : "Load earlier messages"}
-                </button>
-              )}
-              {msgs.length === 0 && (
-                <div className="dm-empty">
-                  <div className="dm-avatar big">{initials}</div>
-                  <p>{thread.name || "This athlete"}</p>
-                  <span>Send the first message. They will see it next time they open the app.</span>
-                </div>
-              )}
-              {msgs.map((m, idx) => {
-                const mine = m.sender_id === userId;
-                const prev = msgs[idx - 1];
-                const next = msgs[idx + 1];
-                const newDay = !prev || fmtDate(prev.created_at.slice(0, 10)) !== fmtDate(m.created_at.slice(0, 10));
-                // Messages from the same person within five minutes group into
-                // one run, so a burst reads as one thought.
-                const grouped = prev && prev.sender_id === m.sender_id
-                  && (new Date(m.created_at) - new Date(prev.created_at)) < 5 * 60 * 1000 && !newDay;
-                const endsRun = !next || next.sender_id !== m.sender_id
-                  || (new Date(next.created_at) - new Date(m.created_at)) >= 5 * 60 * 1000;
-                const embed = m.link_url ? embedFor(m.link_url) : null;
-                return (
-                  <React.Fragment key={m.id}>
-                    {newDay && <div className="dm-daysep"><span>{fmtDate(m.created_at.slice(0, 10))}</span></div>}
-                    <div className={`dm-line${mine ? " mine" : ""}${grouped ? " grouped" : ""}`}>
-                      {!mine && <div className={`dm-avatar sm${grouped || !endsRun ? " hide" : ""}`}>{initials}</div>}
-                      <div className={`dm-bubble${mine ? " mine" : ""}${endsRun ? " tail" : ""}`}>
-                        {m.body && <p>{m.body}</p>}
-                        {m.link_url && (embed && embed.type === "youtube"
-                          ? <div className="post-embed dm-embed"><iframe src={embed.src} title="clip" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" /></div>
-                          : embed && embed.type === "video"
-                            ? <video className="post-video dm-embed" src={embed.src} controls preload="metadata" playsInline />
-                            : <a className="dm-link" href={m.link_url} target="_blank" rel="noopener noreferrer">{m.link_url}</a>)}
-                      </div>
-                    </div>
-                    {endsRun && <div className={`dm-meta${mine ? " mine" : ""}`}>{fmtTime(m.created_at)}{mine && m.id === lastReadMine ? " · Read" : ""}</div>}
-                  </React.Fragment>
-                );
-              })}
-              <div ref={endRef} />
-            </>
-          )}
-        </div>
-
-        <div className="dm-composer">
-          {link.trim() && (
-            <div className="dm-attached">
-              <LinkIcon size={13} /><span>{link.trim().slice(0, 42)}{link.trim().length > 42 ? "…" : ""}</span>
-              <button onClick={() => setLink("")} aria-label="Remove link"><X size={13} /></button>
-            </div>
-          )}
-          <div className="dm-composer-row">
-            <button className={`dm-attach${showLink ? " on" : ""}`} onClick={() => setShowLink((v) => !v)} aria-label="Attach a link">
-              <LinkIcon size={17} />
-            </button>
-            <textarea className="dm-input" rows={1} value={body} maxLength={2000}
-              placeholder="Message" aria-label="Message"
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button className="dm-send" disabled={sending || (!body.trim() && !link.trim())} onClick={send} aria-label="Send">
-              <ChevronRight size={18} />
-            </button>
-          </div>
-          {showLink && (
-            <input className="dm-linkinput" value={link} inputMode="url"
-              placeholder="Paste a YouTube or instructional link" aria-label="Link"
-              onChange={(e) => setLink(e.target.value)} />
-          )}
-          {link.trim() && !embedFor(link) && <p className="composer-warn">That needs to start with https://</p>}
-        </div>
-      </div>
-    );
-  }
-
-  // ---- find someone ----
-  if (view === "find") {
-    return (
-      <div className="tab-pad">
-        <button className="link-btn" onClick={() => setView("inbox")}>Back to messages</button>
-        <h2 className="program-title" style={{ marginTop: 8 }}>Find someone</h2>
-        <p className="muted" style={{ fontSize: 12.5 }}>Search anyone training on the app by name.</p>
-        <div className="tech-search">
-          <Search size={15} className="tech-search-icon" aria-hidden="true" />
-          <input className="tech-search-input" type="search" value={query} placeholder="Search by name"
-            aria-label="Search people"
-            onChange={(e) => { setQuery(e.target.value); if (e.target.value.trim().length >= 1) runSearch(e.target.value); else setPeople(null); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(query); } }} />
-        </div>
-        {searching && <p className="muted">Searching…</p>}
-        {people && people.length === 0 && !searching && (
-          <p className="muted">Nobody by that name yet. People appear here once they have opened the app.</p>
-        )}
-        {people && people.map((p) => (
-          <button key={p.user_id} className="rg-mode" onClick={() => openThread({ userId: p.user_id, name: p.display_name })}>
-            <MessageCircle size={18} /><div><strong>{p.display_name || "Athlete"}</strong><span>Tap to message</span></div><ChevronRight size={16} />
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  // ---- inbox ----
-  return (
-    <div className="tab-pad">
-      <div className="community-head">
-        <div>
-          <h2 className="program-title" style={{ margin: 0 }}>Messages</h2>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>Private, one to one. Your coach cannot read these.</p>
-        </div>
-      </div>
-      <button className="btn-primary wide" style={{ marginBottom: 14 }} onClick={() => { setView("find"); setQuery(""); setPeople(null); }}>
-        Find someone to message
-      </button>
-      {failed && <div className="adjust-box" style={{ marginBottom: 12 }}>Couldn't load your messages — check your connection.</div>}
-      {inbox === null && !failed && <p className="muted">Loading…</p>}
-      {inbox && inbox.length === 0 && !failed && (
-        <Card title="No messages yet">
-          <p className="muted" style={{ marginBottom: 0 }}>Search for a training partner and send them something — a question, or an instructional you think they should watch.</p>
-        </Card>
-      )}
-      {inbox && inbox.map((t) => (
-        <button key={t.userId} className="dm-row" onClick={() => openThread({ userId: t.userId, name: t.name })}>
-          <div className="dm-row-main">
-            <div className="dm-row-name">{t.name || "Athlete"}{t.unread > 0 && <span className="dm-dot">{t.unread}</span>}</div>
-            <div className="dm-row-last">{t.last ? (t.last.body || t.last.link_url || "") : ""}</div>
-          </div>
-          <ChevronRight size={16} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CommunityTab({ client, userId, isCoach, prefs, onPrefs, onOpenMessages, dmUnread = 0 }) {
+function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
   const [channel, setChannel] = useState(() => (
@@ -4932,11 +4512,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, onOpenMessages,
             className={`view-toggle-btn ${channel === c.id ? "active" : ""}`}
             onClick={() => switchChannel(c.id)}>{c.label}</button>
         ))}
-        {onOpenMessages && (
-          <button role="tab" aria-selected={false} className="view-toggle-btn" onClick={onOpenMessages}>
-            Messages{dmUnread > 0 ? ` (${dmUnread})` : ""}
-          </button>
-        )}
       </div>
       <p className="muted" style={{ margin: "-6px 0 12px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
 
@@ -5332,14 +4907,6 @@ function MainApp({ userId, onSignOut }) {
   const [showCalculator, setShowCalculator] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showCoachDashboard, setShowCoachDashboard] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
-  const [dmUnread, setDmUnread] = useState(0);
-  const dmNotifiedRef = useRef(new Set());
-  const dmPrimedRef = useRef(false);
-  // Read through a ref, not a dependency: the prefs are declared further down
-  // this component, and naming them in the effect's dep array would evaluate
-  // them before that line runs.
-  const dmMuteRef = useRef(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showSafety, setShowSafety] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -5369,41 +4936,6 @@ function MainApp({ userId, onSignOut }) {
   }, [isCoach, userId]);
 
   useEffect(() => { refreshNewSignups(); }, [refreshNewSignups]);
-
-  // Unread direct messages, so the Group tab can show a count without the
-  // messages screen being open.
-  useEffect(() => {
-    if (!userId) return undefined;
-    let cancelled = false;
-    const tick = async () => {
-      if (document.visibilityState !== "visible") return;
-      const { count, rows } = await fetchUnreadDMs(userId);
-      if (cancelled) return;
-      setDmUnread(count);
-      // First pass only records what is already waiting. Banners are for
-      // messages that arrive while the app is open, not for a backlog the
-      // athlete already knows about from the badge.
-      const seen = dmNotifiedRef.current;
-      const fresh = rows.filter((r) => !seen.has(r.id));
-      rows.forEach((r) => seen.add(r.id));
-      if (seen.size > 400) dmNotifiedRef.current = new Set(rows.map((r) => r.id));
-      if (!dmPrimedRef.current) { dmPrimedRef.current = true; return; }
-      if (dmMuteRef.current) return;
-      // One banner per person, newest first, so ten messages from one training
-      // partner is one notification.
-      const byPerson = new Set();
-      fresh.forEach((r) => {
-        if (r.sender_id === openDmPeer) return;
-        if (byPerson.has(r.sender_id)) return;
-        byPerson.add(r.sender_id);
-        notifyNewMessage(r);
-      });
-    };
-    tick();
-    const id = setInterval(tick, 60000);
-    document.addEventListener("visibilitychange", tick);
-    return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", tick); };
-  }, [userId]);
 
   // Signup-time linking fails whenever email confirmation is on, because there
   // is no session yet for row-level security to check. Re-asserting it here, on
@@ -5660,7 +5192,6 @@ function MainApp({ userId, onSignOut }) {
     });
   }, [userId]);
   const communityLeft = !!(communityPrefs && communityPrefs.left);
-  dmMuteRef.current = !!(communityPrefs && (communityPrefs.muted || communityPrefs.left));
   // Hooks run before the early returns below, so this one has to sit here and
   // cope with `client` still being null.
   const communityUnread = useCommunityUnread(communityPrefs, userId, communityOpen && !communityLeft && !!communityPrefs);
@@ -5756,21 +5287,12 @@ function MainApp({ userId, onSignOut }) {
         {(tab === "progress" || tab === "history" || tab === "bjj" || tab === "prs") && (
           <ProgressHub client={client} onPersist={persistClient} userId={userId} />
         )}
-        {tab === "community" && communityOpen && !showMessages && (
+        {tab === "community" && communityOpen && (
           <CommunityTab client={client} userId={userId} isCoach={isCoach}
-            prefs={communityPrefs || {}} onPrefs={saveCommunityPrefs}
-            onOpenMessages={() => setShowMessages(true)} dmUnread={dmUnread} />
-        )}
-        {tab === "community" && communityOpen && showMessages && (
-          <>
-            <div className="tab-pad" style={{ paddingBottom: 0 }}>
-              <button className="link-btn" onClick={() => setShowMessages(false)}>Back to the group</button>
-            </div>
-            <MessagesTab client={client} userId={userId} onUnreadChanged={setDmUnread} />
-          </>
+            prefs={communityPrefs || {}} onPrefs={saveCommunityPrefs} />
         )}
       </div>
-      <BottomNav tab={tab} setTab={setTab} tabs={visibleTabs} unread={communityUnread + dmUnread} />
+      <BottomNav tab={tab} setTab={setTab} tabs={visibleTabs} unread={communityUnread} />
       <ToastHost />
       {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
@@ -10310,82 +9832,6 @@ function GlobalStyle() {
       .rg-table .rg-num { text-align: center; font-family: 'Oswald', sans-serif; font-size: 15px; font-weight: 600; }
       .rg-table tr.rg-differs .rg-num { color: var(--accent); }
       .rg-table tr.rg-differs td:first-child { font-weight: 600; }
-      .dm-row { display: flex; align-items: center; gap: 12px; width: 100%; background: var(--card);
-        border: 1px solid var(--border); border-radius: 12px; padding: 14px 15px; margin-bottom: 8px;
-        color: var(--text); cursor: pointer; text-align: left; min-height: 58px; }
-      .dm-row-main { flex: 1; min-width: 0; }
-      .dm-row-name { font-size: 14.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
-      .dm-row-last { font-size: 12.5px; color: var(--text-dim); margin-top: 2px;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .dm-dot { background: var(--accent); color: var(--accent-text); border-radius: 999px;
-        font-size: 11px; font-weight: 700; padding: 1px 7px; min-width: 19px; text-align: center; }
-      /* A conversation fills the screen between the header and the composer,
-         with only the messages scrolling — the way a messaging app behaves. */
-      .dm-screen { position: fixed; inset: 0; display: flex; flex-direction: column;
-        background: var(--bg); z-index: 40; }
-      .dm-top { display: flex; align-items: center; gap: 11px; padding: 10px 14px;
-        padding-top: calc(10px + env(safe-area-inset-top, 0px));
-        border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
-      .dm-back { background: none; border: none; color: var(--text); cursor: pointer;
-        padding: 6px; margin: -6px 0 -6px -6px; display: inline-flex; }
-      .dm-top-name { font-size: 16px; font-weight: 700; flex: 1; min-width: 0;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .dm-avatar { width: 34px; height: 34px; border-radius: 999px; background: var(--accent);
-        color: var(--accent-text); display: flex; align-items: center; justify-content: center;
-        font-size: 13px; font-weight: 700; flex-shrink: 0; }
-      .dm-avatar.sm { width: 26px; height: 26px; font-size: 10.5px; align-self: flex-end; }
-      .dm-avatar.sm.hide { visibility: hidden; }
-      .dm-avatar.big { width: 64px; height: 64px; font-size: 22px; margin: 0 auto 12px; }
-
-      .dm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
-        padding: 14px 14px calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; }
-      .dm-older { align-self: center; background: var(--card); border: 1px solid var(--border);
-        border-radius: 999px; padding: 7px 15px; font-size: 12.5px; color: var(--text-dim);
-        cursor: pointer; margin-bottom: 14px; }
-      .dm-empty { margin: auto; text-align: center; padding: 30px 20px; }
-      .dm-empty p { font-weight: 700; font-size: 16px; margin: 0 0 5px; }
-      .dm-empty span { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
-      .dm-daysep { display: flex; align-items: center; justify-content: center; margin: 16px 0 10px; }
-      .dm-daysep span { font-size: 11px; font-weight: 600; color: var(--text-dim);
-        background: var(--card); border-radius: 999px; padding: 4px 11px; }
-
-      .dm-line { display: flex; align-items: flex-end; gap: 7px; margin-top: 8px; }
-      .dm-line.grouped { margin-top: 2px; }
-      .dm-line.mine { justify-content: flex-end; }
-      .dm-bubble { max-width: 76%; background: var(--card); border: 1px solid var(--border);
-        border-radius: 18px; padding: 9px 14px; font-size: 15px; line-height: 1.4; }
-      .dm-bubble.tail { border-bottom-left-radius: 5px; }
-      .dm-bubble.mine { background: var(--accent); color: var(--accent-text); border-color: var(--accent);
-        border-bottom-left-radius: 18px; }
-      .dm-bubble.mine.tail { border-bottom-right-radius: 5px; }
-      .dm-bubble p { margin: 0; white-space: pre-wrap; word-break: break-word; }
-      .dm-bubble.mine a { color: var(--accent-text); text-decoration: underline; }
-      .dm-embed { margin-top: 7px; border-radius: 12px; overflow: hidden; }
-      .dm-link { display: inline-block; font-size: 13.5px; word-break: break-all; color: var(--accent); }
-      .dm-meta { font-size: 10.5px; color: var(--text-dim); margin: 3px 0 0 33px; }
-      .dm-meta.mine { text-align: right; margin: 3px 2px 0 0; }
-
-      .dm-composer { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--card);
-        padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)); }
-      .dm-composer-row { display: flex; align-items: flex-end; gap: 8px; }
-      .dm-input { flex: 1; min-width: 0; resize: none; background: var(--bg); color: var(--text);
-        border: 1px solid var(--border); border-radius: 20px; padding: 10px 14px; font-size: 16px;
-        font-family: inherit; line-height: 1.35; max-height: 110px; min-height: 42px; }
-      .dm-input:focus { outline: none; border-color: var(--accent); }
-      .dm-attach, .dm-send { width: 42px; height: 42px; border-radius: 999px; flex-shrink: 0;
-        display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border: none; }
-      .dm-attach { background: var(--bg); border: 1px solid var(--border); color: var(--text-dim); }
-      .dm-attach.on { border-color: var(--accent); color: var(--accent); }
-      .dm-send { background: var(--accent); color: var(--accent-text); }
-      .dm-send:disabled { opacity: .4; cursor: default; }
-      .dm-linkinput { width: 100%; margin-top: 8px; background: var(--bg); color: var(--text);
-        border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; font-size: 16px; font-family: inherit; }
-      .dm-linkinput:focus { outline: none; border-color: var(--accent); }
-      .dm-attached { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-dim);
-        background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
-        padding: 7px 10px; margin-bottom: 8px; }
-      .dm-attached span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .dm-attached button { background: none; border: none; color: var(--text-dim); cursor: pointer; display: inline-flex; padding: 2px; }
       .rg-holdbox { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--accent);
         border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
       .rg-holdbox strong { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--accent); flex-shrink: 0; }
