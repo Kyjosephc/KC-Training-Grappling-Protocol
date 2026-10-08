@@ -76,6 +76,7 @@ export const RULESETS = {
       "Then fewest penalties (Art. 2.5.4)",
       "Then referee decision — who was more offensive and came closest to scoring (Art. 2.6.2)",
     ],
+    tiebreakSummary: "Advantages are counted first, then fewest penalties, then a referee decision.",
     specials: [
       { k: "Cumulative points", v: "Positions passed through in one continuous sequence all score, counted once at the end of the sequence. A guard pass straight into mount is 7 (3+4).", cite: "Art. 3.4" },
       { k: "Scoring while submitted", v: "An athlete who reaches a scoring position while caught in a submission scores nothing until they escape and hold it 3 seconds. If the 3-second count is interrupted by a submission, they get an advantage for each position instead.", cite: "Art. 3.3, 3.3.2" },
@@ -133,6 +134,7 @@ export const RULESETS = {
       "Then referee decision based on who was more dominant and aggressive",
       "No advantages exist to separate a tie",
     ],
+    tiebreakSummary: "A referee decision, straight away — there are no advantages to count.",
     specials: [
       { k: "The scoreless period", v: "In the first half of a match no positive points are awarded. Negative points still apply. This is the single biggest difference from every other ruleset here.", cite: "Match structure" },
       { k: "Clean vs regular", v: "A takedown or sweep that lands past the guard is worth 4, not 2. Landing in guard or half guard is 2.", cite: "Scoring" },
@@ -183,6 +185,7 @@ export const RULESETS = {
       "Within a match: fewest penalties, then referee decision",
       "Within a round-robin division: most wins, then most submissions, then head-to-head, then most points scored, then fewest points conceded",
     ],
+    tiebreakSummary: "Fewest penalties, then a referee decision. There are no advantages in this ruleset.",
     specials: [
       { k: "No advantages", v: "A near-miss is worth nothing. A position either scores or it does not.", cite: "Scoring" },
       { k: "Submission attempt scores", v: "A solid submission attempt stopped by going out of bounds is worth 2 points — unique among these four rule sets.", cite: "Scoring" },
@@ -233,6 +236,7 @@ export const RULESETS = {
       "Points, then advantages, then penalties, following the IBJJF guideline",
       "The tournament director has the final say on anything the document does not cover",
     ],
+    tiebreakSummary: "Advantages, then penalties, following the IBJJF guideline, with the tournament director as the final authority.",
     specials: [
       { k: "Side control scores", v: "Side mount and technical mount are worth 4 points. Under IBJJF, side control is worth nothing on its own — this is the difference that costs people matches.", cite: "Scoring" },
       { k: "Back grab scores", v: "A back grab is worth 4.", cite: "Scoring" },
@@ -247,7 +251,9 @@ export const RULESET_IDS = ["ibjjf", "adcc", "gi", "revolution"];
 // to go. `key` matches the scoring keys above.
 export const COMPARE_ROWS = [
   { key: "takedown", label: "Takedown" },
+  { key: "cleanTakedown", label: "A takedown landing past the guard" },
   { key: "sweep", label: "Sweep" },
+  { key: "cleanSweep", label: "A sweep landing past the guard" },
   { key: "guardPass", label: "Guard pass" },
   { key: "kneeOnBelly", label: "Knee on belly" },
   { key: "mount", label: "Mount" },

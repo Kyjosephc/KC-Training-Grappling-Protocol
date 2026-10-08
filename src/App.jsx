@@ -9840,6 +9840,12 @@ function GlobalStyle() {
       .rg-req:last-child { border-bottom: none; }
       .rg-req-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
       .rg-must, .rg-not { margin: 0 0 6px; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+      .rg-scene { font-size: 13px; line-height: 1.5; margin: 4px 0 6px; padding-left: 11px;
+        border-left: 2px solid var(--accent); color: var(--text); }
+      .rg-verdict { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .04em; border-radius: 999px; padding: 2px 8px; margin-right: 7px; vertical-align: 1px; }
+      .rg-verdict.advantage { background: rgba(255,176,32,.16); color: var(--amber, #ffb020); }
+      .rg-verdict.nothing { background: rgba(255,90,90,.14); color: var(--red); }
       .rg-must { color: var(--text-dim); }
       .rg-must li::marker { color: var(--green); }
       .rg-not { color: var(--text-dim); }

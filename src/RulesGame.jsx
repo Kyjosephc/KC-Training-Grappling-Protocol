@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3 } from "lucide-react";
 import { RULESETS, RULESET_IDS, COMPARE_ROWS, DISCLAIMER } from "./rules/rulesets.js";
 import { buildQuestionBank, pickQuestions, rankFor } from "./rules/engine.js";
-import { REQUIREMENTS, HOLD_SECONDS } from "./rules/requirements.js";
+import { REQUIREMENTS, HOLD_SECONDS, SCENES } from "./rules/requirements.js";
 
 const BANK = buildQuestionBank();
 const XP_RIGHT = 10, XP_STREAK_BONUS = 5;
@@ -194,6 +194,7 @@ export default function RulesGame({ progress, onProgress }) {
           {Object.entries(rs.scoring).map(([k, s]) => s && (
             <div key={k} className="rg-rule">
               <div className="rg-rule-head"><span>{tLabel(k)}</span><strong>{s.points == null ? "No points" : s.points}</strong></div>
+              {SCENES[rs.id] && SCENES[rs.id][k] && <div className="rg-scene">{SCENES[rs.id][k]}</div>}
               <div className="muted">{s.control} <span className="rg-cite-inline">{s.cite}</span></div>
             </div>
           ))}
@@ -209,7 +210,12 @@ export default function RulesGame({ progress, onProgress }) {
                 <div className="rg-req-head">{tLabel(pos)}</div>
                 <ul className="rg-must">{r.must.map((x, i) => <li key={i}>{x}</li>)}</ul>
                 {r.notPoints.length > 0 && (
-                  <ul className="rg-not">{r.notPoints.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <ul className="rg-not">{r.notPoints.map((x, i) => (
+                    <li key={i}>
+                      <span className={`rg-verdict ${x.verdict}`}>{x.verdict === "advantage" ? "Advantage only" : "Scores nothing"}</span>
+                      {x.why}
+                    </li>
+                  ))}</ul>
                 )}
                 <span className="rg-cite-inline">{r.cite}</span>
               </div>

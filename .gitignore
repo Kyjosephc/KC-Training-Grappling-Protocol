@@ -9,3 +9,7 @@ dist
 .env.*
 !.env.example
 .vercel
+
+# rules-game verification bundles
+.rg.cjs
+.eng.cjs

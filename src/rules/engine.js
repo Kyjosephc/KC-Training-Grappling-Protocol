@@ -1,16 +1,22 @@
 // =============================================================================
 // QUESTION ENGINE
 // =============================================================================
-// Every question is generated from rulesets.js. Nothing is written by hand, so
-// a rule change in that file changes the questions, the answers and the
-// explanations together — they cannot drift apart.
+// Every question is generated from rulesets.js and requirements.js. Nothing is
+// written by hand, so a rule change in those files changes the questions, the
+// answers and the explanations together — they cannot drift apart.
+//
+// Questions describe a situation. "Feet crossed. What do you get?" teaches
+// nobody anything: an athlete who does not already know the rule cannot even
+// tell which position is being discussed. Every prompt here says who is doing
+// what, from where, and for how long, so the question itself is the lesson and
+// the answer confirms it.
 //
 // A question is: { id, ruleset, topic, difficulty, prompt, options[], answer,
 // why, wrong{}, cite }
 // =============================================================================
 
 import { RULESETS, RULESET_IDS, COMPARE_ROWS } from "./rulesets.js";
-import { REQUIREMENTS, HOLD_SECONDS } from "./requirements.js";
+import { REQUIREMENTS, HOLD_SECONDS, SCENES } from "./requirements.js";
 
 const POS_LABEL = {
   takedown: "a takedown", cleanTakedown: "a clean takedown past the guard",
@@ -36,30 +42,41 @@ function mulberry(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// A stable number from a string, so a given question always builds its options
+// the same way. The bank has to be identical on every device, or a saved weak
+// topic means nothing the next time the athlete opens the app.
+function hashSeed(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
 const label = (n) => (n === 0 ? "No points" : `${n} point${n === 1 ? "" : "s"}`);
 
-// --- 1. What is this position worth under this ruleset? ----------------------
+// --- 1. What is this worth? — asked as a situation, not as a position name ---
 function positionQuestions(rsId) {
   const rs = RULESETS[rsId];
+  const scenes = SCENES[rsId] || {};
   const out = [];
   Object.entries(rs.scoring).forEach(([key, s]) => {
     if (!s) return;
+    const scene = scenes[key];
+    if (!scene) return;                     // verify.mjs fails before this ships
     const worth = s.points == null ? 0 : s.points;
     const wrong = {};
     POINT_CHOICES.filter((n) => n !== worth).forEach((n) => {
       wrong[label(n)] = n === 0
-        ? `${POS_LABEL[key] || key} does score under ${rs.name}.`
-        : `${n} is not what ${rs.name} awards for ${POS_LABEL[key] || key}.`;
+        ? `${POS_LABEL[key] || key} does score under ${rs.name} — ${s.control}.`
+        : `${rs.name} does not award ${n} for ${POS_LABEL[key] || key}.`;
     });
     out.push({
       id: `${rsId}:pos:${key}`,
       ruleset: rsId, topic: key, difficulty: 1,
-      prompt: `Under ${rs.name} rules, how many points is ${POS_LABEL[key] || key} worth?`,
+      prompt: `${rs.name} rules. ${scene} How many points do you score?`,
       options: POINT_CHOICES.map(label),
       answer: label(worth),
       why: s.points == null
-        ? `${rs.name} awards no points for that. ${s.control}`
-        : `${label(worth)}. ${s.control}`,
+        ? `No points. That is ${POS_LABEL[key] || key} under ${rs.name}, and ${rs.name} awards nothing for it. ${s.control}`
+        : `${label(worth)}. That is ${POS_LABEL[key] || key}: ${s.control}`,
       wrong, cite: `${rs.name} ${rs.version} — ${s.cite}`,
     });
   });
@@ -67,15 +84,31 @@ function positionQuestions(rsId) {
 }
 
 // --- 2. Sequences: cumulative scoring through a match ------------------------
+// Each step says what was held, because "takedown, pass, mount" is a list of
+// words and "you land them on their back, hold three seconds, clear the legs
+// into side control, hold three seconds" is a match.
 const SEQUENCES = [
-  { steps: ["takedown", "guardPass"], story: "You take your opponent down into their guard, hold it, then pass to side control and hold that." },
-  { steps: ["takedown", "guardPass", "mount"], story: "You take them down, pass the guard, and climb straight to mount in one continuous sequence." },
-  { steps: ["sweep", "guardPass"], story: "From guard you sweep them, settle on top, then pass their guard." },
-  { steps: ["sweep", "guardPass", "mount", "backControl"], story: "You sweep, pass, mount, they turn away and you take the back with both hooks — all without losing control." },
-  { steps: ["guardPass", "kneeOnBelly"], story: "You pass the guard and step straight into knee on belly, holding each." },
-  { steps: ["takedown", "guardPass", "kneeOnBelly", "mount"], story: "Takedown, pass, knee on belly, then mount — one unbroken sequence." },
-  { steps: ["sweep", "mount"], story: "You sweep from guard and come straight up into mount." },
+  { steps: ["takedown", "guardPass"],
+    story: "You take your opponent down onto their back from standing and hold the top position for 3 seconds. They recover guard, you clear their legs into side control, and hold that for 3 seconds." },
+  { steps: ["takedown", "guardPass", "mount"],
+    story: "You take them down and stabilise for 3 seconds, clear their legs into side control for 3 seconds, then climb up and sit on their torso and hold mount for 3 seconds — all without them recovering anything." },
+  { steps: ["sweep", "guardPass"],
+    story: "They are on top inside your closed guard. You reverse them, come up on top and hold it 3 seconds, then clear their legs into side control and hold that 3 seconds." },
+  { steps: ["sweep", "guardPass", "mount", "backControl"],
+    story: "From the bottom you reverse them and hold top 3 seconds, pass their legs into side control for 3 seconds, climb to mount for 3 seconds, then they turn away and you take their back with both heels hooked inside their thighs, legs uncrossed, for 3 seconds." },
+  { steps: ["guardPass", "kneeOnBelly"],
+    story: "You clear their legs into side control and hold it 3 seconds, then post one foot wide and drive the near knee onto their stomach, holding that for 3 seconds." },
+  { steps: ["takedown", "guardPass", "kneeOnBelly", "mount"],
+    story: "You take them down and hold 3 seconds, pass into side control for 3 seconds, step into knee on belly for 3 seconds, then slide into mount and hold 3 seconds." },
+  { steps: ["sweep", "mount"],
+    story: "From your closed guard you reverse them and come straight up into mount, holding the mount for 3 seconds." },
 ];
+
+// ADCC is the one ruleset where WHEN in the match changes the answer, so its
+// sequences have to say which half they happen in or the question is unfair.
+const SEQ_PREAMBLE = {
+  adcc: "This is the second half of the match, so points are live. ",
+};
 
 function sequenceQuestions(rsId) {
   const rs = RULESETS[rsId];
@@ -93,9 +126,9 @@ function sequenceQuestions(rsId) {
     return {
       id: `${rsId}:seq:${i}`,
       ruleset: rsId, topic: "sequence", difficulty: 2,
-      prompt: `${rs.name} rules. ${seq.story} What is on the board?`,
+      prompt: `${rs.name} rules. ${SEQ_PREAMBLE[rsId] || ""}${seq.story} What is on the board?`,
       options, answer: label(total),
-      why: `${label(total)} — ${sum}. ${rs.name === "IBJJF" ? "Positions reached in one continuous sequence all score; the referee counts three seconds once, at the end of the sequence." : "Each position reached and controlled scores on its own."}`,
+      why: `${label(total)} — ${sum}. ${rsId === "ibjjf" ? "Positions reached in one continuous sequence all score; the referee counts the three seconds once, at the end of the sequence." : "Each position reached and controlled scores on its own."}`,
       wrong, cite: `${rs.name} ${rs.version} — ${rsId === "ibjjf" ? "Art. 3.4 (cumulative points)" : "Scoring"}`,
     };
   });
@@ -104,27 +137,34 @@ function sequenceQuestions(rsId) {
 // --- 3. The special cases people actually lose matches over -------------------
 function specialQuestions(rsId) {
   const rs = RULESETS[rsId];
-  return rs.specials.map((sp, i) => ({
-    id: `${rsId}:sp:${i}`,
-    ruleset: rsId, topic: "special", difficulty: 3,
-    prompt: `Under ${rs.name}: ${sp.k.toLowerCase()} — which is correct?`,
-    options: shuffle([sp.v, ...wrongSpecials(rsId, sp.v)], mulberry(i + rsId.length)).slice(0, 4),
-    answer: sp.v,
-    why: sp.v,
-    wrong: {}, cite: `${rs.name} ${rs.version} — ${sp.cite}`,
-  }));
-}
-// Distractors are real statements from the OTHER rule sets, so the wrong answer
-// is always something true somewhere — which is the actual trap in competition.
-function wrongSpecials(rsId, correct) {
-  const pool = [];
-  RULESET_IDS.filter((id) => id !== rsId).forEach((id) => {
-    RULESETS[id].specials.forEach((sp) => { if (sp.v !== correct) pool.push(sp.v); });
+  return rs.specials.map((sp, i) => {
+    const id = `${rsId}:sp:${i}`;
+    const rnd = mulberry(hashSeed(id));
+    // Distractors are real statements from the OTHER rule sets, so the wrong
+    // answer is always true somewhere — which is the actual trap in
+    // competition. They are drawn fresh per question: taking the first three
+    // off the pool every time meant all seven IBJJF questions shared one set of
+    // wrong answers, and after two rounds you could pass by recognising them.
+    const pool = [];
+    RULESET_IDS.filter((x) => x !== rsId).forEach((x) => {
+      RULESETS[x].specials.forEach((o) => { if (o.v !== sp.v) pool.push(o.v); });
+    });
+    const picked = shuffle(pool, rnd).slice(0, 3);
+    return {
+      id, ruleset: rsId, topic: "special", difficulty: 3,
+      prompt: `${rs.name} — ${sp.k.toLowerCase()}. Which of these is the ${rs.name} rule?`,
+      options: shuffle([sp.v, ...picked], rnd),
+      answer: sp.v,
+      why: sp.v,
+      wrong: {}, cite: `${rs.name} ${rs.version} — ${sp.cite}`,
+    };
   });
-  return pool.slice(0, 3);
 }
 
 // --- 4. Cross-ruleset: the anti-guessing questions ---------------------------
+// Only asked where there is a single right answer. "Which awards the most for
+// mount?" used to mark Grappling Industries wrong for saying 4 when Grappling
+// Industries does award 4 — IBJJF just happened to come first in the list.
 function comparisonQuestions() {
   const out = [];
   COMPARE_ROWS.forEach((row) => {
@@ -132,61 +172,127 @@ function comparisonQuestions() {
       const s = RULESETS[id].scoring[row.key];
       return { id, name: RULESETS[id].name, pts: s && s.points != null ? s.points : null };
     });
-    const distinct = new Set(vals.map((v) => String(v.pts)));
-    if (distinct.size < 2) return;   // nothing to teach if they all agree
-    const highest = vals.reduce((a, b) => ((b.pts || 0) > (a.pts || 0) ? b : a));
-    const wrong = {};
-    vals.filter((v) => v.name !== highest.name).forEach((v) => {
-      wrong[v.name] = v.pts == null
-        ? `${v.name} awards nothing for ${row.label.toLowerCase()}.`
-        : `${v.name} awards ${v.pts}.`;
-    });
-    out.push({
-      id: `cmp:${row.key}`,
-      ruleset: "compare", topic: row.key, difficulty: 3,
-      prompt: `Which of these awards the most points for ${row.label.toLowerCase()}?`,
-      options: vals.map((v) => v.name),
-      answer: highest.name,
-      why: `${highest.name} awards ${highest.pts}. The others: ${vals.filter((v) => v.name !== highest.name).map((v) => `${v.name} ${v.pts == null ? "nothing" : v.pts}`).join(", ")}. This is why you cannot carry one ruleset's habits into another's tournament.`,
-      wrong, cite: "Each organisation's own published scoring",
-    });
+    const num = (v) => (v.pts == null ? 0 : v.pts);
+    const max = Math.max(...vals.map(num)), min = Math.min(...vals.map(num));
+    if (max === min) return;                       // nothing to teach if they all agree
+    const topped = vals.filter((v) => num(v) === max);
+    const bottomed = vals.filter((v) => num(v) === min);
+    const spread = vals.map((v) => `${v.name} ${v.pts == null ? "nothing" : v.pts}`).join(", ");
+
+    const mk = (target, kind) => {
+      const wrong = {};
+      vals.filter((v) => v.name !== target.name).forEach((v) => {
+        wrong[v.name] = v.pts == null
+          ? `${v.name} awards nothing for ${row.label.toLowerCase()}.`
+          : `${v.name} awards ${v.pts}.`;
+      });
+      out.push({
+        id: `cmp:${row.key}:${kind}`,
+        ruleset: "compare", topic: row.key, difficulty: 3,
+        prompt: kind === "most"
+          ? `You are choosing between tournaments. Which one of these rule sets awards the MOST points for ${row.label.toLowerCase()}?`
+          : `You are choosing between tournaments. Which one of these rule sets awards the FEWEST points for ${row.label.toLowerCase()}?`,
+        options: vals.map((v) => v.name),
+        answer: target.name,
+        why: `${target.name} awards ${target.pts == null ? "nothing" : target.pts}. The full picture: ${spread}. This is why you cannot carry one ruleset's habits into another's tournament.`,
+        wrong, cite: "Each organisation's own published scoring",
+      });
+    };
+    // A question only ships if exactly one organisation holds that end of the
+    // range. A three-way tie at the top has no single right answer.
+    if (topped.length === 1) mk(topped[0], "most");
+    if (bottomed.length === 1) mk(bottomed[0], "fewest");
   });
   return out;
 }
 
-// --- 5. Advantages, penalties, durations -------------------------------------
+// --- 5. Advantages, penalties, tiebreaks, durations --------------------------
 function systemQuestions(rsId) {
   const rs = RULESETS[rsId];
   const out = [];
+
   out.push({
     id: `${rsId}:adv`, ruleset: rsId, topic: "advantages", difficulty: 2,
-    prompt: `Does ${rs.name} use advantage points?`,
-    options: ["Yes", "No"],
-    answer: rs.advantages.used ? "Yes" : "No",
+    prompt: `You are two minutes into a ${rs.name} match. You almost finish a sweep — you get them up on one side but they post a hand and stop it just short. Does anything go on the scoreboard for coming that close?`,
+    options: ["Yes — an advantage", "No — nothing at all"],
+    answer: rs.advantages.used ? "Yes — an advantage" : "No — nothing at all",
     why: rs.advantages.rule,
-    wrong: { [rs.advantages.used ? "No" : "Yes"]: rs.advantages.used
+    wrong: { [rs.advantages.used ? "No — nothing at all" : "Yes — an advantage"]: rs.advantages.used
       ? `${rs.name} does use advantages — they decide matches that are level on points.`
       : `${rs.name} has no advantage scoring, so a near miss is worth nothing.` },
     cite: `${rs.name} ${rs.version} — ${rs.advantages.cite}`,
   });
-  if (rs.penalties.ladder.length > 1) {
+
+  // The escalating-penalty question only makes sense where the rulebook
+  // actually publishes a numbered ladder. ADCC does not — its list is separate
+  // offences, each worth a negative point — and the old code answered "an
+  // advantage to the opponent" for ADCC, a ruleset with no advantages.
+  const second = rs.penalties.ladder.find((x) => /^\s*2nd\b/i.test(x));
+  if (second) {
+    const says = second.replace(/^\s*2nd[^—-]*[—-]\s*/i, "").trim().toLowerCase();
+    const pick = /advantage/.test(says) ? "An advantage to the opponent"
+      : /\b2 points?\b/.test(says) ? "2 points to the opponent"
+      : /disqualif/.test(says) ? "Disqualification"
+      : "Nothing yet, it is only marked";
     out.push({
       id: `${rsId}:pen`, ruleset: rsId, topic: "penalties", difficulty: 3,
-      prompt: `Under ${rs.name}, what happens on the second penalty?`,
-      options: shuffle(["Nothing yet, it is only marked", "An advantage to the opponent", "2 points to the opponent", "Disqualification"], mulberry(7)),
-      answer: rsId === "ibjjf" ? "An advantage to the opponent"
-        : rsId === "gi" ? "2 points to the opponent" : "An advantage to the opponent",
-      why: rs.penalties.ladder.join(" · "),
+      prompt: `${rs.name}. You have already picked up one penalty. Later in the match the referee gives you a second one. What does your opponent get for it?`,
+      options: ["Nothing yet, it is only marked", "An advantage to the opponent", "2 points to the opponent", "Disqualification"],
+      answer: pick,
+      why: `The ${rs.name} ladder: ${rs.penalties.ladder.join(" · ")}`,
       wrong: {}, cite: `${rs.name} ${rs.version} — ${rs.penalties.cite}`,
     });
+  } else if (rsId === "adcc") {
+    out.push({
+      id: `${rsId}:pen`, ruleset: rsId, topic: "penalties", difficulty: 3,
+      prompt: "ADCC, second half, points are live. You sit down to guard and stay there for about five seconds without attacking anything. What happens on the scoreboard?",
+      options: ["Nothing — guard pulling is allowed", "You lose a point", "Your opponent gets an advantage", "You are disqualified"],
+      answer: "You lose a point",
+      why: `ADCC has no advantages and no warning ladder — it uses negative points. ${rs.penalties.ladder.join(" · ")}`,
+      wrong: {
+        "Your opponent gets an advantage": "ADCC has no advantage scoring at all.",
+        "Nothing — guard pulling is allowed": "Pulling guard and staying down during the scoring period costs you a point.",
+      },
+      cite: `${rs.name} ${rs.version} — ${rs.penalties.cite}`,
+    });
   }
+
+  // Tiebreaks: published in every rulebook, and competitors almost never know
+  // them until the match is already over. The summary line lives on the ruleset
+  // so the generator never has to guess which entry of a tiebreak list is the
+  // one that applies after points — the lists are structured differently.
+  if (rs.tiebreakSummary) {
+    const others = RULESET_IDS.filter((x) => x !== rsId)
+      .map((x) => RULESETS[x].tiebreakSummary).filter(Boolean);
+    const rnd = mulberry(hashSeed(`${rsId}:tie`));
+    out.push({
+      id: `${rsId}:tie`, ruleset: rsId, topic: "tiebreak", difficulty: 3,
+      prompt: `${rs.name}. The clock runs out and you and your opponent are dead level on points. What decides the match?`,
+      options: shuffle([rs.tiebreakSummary, ...shuffle(others, rnd).slice(0, 3)], rnd),
+      answer: rs.tiebreakSummary,
+      why: `${rs.name} tiebreak order: ${rs.tiebreak.join(" → ")}`,
+      wrong: {}, cite: `${rs.name} ${rs.version} — tiebreak`,
+    });
+  }
+
+  // Durations. Distractors come from this ruleset's OWN other divisions first,
+  // so the answer is not simply the longest or most detailed string on screen —
+  // which is exactly how the ADCC duration questions used to give themselves
+  // away against a field of bare "5 min" / "6 min".
+  const ownTimes = [...new Set(rs.durations.map((d) => d.time))];
+  const otherTimes = [...new Set(RULESET_IDS.filter((x) => x !== rsId)
+    .flatMap((x) => RULESETS[x].durations.map((d) => d.time)))];
   rs.durations.slice(0, 4).forEach((d, i) => {
-    const others = RULESET_IDS.flatMap((id) => RULESETS[id].durations.map((x) => x.time))
-      .filter((t) => t !== d.time);
+    const overlaps = (a, b) => a.includes(b) || b.includes(a);
+    const near = ownTimes.filter((t) => t !== d.time && !overlaps(t, d.time));
+    const far = otherTimes.filter((t) => t !== d.time && !overlaps(t, d.time) && !near.includes(t));
+    const rnd = mulberry(hashSeed(`${rsId}:dur:${i}`));
+    const distractors = [...shuffle(near, rnd), ...shuffle(far, rnd)].slice(0, 3);
+    if (distractors.length < 2) return;      // not enough distinct times to ask fairly
     out.push({
       id: `${rsId}:dur:${i}`, ruleset: rsId, topic: "duration", difficulty: 2,
-      prompt: `${rs.name} — how long is a match for ${d.division}?`,
-      options: shuffle([d.time, ...[...new Set(others)].slice(0, 3)], mulberry(i + 3)),
+      prompt: `You have signed up for ${rs.name}, ${d.division.toLowerCase()}. How long is the match?`,
+      options: shuffle([d.time, ...distractors], rnd),
       answer: d.time, why: `${d.division}: ${d.time}.`,
       wrong: {}, cite: `${rs.name} ${rs.version} — ${rs.durationCite}`,
     });
@@ -206,7 +312,7 @@ function holdQuestions(rsId) {
   });
   return [{
     id: `${rsId}:hold`, ruleset: rsId, topic: "control", difficulty: 1,
-    prompt: `Under ${rs.name}, how long must you hold a position before the points are awarded?`,
+    prompt: `${rs.name}. You clear their legs and settle into side control, but nothing has gone up on the board yet. How long do you have to keep them there before the referee awards it?`,
     options: opts, answer: `${h.n} seconds`, why: h.rule, wrong, cite: h.cite,
   }];
 }
@@ -221,8 +327,8 @@ function requirementQuestions(rsId) {
     // "Which of these is required?" — distractors are requirements from other
     // positions, which is exactly how people confuse them in a real match.
     // A distractor has to be FALSE for this position. The 3-second hold is true
-    // for every position, so it can never be the wrong answer — and the target's
-    // own requirements obviously cannot be either.
+    // for every position, so it can never be the wrong answer — and the
+    // target's own requirements obviously cannot be either.
     const mine = new Set(r.must.map((x) => x.toLowerCase()));
     const generic = /\b3 second|three second|hold it/i;
     const others = Object.entries(reqs)
@@ -233,29 +339,33 @@ function requirementQuestions(rsId) {
     if (r.must.length && others.length >= 3) {
       out.push({
         id: `${rsId}:req:${pos}`, ruleset: rsId, topic: pos, difficulty: 2,
-        prompt: `${rs.name} — which of these is required for ${POS_LABEL[pos] || pos}?`,
+        prompt: `${rs.name}. The referee is deciding whether to award ${POS_LABEL[pos] || pos}. Which of these does ${rs.name} require before the points go up?`,
         options: [specific, ...others.slice(0, 3)],
         answer: specific,
         why: `For ${POS_LABEL[pos] || pos} under ${rs.name}: ${r.must.join(" · ")}.`,
         wrong: {}, cite: `${rs.name} ${rs.version} — ${r.cite}`,
       });
     }
-    // The near-misses. These are the questions that win and lose matches.
-    r.notPoints.forEach((nm, i) => {
-      const isAdv = /advantage only/i.test(nm);
-      const isNone = /no points|not .*(count|mount)|does not count|is nothing/i.test(nm);
-      if (!isAdv && !isNone) return;
-      const answer = isAdv ? "An advantage" : "Nothing";
+    // The near-misses. These are the questions that win and lose matches, and
+    // the whole value is in describing the situation fully enough that an
+    // athlete can picture it and reason it out.
+    (r.notPoints || []).forEach((nm, i) => {
+      if (!nm || !nm.scene || !nm.verdict) return;
+      const answer = nm.verdict === "advantage" ? "An advantage" : "Nothing";
+      const full = `Full points for ${POS_LABEL[pos] || pos}`;
       const opts = rs.advantages.used
-        ? ["Full points", "An advantage", "Nothing", "A penalty"]
-        : ["Full points", "Nothing", "A penalty", "Half the points"];
+        ? [full, "An advantage", "Nothing", "A penalty against you"]
+        : [full, "Nothing", "A penalty against you", "Half the points"];
       if (!opts.includes(answer)) return;
       out.push({
         id: `${rsId}:nm:${pos}:${i}`, ruleset: rsId, topic: pos, difficulty: 3,
-        prompt: `${rs.name}. ${nm.split(" — ")[0]}. What do you get?`,
+        prompt: `${rs.name} rules. ${nm.scene} What does the referee award?`,
         options: opts, answer,
-        why: nm,
-        wrong: { "Full points": `That does not meet the requirement for ${POS_LABEL[pos] || pos}.` },
+        why: nm.why,
+        wrong: {
+          [full]: `That situation does not meet ${rs.name}'s requirement for ${POS_LABEL[pos] || pos}.`,
+          "A penalty against you": "Nothing here is a foul — it simply does not meet the requirement for the position.",
+        },
         cite: `${rs.name} ${rs.version} — ${r.cite}`,
       });
     });
