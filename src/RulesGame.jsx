@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3 } from "lucide-react";
 import { RULESETS, RULESET_IDS, COMPARE_ROWS, DISCLAIMER } from "./rules/rulesets.js";
 import { buildQuestionBank, pickQuestions, rankFor } from "./rules/engine.js";
+import { REQUIREMENTS, HOLD_SECONDS } from "./rules/requirements.js";
 
 const BANK = buildQuestionBank();
 const XP_RIGHT = 10, XP_STREAK_BONUS = 5;
@@ -184,6 +185,11 @@ export default function RulesGame({ progress, onProgress }) {
           ))}
         </div>
 
+        <div className="rg-holdbox">
+          <strong>{HOLD_SECONDS[rs.id] ? HOLD_SECONDS[rs.id].n : 3} seconds</strong>
+          <span>{HOLD_SECONDS[rs.id] ? HOLD_SECONDS[rs.id].rule : ""}</span>
+        </div>
+
         <Card2 title="Scoring">
           {Object.entries(rs.scoring).map(([k, s]) => s && (
             <div key={k} className="rg-rule">
@@ -192,6 +198,24 @@ export default function RulesGame({ progress, onProgress }) {
             </div>
           ))}
         </Card2>
+
+        {REQUIREMENTS[rs.id] && (
+          <Card2 title="What actually counts">
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+              Knowing a mount is {rs.scoring.mount ? rs.scoring.mount.points : 4} is the easy half. This is the half that decides matches.
+            </p>
+            {Object.entries(REQUIREMENTS[rs.id]).map(([pos, r]) => (
+              <div key={pos} className="rg-req">
+                <div className="rg-req-head">{tLabel(pos)}</div>
+                <ul className="rg-must">{r.must.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                {r.notPoints.length > 0 && (
+                  <ul className="rg-not">{r.notPoints.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                )}
+                <span className="rg-cite-inline">{r.cite}</span>
+              </div>
+            ))}
+          </Card2>
+        )}
 
         <Card2 title="Advantages">
           <p className="muted">{rs.advantages.rule} <span className="rg-cite-inline">{rs.advantages.cite}</span></p>

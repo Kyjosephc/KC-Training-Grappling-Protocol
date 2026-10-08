@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { RULESETS, RULESET_IDS, COMPARE_ROWS } from "./rulesets.js";
+import { REQUIREMENTS, HOLD_SECONDS } from "./requirements.js";
 
 const POS_LABEL = {
   takedown: "a takedown", cleanTakedown: "a clean takedown past the guard",
@@ -193,11 +194,81 @@ function systemQuestions(rsId) {
   return out;
 }
 
+// --- 6. How long do you have to hold it? -------------------------------------
+function holdQuestions(rsId) {
+  const h = HOLD_SECONDS[rsId];
+  const rs = RULESETS[rsId];
+  if (!h) return [];
+  const opts = ["1 second", "2 seconds", "3 seconds", "5 seconds"];
+  const wrong = {};
+  opts.filter((o) => o !== `${h.n} seconds`).forEach((o) => {
+    wrong[o] = `${rs.name} requires ${h.n} seconds of control, not ${o}.`;
+  });
+  return [{
+    id: `${rsId}:hold`, ruleset: rsId, topic: "control", difficulty: 1,
+    prompt: `Under ${rs.name}, how long must you hold a position before the points are awarded?`,
+    options: opts, answer: `${h.n} seconds`, why: h.rule, wrong, cite: h.cite,
+  }];
+}
+
+// --- 7. What actually counts as the position --------------------------------
+function requirementQuestions(rsId) {
+  const reqs = REQUIREMENTS[rsId];
+  const rs = RULESETS[rsId];
+  if (!reqs) return [];
+  const out = [];
+  Object.entries(reqs).forEach(([pos, r]) => {
+    // "Which of these is required?" — distractors are requirements from other
+    // positions, which is exactly how people confuse them in a real match.
+    // A distractor has to be FALSE for this position. The 3-second hold is true
+    // for every position, so it can never be the wrong answer — and the target's
+    // own requirements obviously cannot be either.
+    const mine = new Set(r.must.map((x) => x.toLowerCase()));
+    const generic = /\b3 second|three second|hold it/i;
+    const others = Object.entries(reqs)
+      .filter(([k]) => k !== pos)
+      .flatMap(([, x]) => x.must)
+      .filter((x) => !mine.has(x.toLowerCase()) && !generic.test(x));
+    const specific = r.must.find((x) => !generic.test(x)) || r.must[0];
+    if (r.must.length && others.length >= 3) {
+      out.push({
+        id: `${rsId}:req:${pos}`, ruleset: rsId, topic: pos, difficulty: 2,
+        prompt: `${rs.name} — which of these is required for ${POS_LABEL[pos] || pos}?`,
+        options: [specific, ...others.slice(0, 3)],
+        answer: specific,
+        why: `For ${POS_LABEL[pos] || pos} under ${rs.name}: ${r.must.join(" · ")}.`,
+        wrong: {}, cite: `${rs.name} ${rs.version} — ${r.cite}`,
+      });
+    }
+    // The near-misses. These are the questions that win and lose matches.
+    r.notPoints.forEach((nm, i) => {
+      const isAdv = /advantage only/i.test(nm);
+      const isNone = /no points|not .*(count|mount)|does not count|is nothing/i.test(nm);
+      if (!isAdv && !isNone) return;
+      const answer = isAdv ? "An advantage" : "Nothing";
+      const opts = rs.advantages.used
+        ? ["Full points", "An advantage", "Nothing", "A penalty"]
+        : ["Full points", "Nothing", "A penalty", "Half the points"];
+      if (!opts.includes(answer)) return;
+      out.push({
+        id: `${rsId}:nm:${pos}:${i}`, ruleset: rsId, topic: pos, difficulty: 3,
+        prompt: `${rs.name}. ${nm.split(" — ")[0]}. What do you get?`,
+        options: opts, answer,
+        why: nm,
+        wrong: { "Full points": `That does not meet the requirement for ${POS_LABEL[pos] || pos}.` },
+        cite: `${rs.name} ${rs.version} — ${r.cite}`,
+      });
+    });
+  });
+  return out;
+}
+
 // --- The bank ----------------------------------------------------------------
 export function buildQuestionBank() {
   const all = [];
   RULESET_IDS.forEach((id) => {
-    all.push(...positionQuestions(id), ...sequenceQuestions(id), ...specialQuestions(id), ...systemQuestions(id));
+    all.push(...positionQuestions(id), ...sequenceQuestions(id), ...specialQuestions(id),
+             ...systemQuestions(id), ...holdQuestions(id), ...requirementQuestions(id));
   });
   all.push(...comparisonQuestions());
   return all;
