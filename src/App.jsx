@@ -4034,7 +4034,7 @@ function canShowNotifications() {
 function notifyNewPost(post) {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    new Notification(`${post.author_name} posted in Community`, {
+    new Notification(`${post.author_name} posted in the Group`, {
       body: String(post.body || "").trim().slice(0, 140) || "Shared a video",
       icon: "/icon-192.png",
       tag: "strength-matrix-community",
@@ -4290,6 +4290,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const [searching, setSearching] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const searchSeq = useRef(0);
+  const debounce = useRef(null);
+  useEffect(() => () => { if (debounce.current) clearTimeout(debounce.current); }, []);
 
   // Suggestions: the technique list first, then any word people have actually
   // used in this channel that the list does not know about.
@@ -4304,16 +4306,20 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
-    const starts = TECHNIQUE_TERMS.filter((t) => t.startsWith(q));
-    const contains = TECHNIQUE_TERMS.filter((t) => !t.startsWith(q) && t.includes(q));
+    // The technique vocabulary belongs to the Technique channel. In General,
+    // typing "ar" was offering armbar, arm drag and arm triangle to someone
+    // asking a question about the app.
+    const vocab = channel === "technique" ? TECHNIQUE_TERMS : [];
+    const starts = vocab.filter((t) => t.startsWith(q));
+    const contains = vocab.filter((t) => !t.startsWith(q) && t.includes(q));
     const fromPosts = postedWords.filter((w) => w.includes(q)
-      && !TECHNIQUE_TERMS.some((t) => t.includes(w)));
+      && !vocab.some((t) => t.includes(w)));
     return [...starts, ...contains, ...fromPosts].slice(0, 6);
-  }, [query, postedWords]);
+  }, [query, postedWords, channel]);
 
-  const runSearch = useCallback(async (term) => {
+  const runSearch = useCallback(async (term, syncInput = true) => {
     const q = String(term || "").trim();
-    setQuery(q);
+    if (syncInput) setQuery(q);
     if (q.length < 2) { setResults(null); setSearchFailed(false); return; }
     const mine = ++searchSeq.current;
     setSearching(true);
@@ -4418,7 +4424,17 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     if (res.ok) {
       mutations.current += 1;
       // De-dupe against a poll that already picked it up.
-      setPosts((prev) => ((prev || []).some((p) => p.id === res.post.id) ? prev : [res.post, ...(prev || [])]));
+      const add = (prev) => ((prev || []).some((p) => p.id === res.post.id) ? prev : [res.post, ...(prev || [])]);
+      setPosts(add);
+      // The feed is hidden while results are showing, so a new post would
+      // vanish into a list nobody is looking at. Show it if it matches what
+      // they searched for, and otherwise drop back to the feed so they can see
+      // that it posted at all.
+      if (results !== null && !parentId) {
+        const q = query.trim().toLowerCase();
+        if (q && String(text || "").toLowerCase().includes(q)) setResults(add);
+        else clearSearch();
+      }
     }
     return res.ok;
   };
@@ -4437,7 +4453,14 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     mutations.current += 1;
     const res = await hideCommunityPost(post, userId);
     mutations.current += 1;
-    if (res.ok) setPosts((prev) => (prev || []).filter((p) => p.id !== post.id && p.parent_id !== post.id));
+    const gone = (list) => (list || []).filter((p) => p.id !== post.id && p.parent_id !== post.id);
+    if (res.ok) {
+      setPosts(gone);
+      // Search results are a separate list. Without this the post stayed on
+      // screen with a live Remove button, and a second tap re-stamped it and
+      // tried to delete its clip again.
+      setResults((prev) => (prev === null ? null : gone(prev)));
+    }
     // Offered in the same breath as the removal, because that is the moment you
     // know you want it — not later, from a settings screen you'd have to find.
     if (res.ok && alsoBlock && post.author_id !== userId) {
@@ -4450,13 +4473,19 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   };
 
   const unblock = async (row) => {
+    mutations.current += 1;
     const res = await setCommunityBlock(row.user_id, row.user_name, false);
+    mutations.current += 1;
     if (res.ok) setBlocks((prev) => prev.filter((x) => x.user_id !== row.user_id));
   };
 
   const report = async (post) => {
+    // Bracket the whole thing in mutations, or load()'s staleness guard lets an
+    // in-flight poll overwrite the optimistic flag and "Reported" reverts.
+    mutations.current += 1;
     setReports((prev) => [...prev, { post_id: post.id }]);
     const res = await reportCommunityPost(post.id, userId);
+    mutations.current += 1;
     if (res.ok) {
       emitToast({ kind: "success", message: "Sent to Kyle. He'll take a look.", autoDismissMs: 5000 });
     } else {
@@ -4485,9 +4514,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   if (prefs.left) {
     return (
       <div className="tab-pad">
-        <Card title="You've left the community">
+        <Card title="You've left the Group">
           <p className="muted">You won't see posts or get notified. Nothing you posted was deleted — rejoin whenever you like and it will all still be there.</p>
-          <button className="btn-primary wide" style={{ marginTop: 12 }} onClick={() => savePrefs({ left: false })}>Rejoin the community</button>
+          <button className="btn-primary wide" style={{ marginTop: 12 }} onClick={() => savePrefs({ left: false })}>Rejoin the Group</button>
         </Card>
       </div>
     );
@@ -4499,7 +4528,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     <div className="tab-pad">
       <div className="community-head">
         <div>
-          <h2 className="program-title" style={{ margin: 0 }}>Community</h2>
+          <h2 className="program-title" style={{ margin: 0 }}>Group</h2>
           <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>
             Everyone training with Kyle.
           </p>
@@ -4526,7 +4555,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
           onChange={(e) => {
             const v = e.target.value;
             setQuery(v);
-            if (v.trim().length < 2) { searchSeq.current++; setResults(null); setSearchFailed(false); setSearching(false); }
+            if (v.trim().length < 2) { searchSeq.current++; setResults(null); setSearchFailed(false); setSearching(false); return; }
+            setSearching(true);
+            if (debounce.current) clearTimeout(debounce.current);
+            debounce.current = setTimeout(() => runSearch(v, false), 350);
           }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(query); } }}
         />
@@ -4546,11 +4578,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         </div>
       )}
 
-      {query.trim().length >= 2 && results === null && !searching && (
-        <p className="muted" style={{ fontSize: 12.5, marginTop: -2, marginBottom: 12 }}>
-          Press enter to search, or pick one above.
-        </p>
-      )}
+
       {isCoach && posts && !channelsAreReady() && (
         <div className="adjust-box" style={{ marginBottom: 14 }}>
           Both tabs are showing the same posts because the channel column is not in the database yet.
@@ -4571,7 +4599,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
             {notifyState === "denied"
               ? "Notifications are blocked for this site in your browser settings."
               : notifyState === "undeliverable"
-                ? "This phone won't deliver notifications from the app — check the Group tab for new posts."
+                ? "This phone won't deliver notifications from the app — open the Group tab to see new posts."
                 : "This browser can't show notifications."}
           </span>
         ) : (
