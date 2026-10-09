@@ -15,6 +15,30 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
+// Handles get typed with and without their sigil, and with stray spaces. Take
+// whatever is in the variable and produce a URL that works either way.
+function venmoUrl(handle) {
+  const h = String(handle || "").trim().replace(/^@+/, "");
+  return h ? `https://venmo.com/u/${encodeURIComponent(h)}` : "";
+}
+function cashAppUrl(tag) {
+  const t = String(tag || "").trim().replace(/^\$+/, "");
+  return t ? `https://cash.app/$${encodeURIComponent(t)}` : "";
+}
+// A tappable handle. Falls back to plain text if the handle is unusable, so a
+// typo in an environment variable never produces a dead link.
+function PayHandle({ label, handle, href, size = 14.5, gap = 6 }) {
+  if (!handle) return null;
+  const inner = <strong>{handle}</strong>;
+  return (
+    <div style={{ fontSize: size, marginBottom: gap }}>
+      {label}:{" "}
+      {href
+        ? <a href={href} target="_blank" rel="noopener noreferrer">{inner}</a>
+        : inner}
+    </div>
+  );
+}
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 
@@ -5594,8 +5618,8 @@ function PaymentModal({ onClose, userId }) {
                 <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
               )
             )}
-            {coachVenmo && <div style={{ fontSize: 14.5, marginBottom: 6 }}>Venmo: <strong>{coachVenmo}</strong></div>}
-            {coachCashApp && <div style={{ fontSize: 14.5, marginBottom: coachPaymentLink ? 12 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} />
+            <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} gap={coachPaymentLink ? 12 : 0} />
             {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
           </div>
         </Card>
@@ -7457,8 +7481,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
               )}
               {(coachVenmo || coachCashApp || coachPaymentLink) ? (
                 <div style={{ textAlign: "center" }}>
-                  {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
-                  {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+                  <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} size={13.5} gap={4} />
+                  <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} size={13.5} gap={coachPaymentLink ? 10 : 0} />
                   {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
                 </div>
               ) : (
@@ -10455,8 +10479,8 @@ function AuthScreen() {
                 <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
               )
             )}
-            {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
-            {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
+            <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} size={13.5} gap={4} />
+            <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} size={13.5} gap={coachPaymentLink ? 10 : 0} />
             {coachPaymentLink && <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
           </div>
         )}
