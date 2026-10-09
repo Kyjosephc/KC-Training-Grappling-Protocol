@@ -9975,9 +9975,10 @@ function GlobalStyle() {
       .stat-chip { flex: 1 1 45%; min-width: 90px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
       .stat-chip-value { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 0.02em; color: var(--accent); }
       .stat-chip-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-      .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+      .card { background: none; border: none; border-top: 1px solid var(--border); border-radius: 0; padding: 18px 0 4px; margin-bottom: 0; }
+      .card:first-child { border-top: none; padding-top: 0; }
       .card-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
-      .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.04em; color: var(--text); }
+      .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
       /* Form fields need a 3:1 edge against their background. --border is 1.4:1,
@@ -10090,12 +10091,12 @@ function GlobalStyle() {
       .section-preview-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
       .preview-toggle { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 8px; }
       .section-preview-ex-row { font-size: 13px; color: var(--text); padding: 3px 0 3px 8px; border-left: 2px solid var(--border); margin-left: 2px; }
-      .section-subheading { font-size: 12px; letter-spacing: 0.03em; color: var(--accent); margin: 8px 0 4px; }
-      .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px 18px; font-weight: 800; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
+      .section-subheading { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-dim); margin: 14px 0 6px; }
+      .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 4px; padding: 16px 18px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.12em; box-shadow: none; }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
       .btn-primary:disabled { opacity: 0.6; }
       .btn-ghost:disabled { opacity: 0.6; cursor: default; }
-      .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+      .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 12px 18px; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: center; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
       .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 2px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
