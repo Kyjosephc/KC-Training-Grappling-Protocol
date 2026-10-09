@@ -1181,6 +1181,22 @@ function reengagementMessage(days) {
 // and starts describing work capacity — at 20 reps it claims 1.67x, which would
 // then drive every weight suggestion the app makes from that day on.
 const E1RM_REP_CAP = 12;
+
+// How many sessions an athlete gets before the first payment prompt. A fixed
+// number on purpose: this used to be however many sessions a week their own
+// record claimed, and their record is the one thing they can write freely.
+const FREE_SESSION_LIMIT = 3;
+
+// Whether the free sessions are spent. Pulled out of the render so the one rule
+// that decides whether somebody is asked for money can be tested on its own.
+// Two clauses, and both are needed: the week number catches an athlete who
+// skips ahead without logging anything, the log count catches one who stays on
+// week 1 and logs it out.
+function freeSessionsUsed(client) {
+  if (!client || !client.program) return false;
+  const pos = positionAtIndex(client.program, client.sessionsCompleted || 0);
+  return pos.weekNumber > 1 || (client.logs || []).length >= FREE_SESSION_LIMIT;
+}
 function est1RM(weight, reps) {
   if (!weight || !reps) return 0;
   if (reps === 1) return weight;
@@ -5033,7 +5049,11 @@ function MainApp({ userId, onSignOut }) {
     (async () => {
       const { data: authed } = await supabase.auth.getUser();
       const { error } = await supabase.from("client_links")
-        .upsert({ client_user_id: userId, coach_user_id: COACH_USER_ID, client_email: authed?.user?.email || null }, { onConflict: "client_user_id" });
+        .upsert({ client_user_id: userId, coach_user_id: COACH_USER_ID, client_email: authed?.user?.email || null },
+          // ignoreDuplicates makes this ON CONFLICT DO NOTHING. Without it an
+          // existing row turns this into an UPDATE, and only the coach may
+          // update client_links — so it failed on every load after the first.
+          { onConflict: "client_user_id", ignoreDuplicates: true });
       if (error) console.warn("coach link:", error.message);
     })();
   }, [userId]);
@@ -6469,15 +6489,12 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
           <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</h3>
           <p className="muted" style={{ marginBottom: 10 }}>
-            {client?.paid
-              ? "This athlete is marked as paid — they have full access to the program going forward, with no more payment prompts."
-              : "The first week is free. Starting in Week 2, this athlete will be shown your payment info and won't be able to start that session until you mark them as paid here."}
+            An athlete's first week is free. From Week 2 on they see your Venmo and Cash App codes and cannot start a session until you mark them as paid. Once you do it is permanent — they are never asked again, through this block and every block after it.
           </p>
-          {client?.paid ? (
-            <button className="btn-ghost wide" onClick={() => onPersist({ ...client, paid: false })}>Mark as Unpaid</button>
-          ) : (
-            <button className="btn-primary wide" onClick={() => onPersist({ ...client, paid: true })}>Mark as Paid</button>
-          )}
+          <p className="muted" style={{ marginBottom: 10 }}>
+            You mark somebody paid in the Coach Dashboard, on their row. That is the only place in the app that can do it, and it has to be: the flag lives on the server in a column only your account is allowed to write, which is what stops an athlete handing it to themselves. Their copy of the app is told the answer, it never decides it.
+          </p>
+          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
         </>
       )}
 
@@ -7192,10 +7209,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   // logging anything, so an athlete could land on week two having logged
   // nothing and never be asked to pay. The week they are actually on is what
   // decides it, and nothing in the app moves that without their say-so.
-  const livePos = positionAtIndex(client.program, client.sessionsCompleted || 0);
-  const freeWeekUsed = livePos.weekNumber > 1
-    || (client.logs || []).length >= (client.program.sessionsPerWeek || 3);
-  const awaitingPayment = isCurrent && freeWeekUsed && !client.paid;
+  const awaitingPayment = isCurrent && freeSessionsUsed(client) && !client.paid;
   const [checkingPaid, setCheckingPaid] = useState(false);
   const [paidCheckEmpty, setPaidCheckEmpty] = useState(false);
   const onCheckPaid = async () => {
@@ -10479,7 +10493,7 @@ function AuthScreen() {
             // coach dashboard, pay, and then hard-lock at week 2. The upsert on
             // load below is the real fix; this is just the fast path.
             const { error: linkErr } = await supabase.from("client_links")
-              .upsert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email }, { onConflict: "client_user_id" });
+              .upsert({ client_user_id: newUserId, coach_user_id: COACH_USER_ID, client_email: signUpData.user.email }, { onConflict: "client_user_id", ignoreDuplicates: true });
             if (linkErr) console.warn("client_links insert deferred to first sign-in:", linkErr.message);
           }
           setInfo("Account created. If we ask you to confirm your email, open the link we just sent you and then come back and sign in. Otherwise you'll be taken straight to your program.");

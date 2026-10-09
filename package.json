@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify:rules": "sh scripts/verify-rules.sh"
+    "verify:rules": "sh scripts/verify-rules.sh",
+    "verify:payment": "sh scripts/verify-payment.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
