@@ -18,20 +18,6 @@ const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 
-// Stripe passes client_reference_id straight through to the webhook, and it is
-// the only way the server learns which athlete just paid — without it a payment
-// arrives that nobody can match to an account. An email prefill saves typing it
-// on a phone. Anything that is not a well-formed URL is handed back untouched
-// rather than throwing on the way to a payment screen.
-function paymentLinkFor(base, userId, email) {
-  if (!base) return base;
-  try {
-    const u = new URL(base);
-    if (userId) u.searchParams.set("client_reference_id", userId);
-    if (email) u.searchParams.set("prefilled_email", email);
-    return u.toString();
-  } catch { return base; }
-}
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
 // Every escalation in the app — a payment that has not been marked, a report, a
 // deletion request — ended in "ask your coach". That worked when every athlete
@@ -5601,7 +5587,7 @@ function PaymentModal({ onClose, userId }) {
           <div style={{ textAlign: "center" }}>
             {qrOk && (
               coachPaymentLink ? (
-                <a href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">
+                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
                   <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
                 </a>
               ) : (
@@ -5610,7 +5596,7 @@ function PaymentModal({ onClose, userId }) {
             )}
             {coachVenmo && <div style={{ fontSize: 14.5, marginBottom: 6 }}>Venmo: <strong>{coachVenmo}</strong></div>}
             {coachCashApp && <div style={{ fontSize: 14.5, marginBottom: coachPaymentLink ? 12 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-            {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE}</a>}
+            {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
           </div>
         </Card>
       ) : (
@@ -5618,7 +5604,7 @@ function PaymentModal({ onClose, userId }) {
       )}
       <p className="muted" style={{ fontSize: 12.5 }}>
         {coachPaymentLink
-          ? "One payment, and the program is yours to keep — no subscription and nothing to cancel. Card details are handled by Stripe; this app never sees, processes or stores a card or bank account number."
+          ? "One payment and the program is yours to keep — no subscription and nothing to cancel. You pay Kyle directly; this app never sees, processes or stores a card or bank account number."
           : "This app never sees, processes or stores a card or bank account number."}
       </p>
     </ModalShell>
@@ -5813,7 +5799,7 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
 const TERMS_SECTIONS = [
   { heading: "What this app is", body: "Strength Matrix is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
   { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to the person who operates the app.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
-  { heading: "Payment", body: `The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one, and there is nothing to cancel. Payment is taken by Stripe, which handles the card details; this app never sees, transmits or stores a card or bank account number, and it cannot charge you again. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable. If something is wrong, email ${SUPPORT_EMAIL || "the address in Settings"} within 14 days of paying and you will be refunded. If you stop training, nothing further is charged and everything you have logged stays in your account.` },
+  { heading: "Payment", body: `The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one, and there is nothing to cancel. You pay Kyle directly, through Venmo or whichever method is shown in the app; this app never sees, transmits or stores a card or bank account number, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable. If something is wrong, email ${SUPPORT_EMAIL || "the address in Settings"} within 14 days of paying and you will be refunded. If you stop training, nothing further is charged and everything you have logged stays in your account.` },
   { heading: "Not coaching, not medical advice", body: "This app is software that writes you a training program. It is not personal training, it is not coaching, and it is not medical care: nobody is supervising you, reviewing your sessions or assessing whether a given lift is safe for you. It cannot account for an injury, a medical condition, or anything else it has not been told, so check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you say you feel, but it cannot see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train, that you are choosing to train unsupervised, and that you accept that risk as your own." },
   { heading: "Your data, your call", body: `You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, email ${SUPPORT_EMAIL || "the address in Settings"} and it will be done within 30 days. Deleting your account removes your training record and your posts; clips you have already uploaded are removed with them.` },
   { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
@@ -7455,7 +7441,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{coachPaymentLink
-                ? `One payment of $${PROGRAM_PRICE - (client.promoDiscount || 0)} unlocks the whole program and keeps it — no subscription, nothing to cancel. Pay below and this screen unlocks on its own within a minute; you do not need to tell anyone.`
+                ? `One payment of $${PROGRAM_PRICE - (client.promoDiscount || 0)} unlocks the whole program and keeps it — no subscription, nothing to cancel. Pay using the details below, then Kyle confirms it on his end and this screen picks that up on its own within a minute.`
                 : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Once it is confirmed this screen unlocks on its own within a minute — or tap Check again below.`}</p>
               <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
                 You signed a liability waiver before your first session. It still applies: this is
@@ -7473,7 +7459,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
                   {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE - (client.promoDiscount || 0)} once and unlock</a>}
+                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
                 </div>
               ) : (
                 <p className="muted" style={{ marginBottom: 0 }}>Payment isn't set up yet. Try again shortly.</p>
