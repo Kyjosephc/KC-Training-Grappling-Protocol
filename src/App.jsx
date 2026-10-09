@@ -3014,6 +3014,12 @@ const SCHEDULE_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ", "Strengt
 // looks like the program failing rather than the schedule being wrong.
 const STRENGTH_ACTIVITY = "Strength/Conditioning";
 const REQUIRED_STRENGTH_DAYS = 3;
+// How many lifting days a given program actually needs on the calendar. The
+// in-season program is two sessions a week, so asking for three was blocking
+// signup for exactly the people it was written for.
+function requiredStrengthDaysFor(variant) {
+  return variant === "D" ? 2 : REQUIRED_STRENGTH_DAYS;
+}
 function strengthDayCount(schedule) {
   return SCHEDULE_DAYS.filter(([key]) => (schedule?.[key] || []).includes(STRENGTH_ACTIVITY)).length;
 }
@@ -5713,7 +5719,8 @@ function OnboardingScreen({ onSubmit }) {
   const [picError, setPicError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const strengthDays = strengthDayCount(schedule);
-  const hasEnoughStrengthDays = strengthDays >= REQUIRED_STRENGTH_DAYS;
+  const requiredStrengthDays = requiredStrengthDaysFor(programVariant);
+  const hasEnoughStrengthDays = strengthDays >= requiredStrengthDays;
   const canSubmit = firstName.trim() && lastName.trim() && weight && hasEnoughStrengthDays;
   const handlePictureUpload = (e) => {
     const file = e.target.files?.[0];
@@ -5806,7 +5813,7 @@ function OnboardingScreen({ onSubmit }) {
       <div className={`schedule-requirement ${hasEnoughStrengthDays ? "met" : ""}`} role="status">
         {hasEnoughStrengthDays
           ? `${strengthDays} strength days selected — you're set.`
-          : `${strengthDays} of ${REQUIRED_STRENGTH_DAYS} strength days selected. Pick ${REQUIRED_STRENGTH_DAYS - strengthDays} more to continue.`}
+          : `${strengthDays} of ${requiredStrengthDays} strength days selected. Pick ${requiredStrengthDays - strengthDays} more to continue.`}
       </div>
       {programVariant === "A" && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
@@ -5839,7 +5846,8 @@ function OnboardingScreen({ onSubmit }) {
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
       {!hasEnoughStrengthDays && (firstName.trim() && lastName.trim() && weight) && (
         <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0, color: "var(--amber)" }}>
-          Go back up to your weekly schedule and pick {REQUIRED_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {REQUIRED_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start.
+          Go back up to your weekly schedule and pick {requiredStrengthDays - strengthDays} more Strength/Conditioning {requiredStrengthDays - strengthDays === 1 ? "day" : "days"} before you start.
+          {programVariant === "D" ? " Program D only needs two." : ""}
         </p>
       )}
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver || submitting}
@@ -6695,9 +6703,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
-      {strengthDayCount(schedule) < REQUIRED_STRENGTH_DAYS && (
+      {strengthDayCount(schedule) < requiredStrengthDaysFor(client?.program?.variant) && (
         <div className="schedule-requirement" role="status">
-          {strengthDayCount(schedule)} of {REQUIRED_STRENGTH_DAYS} Strength/Conditioning days selected. Your program is written for three a week — you can save fewer, but the plan assumes three.
+          {strengthDayCount(schedule)} of {requiredStrengthDaysFor(client?.program?.variant)} Strength/Conditioning days selected. {requiredStrengthDaysFor(client?.program?.variant) === 2 ? "Your program is written for two a week" : "Your program is written for three a week"} — you can save fewer, but the plan assumes that many.
         </div>
       )}
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>

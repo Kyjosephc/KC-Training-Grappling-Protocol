@@ -164,6 +164,52 @@ check("and the answers build a real twelve-week program", () => {
   if (A.positionAtIndex(built.program, 35).weekNumber !== 12) throw new Error("session 36 is not in week 12");
 });
 
+console.log("\nHow many lifting days each program asks for");
+// The in-season program is two sessions a week. Asking for three lifting days
+// on the calendar used to block signup for the people it was written for.
+const pickProgram = (title) => {
+  const card = [...host.querySelectorAll('[role="radio"]')]
+    .find((el) => new RegExp(title, "i").test(el.textContent));
+  if (!card) throw new Error(`no program card matching ${title}`);
+  hit(card);
+};
+const fillProfile = () => {
+  openOnboarding();
+  signWaiver();
+  const t = [...host.querySelectorAll("input[type=text]")];
+  setVal(t[0], "Dani"); setVal(t[1], "Reyes");
+  const n = [...host.querySelectorAll("input[type=number]")];
+  setVal(n[0], "148"); setVal(n[1], "5"); setVal(n[2], "6");
+};
+const pickStrengthDays = (howMany) => {
+  const picks = buttons().filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
+  for (let i = 0; i < howMany; i++) hit(picks[i]);
+};
+
+check("Program D lets you start on two lifting days", () => {
+  fillProfile();
+  pickProgram("In-Season Maintenance");
+  pickStrengthDays(2);
+  if (byText(/get started/i).disabled) throw new Error("two days is not enough for a two-day program");
+});
+check("Program B still wants three", () => {
+  fillProfile();
+  pickProgram("Offseason Strength Build");
+  pickStrengthDays(2);
+  if (!byText(/get started/i).disabled) throw new Error("a three-day program accepted two lifting days");
+  // Picking the same day again clears it, so start over rather than adding.
+  fillProfile();
+  pickProgram("Offseason Strength Build");
+  pickStrengthDays(3);
+  if (byText(/get started/i).disabled) throw new Error("three days is still not enough");
+});
+check("Program A still wants three", () => {
+  fillProfile();
+  pickProgram("Condensed Conjugate");
+  pickStrengthDays(2);
+  if (!byText(/get started/i).disabled) throw new Error("a three-day program accepted two lifting days");
+});
+
 console.log("\nWeek one, free");
 const marcusWeek1 = athlete({ id: "marcus", firstName: "Marcus", sessionsCompleted: 0, logs: [], paid: false });
 check("today's session is offered, no payment wall", () => {
