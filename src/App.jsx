@@ -7448,7 +7448,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{coachPaymentLink
-                ? `$${PROGRAM_PRICE - (client.promoDiscount || 0)} a month unlocks the rest of your program. Pay below and this screen unlocks on its own within a minute — you do not need to tell anyone.`
+                ? `One payment of $${PROGRAM_PRICE - (client.promoDiscount || 0)} unlocks the whole program and keeps it — no subscription, nothing to cancel. Pay below and this screen unlocks on its own within a minute; you do not need to tell anyone.`
                 : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
               <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {paidCheckEmpty && !checkingPaid && (
@@ -7461,7 +7461,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
                   {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE - (client.promoDiscount || 0)} and unlock</a>}
+                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE - (client.promoDiscount || 0)} once and unlock</a>}
                 </div>
               ) : (
                 <p className="muted" style={{ marginBottom: 0 }}>Contact your coach for payment instructions.</p>

@@ -1,8 +1,11 @@
 # Taking payment automatically
 
 Right now you mark people paid by hand. This replaces that: an athlete hits the
-paywall, taps Pay, and the app unlocks itself about a second later. If they
-cancel, it locks itself again.
+paywall, taps Pay, and the app unlocks itself about a second later.
+
+This is set up as a ONE-TIME $15 payment, not a subscription. Somebody who pays
+is in for good — there is nothing to cancel and nothing to lock them out of
+later.
 
 Everything on this page is a one-time setup. Work through it in order — about
 twenty minutes. Nothing is live until the last step.
@@ -23,7 +26,7 @@ It adds two columns so the webhook can find an athlete again when they cancel.
    you can do.
 2. In the Stripe dashboard, **Product catalogue** → **Add product**.
    - Name: Strength Matrix
-   - Price: **15.00 USD**, **Recurring**, **Monthly**
+   - Price: **15.00 USD**, **One-off** (not recurring — they pay once and keep access)
    - Save.
 3. On that product, **Create payment link**.
    - Under *After payment*, choose **Redirect customers to your website** and
@@ -74,9 +77,9 @@ VITE_COACH_PAYMENT_LINK      https://buy.stripe.com/aEU...
 3. Endpoint URL:
    `https://strength-matrix-kyjosephc.vercel.app/api/stripe-webhook`
 4. Select these events and nothing else:
-   - `checkout.session.completed`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
+   - `checkout.session.completed` — the one that matters
+   - `customer.subscription.updated` — unused on a one-time price; harmless
+   - `customer.subscription.deleted` — same
 5. Add the endpoint, then copy its **Signing secret** (starts `whsec_`).
 6. Back in Vercel, add it as a **Secret**:
 
@@ -110,18 +113,21 @@ If step 4 does not unlock: open the webhook in Stripe and read the response.
 | 500 Server is not configured | One of the four Secret variables is missing or misspelled |
 | 200 but still locked | Check the Vercel function logs — probably "no athlete matched", meaning the payment did not carry the athlete's id. That happens if someone pays from the signup screen before their account exists; mark them paid by hand that once. |
 
+On a one-time price, `stripe_customer_id` and `stripe_subscription_id` stay
+empty in the database. That is correct — Stripe does not create either for a
+single payment. The column that matters is `paid`.
+
 ---
 
 ## What happens after
 
-- Someone pays → unlocked within seconds, no action from you.
-- Someone cancels → locked at the end of the period they paid for.
-- A card fails → they **stay unlocked** while Stripe retries. Only a genuine
-  cancellation locks them out. Somebody mid-programme should not lose access
-  over an expired card.
+- Someone pays → unlocked within seconds, no action from you. They keep it.
+- Nobody gets locked out. There is no subscription, so there is nothing to
+  cancel and no failed card to worry about.
 - You can still mark anyone paid by hand in the Coach Dashboard — for a friend,
-  a comp, or anyone who pays you another way. That still works and the webhook
-  will not undo it unless they had a Stripe subscription that then ended.
+  a comp, or anyone who pays you another way.
+- The webhook also handles subscription cancellations, which simply never fire
+  on a one-time price. If you ever switch to monthly, that side already works.
 
 ## Running it on test mode first
 
