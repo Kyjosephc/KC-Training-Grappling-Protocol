@@ -17,6 +17,21 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
+
+// Stripe passes client_reference_id straight through to the webhook, and it is
+// the only way the server learns which athlete just paid — without it a payment
+// arrives that nobody can match to an account. An email prefill saves typing it
+// on a phone. Anything that is not a well-formed URL is handed back untouched
+// rather than throwing on the way to a payment screen.
+function paymentLinkFor(base, userId, email) {
+  if (!base) return base;
+  try {
+    const u = new URL(base);
+    if (userId) u.searchParams.set("client_reference_id", userId);
+    if (email) u.searchParams.set("prefilled_email", email);
+    return u.toString();
+  } catch { return base; }
+}
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
 // Every escalation in the app — a payment that has not been marked, a report, a
 // deletion request — ended in "ask your coach". That worked when every athlete
@@ -5314,7 +5329,7 @@ function MainApp({ userId, onSignOut }) {
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
-          <TodayTab client={client} onPersist={persistClient}
+          <TodayTab client={client} onPersist={persistClient} userId={userId}
             onStartLog={(phaseId, dayId) => setLogging({ phaseId, dayId })}
             onStartMobility={() => setShowMobility(true)}
             onRefreshProgram={refreshProgramTemplate}
@@ -5340,7 +5355,7 @@ function MainApp({ userId, onSignOut }) {
       <ToastHost />
       {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
-      {showPayment && <PaymentModal onClose={() => setShowPayment(false)} />}
+      {showPayment && <PaymentModal userId={userId} onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showSafety && (
         <SafetyScreenModal onClose={async () => {
@@ -5576,7 +5591,7 @@ function OnboardingScreen({ onSubmit }) {
   );
 }
 
-function PaymentModal({ onClose }) {
+function PaymentModal({ onClose, userId }) {
   const [qrOk, setQrOk] = useState(true);
   const hasAnything = coachVenmo || coachCashApp || coachPaymentLink || qrOk;
   return (
@@ -5586,7 +5601,7 @@ function PaymentModal({ onClose }) {
           <div style={{ textAlign: "center" }}>
             {qrOk && (
               coachPaymentLink ? (
-                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
+                <a href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">
                   <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
                 </a>
               ) : (
@@ -5595,7 +5610,7 @@ function PaymentModal({ onClose }) {
             )}
             {coachVenmo && <div style={{ fontSize: 14.5, marginBottom: 6 }}>Venmo: <strong>{coachVenmo}</strong></div>}
             {coachCashApp && <div style={{ fontSize: 14.5, marginBottom: coachPaymentLink ? 12 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-            {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
+            {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE}</a>}
           </div>
         </Card>
       ) : (
@@ -7088,7 +7103,7 @@ function sessionShape(sections) {
   return { working, buildUps, minutes: Math.max(10, Math.round((seconds + 8 * 60) / 60 / 5) * 5) };
 }
 
-function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram, onReloadClient }) {
+function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram, onReloadClient, userId }) {
   const [compLearned, setCompLearned] = useState("");
   const [compWorkOn, setCompWorkOn] = useState("");
   const [savingDebrief, setSavingDebrief] = useState(false);
@@ -7432,7 +7447,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           awaitingPayment ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
-              <p className="muted" style={{ marginBottom: 10 }}>{`Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
+              <p className="muted" style={{ marginBottom: 10 }}>{coachPaymentLink
+                ? `$${PROGRAM_PRICE - (client.promoDiscount || 0)} a month unlocks the rest of your program. Pay below and this screen unlocks on its own within a minute — you do not need to tell anyone.`
+                : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
               <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {paidCheckEmpty && !checkingPaid && (
                 <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
@@ -7444,7 +7461,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 <div style={{ textAlign: "center" }}>
                   {coachVenmo && <div style={{ fontSize: 13.5, marginBottom: 4 }}>Venmo: <strong>{coachVenmo}</strong></div>}
                   {coachCashApp && <div style={{ fontSize: 13.5, marginBottom: coachPaymentLink ? 10 : 0 }}>Cash App: <strong>{coachCashApp}</strong></div>}
-                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}
+                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE - (client.promoDiscount || 0)} and unlock</a>}
                 </div>
               ) : (
                 <p className="muted" style={{ marginBottom: 0 }}>Contact your coach for payment instructions.</p>
