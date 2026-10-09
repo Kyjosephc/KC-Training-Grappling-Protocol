@@ -25,6 +25,24 @@ function cashAppUrl(tag) {
   const t = String(tag || "").trim().replace(/^\$+/, "");
   return t ? `https://cash.app/$${encodeURIComponent(t)}` : "";
 }
+function PayMethod({ brand, label, handle, href, src }) {
+  const [imgOk, setImgOk] = useState(true);
+  if (!handle) return null;
+  const inner = (
+    <>
+      {imgOk && src && (
+        <img className="pay-qr" src={src} alt={`${label} QR code`} loading="lazy"
+          onError={() => setImgOk(false)} />
+      )}
+      <span className="pay-method-label">{label}</span>
+      <span className="pay-method-handle">{handle}</span>
+    </>
+  );
+  return href
+    ? <a className={`pay-method ${brand}`} href={href} target="_blank" rel="noopener noreferrer">{inner}</a>
+    : <div className={`pay-method ${brand}`}>{inner}</div>;
+}
+
 // A tappable handle. Falls back to plain text if the handle is unusable, so a
 // typo in an environment variable never produces a dead link.
 function PayHandle({ label, handle, href, size = 14.5, gap = 6 }) {
@@ -7463,29 +7481,36 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         {isCurrent ? (
           awaitingPayment ? (
             <div className="adjust-box" style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
-              <p className="muted" style={{ marginBottom: 10 }}>{coachPaymentLink
-                ? `One payment of $${PROGRAM_PRICE - (client.promoDiscount || 0)} unlocks the whole program and keeps it — no subscription, nothing to cancel. Pay using the details below, then Kyle confirms it on his end and this screen picks that up on its own within a minute.`
-                : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Once it is confirmed this screen unlocks on its own within a minute — or tap Check again below.`}</p>
-              <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-                You signed a liability waiver before your first session. It still applies: this is
-                software, you train unsupervised and at your own risk, and the fee buys access to
-                the program, not coaching or supervision.
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Week 1 is complete</div>
+              <div className="pay-amount">${PROGRAM_PRICE - (client.promoDiscount || 0)}</div>
+              <p className="muted pay-lede">
+                One payment unlocks the whole program and it is yours to keep — no subscription,
+                nothing to cancel. Scan a code or tap it to open the app.
               </p>
-              <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
+              {(coachVenmo || coachCashApp) ? (
+                <div className="pay-methods">
+                  <PayMethod brand="venmo" label="Venmo" handle={coachVenmo}
+                    href={venmoUrl(coachVenmo)} src="/venmo-qr.png" />
+                  <PayMethod brand="cashapp" label="Cash App" handle={coachCashApp}
+                    href={cashAppUrl(coachCashApp)} src="/cashapp-qr.png" />
+                </div>
+              ) : null}
+              <p className="muted pay-after">
+                Once Kyle confirms it, this screen unlocks on its own within a minute.
+              </p>
+              <button className="btn-ghost wide" style={{ marginTop: 0, marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {paidCheckEmpty && !checkingPaid && (
                 <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
                   Not showing as paid yet. This screen keeps checking on its own.
                   {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
                 </p>
               )}
-              {(coachVenmo || coachCashApp || coachPaymentLink) ? (
-                <div style={{ textAlign: "center" }}>
-                  <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} size={13.5} gap={4} />
-                  <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} size={13.5} gap={coachPaymentLink ? 10 : 0} />
-                  {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
-                </div>
-              ) : (
+              <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 0 }}>
+                You signed a liability waiver before your first session. It still applies: this is
+                software, you train unsupervised and at your own risk, and the fee buys access to
+                the program, not coaching or supervision.
+              </p>
+              {!coachVenmo && !coachCashApp && (
                 <p className="muted" style={{ marginBottom: 0 }}>Payment isn't set up yet. Try again shortly.</p>
               )}
             </div>
@@ -10134,6 +10159,29 @@ function GlobalStyle() {
       .report-acts { display: flex; gap: 8px; }
       .report-acts .sm { font-size: 12.5px; padding: 6px 12px; margin-top: 0; }
       .report-acts .danger { color: var(--red); border-color: var(--red); }
+      /* Payment. The amount large, then two scannable cards side by side —
+         somebody holds a phone up to one, or screenshots it to scan later. */
+      .pay-amount { font-family: 'Oswald', sans-serif; font-size: 40px; line-height: 1;
+        font-weight: 600; color: var(--accent); margin: 2px 0 6px; }
+      .pay-lede { font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+      .pay-methods { display: flex; gap: 10px; margin-bottom: 12px; align-items: stretch; }
+      .pay-method { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+        align-items: center; gap: 7px; padding: 12px 10px; border-radius: 14px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--text);
+        text-decoration: none; }
+      .pay-method.venmo { border-color: #3d95ce; }
+      .pay-method.cashapp { border-color: #00d54b; }
+      .pay-qr { display: block; width: 100%; max-width: 150px; aspect-ratio: 1;
+        object-fit: contain; background: #fff; border-radius: 10px; padding: 6px; }
+      .pay-method-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; color: var(--text-dim); }
+      .pay-method.venmo .pay-method-label { color: #3d95ce; }
+      .pay-method.cashapp .pay-method-label { color: #00d54b; }
+      .pay-method-handle { font-size: 14px; font-weight: 700; text-align: center;
+        word-break: break-word; line-height: 1.3; }
+      .pay-after { font-size: 12.5px; margin-bottom: 10px; }
+      /* One card on a narrow phone reads better stacked than squeezed. */
+      @media (max-width: 380px) { .pay-methods { flex-direction: column; } }
       .verdict-line { font-size: 14.5px; line-height: 1.5; font-weight: 600; margin: 10px 0 12px; }
       .verdict-list { list-style: none; margin: 0 0 10px; padding: 0; }
       .verdict-item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
