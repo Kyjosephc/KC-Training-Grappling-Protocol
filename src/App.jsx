@@ -2091,7 +2091,7 @@ const rpeProgramCues = {
   "Trap Bar Static Hold (Quarter Squat)": "If you have a rack, set the pins at standing height and take the bar off them — that way you never have to pull the weight, you only hold it, which is the whole point of the exercise. No rack? Then use around seventy percent of your best pull — a weight you can stand up with easily — and deadlift it normally before you hold. Do not chase the heavier number without pins: the hold is the exercise, and pulling ninety percent off the floor to get into it is where backs go. Either way: stand tall, shoulders back, ribs down, shallow breaths, and set it down under control rather than dropping it. If your back rounds getting it up, the weight is wrong — this is a holding exercise, not a pulling one.",
   "Single Arm Kettlebell Hold": "Stand tall and do not let the weight pull you sideways — the whole point is the side that is not holding anything. Ribs down, glutes on.",
   "6-Way Isometric Neck Holds": "Six directions, not four. Forehead, back of the head, each side — then the new pair: a hand on your temple as if turning to look over that shoulder, resisting the turn. Push hard enough that your head does not actually move: you are resisting, not nodding. Build the pressure over the first two seconds rather than jerking into it. The two rotation holds matter most — scrambles, head-position fights and having your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Anything that pinches or travels down an arm, stop there.",
-  "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and tell your coach.",
+  "Wall Neck Hold (feet walked out)": "Start near vertical — the further you walk your feet from the wall, the more of your bodyweight the neck carries, and that is the whole dial. Head in line with the spine, never turned while loaded, and never pushed back into extension. Move out a few centimetres a week, only once the current position is genuinely easy. Anything that pinches or travels down an arm: come off it and get it looked at by a clinician.",
   "Acceleration Sprint (10 to 15 yards)": "Never sprint cold. Do the three build-ups first — they are not a warm-up formality, they are how you avoid tearing a hamstring, and this program has you sprinting every week. Sixty percent, then eighty, then ninety, with about a minute between each, and only then go all out. In your first week keep even the \"maximal\" effort at around eighty-five percent while you find out how your body handles it. Accelerate rather than launching: build speed over the distance instead of exploding off the first step.",
   "Toes to Bar": "No swinging. If you cannot get your toes to the bar with straight legs, bring your knees to your chest instead and work toward the full version. Lower under control — that half is the part that counts.",
   "Copenhagen Plank (each side)": "Start with the short version: top leg bent, knee resting on the bench, bottom leg on the floor. Only straighten the top leg once you can hold the full time without shaking. Lift from the inner thigh and end the set when your hips start to sag, rather than fighting for the last few seconds.",
@@ -3346,11 +3346,11 @@ const PROGRAM_VARIANT_LABELS = {
 // Replacing the suffering-as-virtue quotes with coaching. These are the lines
 // that agree with the program underneath them.
 const MENTAL_COACHING_LIBRARY = [
-  { quote: "Backing off today is a training decision, not a concession. The set you don't grind is the one you don't pay for on Thursday.", author: "Your coach" },
-  { quote: "Stop when the bar slows, not when the number looks right.", author: "Your coach" },
-  { quote: "A deload week is supposed to feel too easy. That's the dose, not a mistake.", author: "Your coach" },
-  { quote: "The neck work takes four minutes and it's the reason you're still training in five years.", author: "Your coach" },
-  { quote: "Showing up on the days you don't feel like it is most of the program.", author: "Your coach" },
+  { quote: "Backing off today is a training decision, not a concession. The set you don't grind is the one you don't pay for on Thursday.", author: "Training note" },
+  { quote: "Stop when the bar slows, not when the number looks right.", author: "Training note" },
+  { quote: "A deload week is supposed to feel too easy. That's the dose, not a mistake.", author: "Training note" },
+  { quote: "The neck work takes four minutes and it's the reason you're still training in five years.", author: "Training note" },
+  { quote: "Showing up on the days you don't feel like it is most of the program.", author: "Training note" },
 
   // Weighted toward training and combat sport: the athlete reads one of these
   // standing in the gym deciding whether to load the bar, not at a desk.
@@ -3480,7 +3480,7 @@ const SAFETY_SCREEN_SECTIONS = [
   },
   {
     heading: "Pain is not the same as fatigue",
-    body: "The daily check-in is designed to manage fatigue. It is not designed to manage pain. New or worsening pain, anything sharp, anything that radiates down a limb, or anything that is worse the following morning warrants a conversation rather than a lighter session. If you have an area you need to train around, set it in Settings so the program adjusts around it, and tell your coach.",
+    body: "The daily check-in is designed to manage fatigue. It is not designed to manage pain. New or worsening pain, anything sharp, anything that radiates down a limb, or anything that is worse the following morning warrants a clinician, not a lighter session. If you have an area you need to train around, set it in Settings so the program adjusts around it.",
   },
   {
     heading: "Scope of this program",
@@ -3868,7 +3868,7 @@ function InjuryAreaPicker({ value, onChange, compact }) {
             </div>
           ))}
           <p className="muted" style={{ fontSize: 12.5 }}>
-            These swaps happen automatically from your next session. Anything acute, anything that hurts at rest or wakes you at night, or anything you're already seeing someone about — message your coach rather than training around it.
+            These swaps happen automatically from your next session. Anything acute, anything that hurts at rest or wakes you at night, or anything you're already seeing someone about — see a clinician rather than training around it.
           </p>
         </div>
       )}
@@ -5563,7 +5563,7 @@ function OnboardingScreen({ onSubmit }) {
       </div>
       </div>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, just context your coach can see and you can update anytime in Settings.</p>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it: it is a note to yourself, and you can update it anytime in Settings.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
       <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
@@ -5597,7 +5597,7 @@ function PaymentModal({ onClose, userId }) {
   return (
     <ModalShell onClose={onClose} title="Payment">
       {hasAnything ? (
-        <Card title="Pay your coach">
+        <Card title="Unlock the program">
           <div style={{ textAlign: "center" }}>
             {qrOk && (
               coachPaymentLink ? (
@@ -5614,10 +5614,12 @@ function PaymentModal({ onClose, userId }) {
           </div>
         </Card>
       ) : (
-        <EmptyState text="No payment details are set up yet — ask your coach how they'd like to be paid." />
+        <EmptyState text="No payment method is set up yet. Try again shortly." />
       )}
       <p className="muted" style={{ fontSize: 12.5 }}>
-        Payment is handled directly between you and your coach through Venmo or Cash App. This app never sees, processes or stores a card or bank account number.
+        {coachPaymentLink
+          ? "One payment, and the program is yours to keep — no subscription and nothing to cancel. Card details are handled by Stripe; this app never sees, processes or stores a card or bank account number."
+          : "This app never sees, processes or stores a card or bank account number."}
       </p>
     </ModalShell>
   );
@@ -5697,23 +5699,28 @@ const TUTORIAL_PAGES = [
 /* ============================== LIABILITY WAIVER ============================== */
 // Versioned on purpose: the stored record says which wording someone agreed to,
 // so editing the text later cannot quietly rewrite what past clients signed.
-const WAIVER_VERSION = "2026-09-24";
+// The legal name behind the app. Change VITE_PROVIDER_NAME in Vercel the day
+// an LLC exists and every agreement in here names the company from then on.
+// Bump WAIVER_VERSION at the same time so athletes re-sign against the new name.
+const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Strength Matrix";
+
+const WAIVER_VERSION = "2026-10-09";
 const WAIVER_TITLE = "Assumption of Risk and Release of Liability";
 const WAIVER_SECTIONS = [
   { heading: "What you are agreeing to",
-    body: "Read this before you set up your profile. It is a legal agreement between you and your coach. If you do not agree to it, do not use this app." },
+    body: `Read this before you set up your profile. It is a legal agreement between you and ${PROVIDER}. If you do not agree to it, do not use this app.` },
   { heading: "Strength training carries real risk",
     body: "This program prescribes heavy resistance training, including near-maximal single-rep lifts, jumping and landing, maximal sprinting, loaded carries, neck training, and conditioning work. Activities like these carry a risk of injury that cannot be designed away. That includes muscle strains, joint and ligament damage, broken bones, concussion and other head or spinal injury, heart attack or stroke, permanent disability, and death. You may also be training for a contact sport, which carries its own separate risks that this agreement does not cover." },
   { heading: "You are choosing to take that risk",
     body: "You are taking part voluntarily. You confirm that you are medically able to train, that you have had any condition or injury checked by a physician if there is any doubt, and that you will stop immediately and seek medical attention if anything hurts, feels wrong, or does not settle. You understand and knowingly accept all risks of taking part, both the ones described above and the ones that cannot be foreseen." },
   { heading: "You are training on your own, unsupervised",
-    body: "This app gives you a written program. It cannot see you, it cannot watch your technique, and it knows nothing about you that you have not typed into it. It is not a substitute for in-person coaching, and it is not medical, physiotherapy, or diagnostic advice. You are responsible for your own equipment, your own training environment, how much weight you choose to use, and whether a given session is right for you on the day." },
+    body: "This app is software. It gives you a written program generated by a computer; nobody is watching you train, reviewing your sessions, or supervising you. It cannot see you, it cannot watch your technique, and it knows nothing about you that you have not typed into it. It is not personal training, it is not coaching, and it is not medical, physiotherapy, or diagnostic advice. You decide whether to follow any part of it. You are responsible for your own equipment, your own training environment, how much weight you choose to use, and whether a given session is right for you on the day." },
   { heading: "Release",
-    body: "To the fullest extent the law allows, you release your coach from any claim, demand, or cause of action for injury, illness, disability, death, or property loss arising out of your use of this app or your participation in the training it prescribes, including claims based on ordinary negligence. You agree not to bring such a claim, and you accept responsibility for your own losses. This release does not cover gross negligence, recklessness, or intentional misconduct, and it does not waive any right that cannot lawfully be waived." },
+    body: `To the fullest extent the law allows, you release ${PROVIDER}, together with its owner, employees and anyone acting on its behalf, from any claim, demand, or cause of action for injury, illness, disability, death, or property loss arising out of your use of this app or your participation in the training it prescribes, including claims based on ordinary negligence. You agree not to bring such a claim, and you accept responsibility for your own losses. This release does not cover gross negligence, recklessness, or intentional misconduct, and it does not waive any right that cannot lawfully be waived.` },
   { heading: "If part of this does not hold",
     body: "If a court finds any part of this agreement unenforceable, the rest of it stays in force. This agreement is governed by the laws of the State of Washington and binds your heirs and anyone acting on your behalf." },
   { heading: "Signing it",
-    body: "Typing your full legal name in the signature field below is your signature on this agreement, and you intend it to have the same effect as signing it by hand. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your signature, the date and time you sign, and the version of this wording are recorded against your profile, and your coach keeps a copy of that record." },
+    body: `Typing your full legal name in the signature field below is your signature on this agreement, and you intend it to have the same effect as signing it by hand. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your signature, the date and time you sign, and the version of this wording are recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
 ];
 
 // The signature block. Typing your own name into it is the act of signing — so it
@@ -5805,10 +5812,10 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
 
 const TERMS_SECTIONS = [
   { heading: "What this app is", body: "Strength Matrix is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
-  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to your coach.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app, not just your coach. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
-  { heading: "Payment", body: "The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one. Payment goes directly to your coach; this app does not process, transmit, or store card or bank account numbers, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable — but if something is wrong, tell your coach and he will sort it out with you. There is nothing to cancel: if you stop training, nothing further is charged, and everything you have logged stays in your account." },
-  { heading: "Not medical advice", body: "This program is coaching, not medical care. It can't account for an injury, a medical condition, or anything else your coach doesn't know about, so tell your coach about anything relevant and check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you feel, but it can't see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train and you accept that risk as your own." },
-  { heading: "Your data, your call", body: "You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, contact your coach and it will be done. Deleting your account removes your training record and your posts; clips you have already uploaded are removed with them." },
+  { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to the person who operates the app.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
+  { heading: "Payment", body: `The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one, and there is nothing to cancel. Payment is taken by Stripe, which handles the card details; this app never sees, transmits or stores a card or bank account number, and it cannot charge you again. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable. If something is wrong, email ${SUPPORT_EMAIL || "the address in Settings"} within 14 days of paying and you will be refunded. If you stop training, nothing further is charged and everything you have logged stays in your account.` },
+  { heading: "Not coaching, not medical advice", body: "This app is software that writes you a training program. It is not personal training, it is not coaching, and it is not medical care: nobody is supervising you, reviewing your sessions or assessing whether a given lift is safe for you. It cannot account for an injury, a medical condition, or anything else it has not been told, so check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you say you feel, but it cannot see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train, that you are choosing to train unsupervised, and that you accept that risk as your own." },
+  { heading: "Your data, your call", body: `You can download everything you have logged at any time from Settings — it is a plain file that is yours to keep. To have your account and its data permanently deleted, email ${SUPPORT_EMAIL || "the address in Settings"} and it will be done within 30 days. Deleting your account removes your training record and your posts; clips you have already uploaded are removed with them.` },
   { heading: "Changes", body: "These terms may be updated from time to time as the app changes. The current version is always available here in Settings." },
 ];
 
@@ -6387,7 +6394,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <button className="btn-primary wide" onClick={saveBelt}>{savedBelt ? "Saved" : "Save Belt Level"}</button>
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>Optional context for you and your coach — a bad shoulder, a cranky knee, anything recent. Not a medical form.</p>
+      <p className="muted" style={{ marginBottom: 10 }}>Optional note to yourself — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it.</p>
       <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <button className="btn-primary wide" onClick={saveInjuryNotes}>{savedInjuryNotes ? "Saved" : "Save Note"}</button>
 
@@ -6400,7 +6407,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       {substitutionPool.length > 0 && (
         <>
           <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Exercise Substitutions</h3>
-          <p className="muted" style={{ marginBottom: 10 }}>Check anything you need to avoid right now. Your Max Effort rotation will skip these and pick the next exercise in the pool instead — no code, no waiting on your coach.</p>
+          <p className="muted" style={{ marginBottom: 10 }}>Check anything you need to avoid right now. Your Max Effort rotation will skip these and pick the next exercise in the pool instead — no code, no waiting on anyone.</p>
           {substitutionPool.map((name) => (
             <label key={name} className="bjj-toggle">
               <input type="checkbox" checked={excluded.includes(name)} onChange={() => toggleExcluded(name)} />
@@ -6479,7 +6486,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           <p className="muted" style={{ marginBottom: 10 }}>
             Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
           </p>
-          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email your coach</a>
+          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
         </>
       )}
       <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
@@ -6494,7 +6501,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Your program was saved when you set up your profile, so improvements your coach makes afterward don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
+        Your program was saved when you set up your profile, so later improvements to the program don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
       </p>
       {refreshed ? (
         <div className="adjust-box" style={{ borderColor: "var(--green)" }}>Your program has been updated to the latest version.</div>
@@ -7282,7 +7289,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
           <div className="nudge-card-title">Your program has been updated</div>
           <p className="muted">
-            Your coach has made changes to the program since you started — exercises, sets or reps.
+            The program has been updated since you started — exercises, sets or reps.
             Taking them replaces the plan you train from. Everything you have logged stays exactly
             where it is: sessions, Personal Records, check-ins, and the week and block you are on.
           </p>
@@ -7449,11 +7456,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Week 1 is complete — payment required to continue</div>
               <p className="muted" style={{ marginBottom: 10 }}>{coachPaymentLink
                 ? `One payment of $${PROGRAM_PRICE - (client.promoDiscount || 0)} unlocks the whole program and keeps it — no subscription, nothing to cancel. Pay below and this screen unlocks on its own within a minute; you do not need to tell anyone.`
-                : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Your coach confirms it on their end, and this screen picks that up on its own within a minute — or tap Check again below.`}</p>
+                : `Send $${PROGRAM_PRICE - (client.promoDiscount || 0)} to unlock the rest of your program. Once it is confirmed this screen unlocks on its own within a minute — or tap Check again below.`}</p>
+              <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+                You signed a liability waiver before your first session. It still applies: this is
+                software, you train unsupervised and at your own risk, and the fee buys access to
+                the program, not coaching or supervision.
+              </p>
               <button className="btn-ghost wide" style={{ marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {paidCheckEmpty && !checkingPaid && (
                 <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-                  Not showing as paid yet — your coach has to confirm it on their end. This screen keeps checking on its own.
+                  Not showing as paid yet. This screen keeps checking on its own.
                   {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
                 </p>
               )}
@@ -7464,7 +7476,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                   {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block", marginTop: 8 }} href={paymentLinkFor(coachPaymentLink, userId)} target="_blank" rel="noopener noreferrer">Pay ${PROGRAM_PRICE - (client.promoDiscount || 0)} once and unlock</a>}
                 </div>
               ) : (
-                <p className="muted" style={{ marginBottom: 0 }}>Contact your coach for payment instructions.</p>
+                <p className="muted" style={{ marginBottom: 0 }}>Payment isn't set up yet. Try again shortly.</p>
               )}
             </div>
           ) : (
@@ -7660,7 +7672,7 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
   return (
     <ModalShell onClose={onClose} title="Daily Check-In">
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        New or worsening pain isn't a rough day — that's worth a message to your coach rather than a lighter session.
+        New or worsening pain isn't a rough day — that's worth a clinician rather than a lighter session.
       </p>
       {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
       <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (optional)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
@@ -8267,8 +8279,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                       </div>
                       <p className="muted" style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
                         {plan && plan.kind === "intervals"
-                          ? "Total time end to end, including the easy recovery between rounds. Coming in short is still worth logging — it is what tells you and your coach how the week actually went."
-                          : "Coming in short is still worth logging — it is what tells you and your coach how the week actually went."}
+                          ? "Total time end to end, including the easy recovery between rounds. Coming in short is still worth logging — it is what tells you how the week actually went."
+                          : "Coming in short is still worth logging — it is what tells you how the week actually went."}
                       </p>
                     </div>
                   );
@@ -9251,7 +9263,7 @@ function BJJNotesTab({ client, onPersist }) {
   return (
     <div className="pad">
       <h2 className="program-title" style={{ margin: "0 0 4px" }}>BJJ Notes</h2>
-      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. These notes are for you — your coach's dashboard doesn't display them.</p>
+      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. These notes are for you — nothing else in the app displays them.</p>
 
       {!adding && <button className="btn-primary wide" onClick={startAdd}>+ Add Today's Notes</button>}
 
@@ -10478,6 +10490,15 @@ function AuthScreen() {
           )}
           {error && <div className="error-box" role="alert">{error}</div>}
           {info && <div className="success-box" role="status">{info}</div>}
+          {mode === "signup" && (
+            <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: "4px 0 12px" }}>
+              This app writes you a strength program and tracks your training. It is software, not
+              personal training and not medical care — nobody supervises your sessions or checks
+              whether a lift is safe for you. Heavy lifting carries a real risk of injury, and you
+              train at your own risk. You'll be asked to read and sign a liability waiver before
+              your first session.
+            </p>
+          )}
           <button className="btn-primary wide" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create Account" : mode === "forgot" ? "Send Reset Link" : "Sign In"}</button>
         </form>
         {mode === "forgot" ? (
@@ -10537,7 +10558,7 @@ function ConfigMissingScreen() {
         <div className="program-title" style={{ fontSize: 20, marginBottom: 10 }}>Setup Needed</div>
         <p className="muted">
           This app isn't available right now — that's a setup problem on our end, not anything you
-          did. Message your coach and he'll get it sorted.
+          did. Email support and it will get sorted.
         </p>
         {/* For the coach: add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as environment
             variables in the Vercel project settings, then redeploy. */}
