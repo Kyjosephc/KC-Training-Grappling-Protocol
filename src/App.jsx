@@ -10052,6 +10052,7 @@ function GlobalStyle() {
       .btn-primary { background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px 18px; font-weight: 800; font-size: 15px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
       .btn-primary.wide, .btn-ghost.wide { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
       .btn-primary:disabled { opacity: 0.6; }
+      .btn-ghost:disabled { opacity: 0.6; cursor: default; }
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px 18px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
