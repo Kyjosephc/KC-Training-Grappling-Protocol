@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Bell, BellOff, Video, Flag, ShieldOff, Search } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -565,6 +565,36 @@ async function fetchCommunityReports() {
     if (error) return [];
     return data || [];
   } catch { return []; }
+}
+
+// The reported posts themselves, fetched by id so a flagged post is reachable
+// however far down the feed it has sunk. Coach only — the select policy already
+// limits everyone else to their own reports.
+async function fetchReportedPosts(postIds) {
+  if (!supabase || !postIds || !postIds.length) return [];
+  try {
+    const { data, error } = await supabase.from("community_posts")
+      .select("id, author_id, author_name, author_belt, body, video_url, created_at, parent_id, channel")
+      .in("id", postIds.slice(0, 50))
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return data || [];
+  } catch { return []; }
+}
+
+// Dismiss: the coach looked and it was fine. Needs the coach-delete policy in
+// supabase-community-reports.sql — without it this silently matches no rows.
+async function dismissCommunityReport(postId) {
+  if (!supabase || !postId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("community_reports").delete().eq("post_id", postId);
+    if (error) throw error;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't clear that report — check your connection.", autoDismissMs: 6000 });
+  }
+  return { ok: outcome.ok };
 }
 
 function timeAgo(iso) {
@@ -3980,8 +4010,6 @@ function ConditioningPlan({ target, name }) {
 // notifying them is worse than not offering it.
 function useCommunityUnread(prefs, userId, enabled) {
   const [count, setCount] = useState(0);
-  const lastNotified = useRef(null);
-  const seeded = useRef(false);
   const p = prefs || {};
   const seenBy = lastSeenMap(prefs);
   // One query for both channels, filtered from whichever was read longer ago,
@@ -3989,7 +4017,6 @@ function useCommunityUnread(prefs, userId, enabled) {
   // read would send people looking for something that was not there.
   const lastSeen = Object.values(seenBy).sort()[0];
   const seenKey = JSON.stringify(seenBy);
-  const muted = !!p.muted;
   useEffect(() => {
     if (!enabled || !supabase || !userId) { setCount(0); return undefined; }
     let cancelled = false;
@@ -4008,17 +4035,6 @@ function useCommunityUnread(prefs, userId, enabled) {
         // With no channel column every row reads as the default channel, which
         // is exactly the single-feed behaviour from before channels existed.
         setCount(unseen.length);
-        const newest = unseen[0];
-        // Seed on the very first check whatever came back, including nothing.
-        // Doing it only when there was a backlog meant the first genuinely new
-        // post of every session counted as backlog and was never announced.
-        const first = !seeded.current;
-        seeded.current = true;
-        if (first) { lastNotified.current = newest ? newest.id : null; return; }
-        if (newest && lastNotified.current !== newest.id) {
-          lastNotified.current = newest.id;
-          if (!muted) notifyNewPost(newest);
-        }
       } catch { /* offline; the badge just stays where it was */ }
     };
     check();
@@ -4026,33 +4042,8 @@ function useCommunityUnread(prefs, userId, enabled) {
     const onVis = () => { if (document.visibilityState === "visible") check(); };
     document.addEventListener("visibilitychange", onVis);
     return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
-  }, [enabled, userId, seenKey, muted]); // eslint-disable-line
+  }, [enabled, userId, seenKey]); // eslint-disable-line
   return count;
-}
-
-// Construct one and immediately close it. On iOS this throws, which is the
-// only reliable way to know the permission you were just granted is useless.
-let notifyProbe = null;
-function canShowNotifications() {
-  if (notifyProbe !== null) return notifyProbe;
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
-    const n = new Notification("", { silent: true, tag: "strength-matrix-probe" });
-    try { n.close(); } catch {}
-    notifyProbe = true;
-  } catch { notifyProbe = false; }
-  return notifyProbe;
-}
-
-function notifyNewPost(post) {
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    new Notification(`${post.author_name} posted in the Group`, {
-      body: String(post.body || "").trim().slice(0, 140) || "Shared a video",
-      icon: "/icon-192.png",
-      tag: "strength-matrix-community",
-    });
-  } catch { /* Safari throws constructing these outside a service worker */ }
 }
 
 function VideoEmbed({ url }) {
@@ -4065,9 +4056,12 @@ function VideoEmbed({ url }) {
       return (
         <button type="button" className={`post-video poster${native ? " native" : ""}`}
           onClick={() => setPlaying(true)} aria-label="Play the shared video">
-          {e.kind === "youtube" && (
+          {e.kind === "youtube" ? (
             <img src={`https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`} alt="" loading="lazy"
               onError={(ev) => { ev.currentTarget.style.display = "none"; }} />
+          ) : (
+            <video src={`${e.href}#t=0.1`} preload="metadata" muted playsInline
+              tabIndex={-1} aria-hidden="true" />
           )}
           <span className="post-play" aria-hidden="true" />
         </button>
@@ -4094,7 +4088,8 @@ function VideoEmbed({ url }) {
   );
 }
 
-const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged }) {
+const NO_REPORTS = new Set();
+const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged, reportedReplyIds = NO_REPORTS }) {
   const mine = post.author_id === userId;
   const hearts = reactedBy.length;
   const iReacted = reactedBy.includes(userId);
@@ -4144,6 +4139,12 @@ const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, 
                   {(r.author_id === userId || isCoach) && (
                     <button className="post-remove" onClick={() => onHide(r)} aria-label="Remove this reply">
                       <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  )}
+                  {r.author_id !== userId && !isCoach && onReport && (
+                    <button className="post-remove" onClick={() => onReport(r)} disabled={reportedReplyIds.has(r.id)}
+                      aria-label={reportedReplyIds.has(r.id) ? "You reported this reply" : `Report ${r.author_name}'s reply to the coach`}>
+                      <Flag size={13} aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -4266,11 +4267,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const [pages, setPages] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [notifyState, setNotifyState] = useState(() => {
-    if (typeof Notification === "undefined") return "unsupported";
-    if (Notification.permission !== "granted") return Notification.permission;
-    return canShowNotifications() ? "granted" : "undeliverable";
-  });
 
   const savePrefs = onPrefs;
 
@@ -4473,6 +4469,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       // screen with a live Remove button, and a second tap re-stamped it and
       // tried to delete its clip again.
       setResults((prev) => (prev === null ? null : gone(prev)));
+      setFlaggedPosts((prev) => prev.filter((p) => p.id !== post.id));
+      if (reportedIds.has(post.id)) dismissCommunityReport(post.id);
     }
     // Offered in the same breath as the removal, because that is the moment you
     // know you want it — not later, from a settings screen you'd have to find.
@@ -4509,26 +4507,30 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const iAmBlocked = blocks.some((b) => b.user_id === userId);
   const reportedIds = useMemo(() => new Set(reports.map((r) => r.post_id)), [reports]);
 
-  const askNotifications = async () => {
-    if (typeof Notification === "undefined") return;
-    try {
-      const result = await Notification.requestPermission();
-      // Granting isn't the same as being able to deliver. iOS hands out the
-      // permission and then throws on the page-level constructor, because it
-      // only delivers through a service worker — which this app doesn't have.
-      // Finding that out here is the difference between an honest label and a
-      // switch that says "on" and never fires.
-      if (result === "granted" && !canShowNotifications()) { setNotifyState("undeliverable"); return; }
-      setNotifyState(result);
-      if (result === "granted") savePrefs({ muted: false });
-    } catch { /* older Safari uses a callback form; nothing to do if it refuses */ }
+  // The coach's moderation queue. Only loads when there is something in it.
+  const [flaggedPosts, setFlaggedPosts] = useState([]);
+  const reportKey = useMemo(() => [...reportedIds].sort().join(","), [reportedIds]);
+  useEffect(() => {
+    if (!isCoach || !reportKey) { setFlaggedPosts([]); return undefined; }
+    let cancelled = false;
+    fetchReportedPosts(reportKey.split(",")).then((rows) => { if (!cancelled) setFlaggedPosts(rows); });
+    return () => { cancelled = true; };
+  }, [isCoach, reportKey]);
+
+  const dismissReport = async (postId) => {
+    mutations.current += 1;
+    setReports((prev) => prev.filter((r) => r.post_id !== postId));
+    setFlaggedPosts((prev) => prev.filter((p) => p.id !== postId));
+    const res = await dismissCommunityReport(postId);
+    mutations.current += 1;
+    if (!res.ok) load();
   };
 
   if (prefs.left) {
     return (
       <div className="tab-pad">
         <Card title="You've left the Group">
-          <p className="muted">You won't see posts or get notified. Nothing you posted was deleted — rejoin whenever you like and it will all still be there.</p>
+          <p className="muted">You won't see posts and the Group tab stays quiet. Nothing you posted was deleted — rejoin whenever you like and it will all still be there.</p>
           <button className="btn-primary wide" style={{ marginTop: 12 }} onClick={() => savePrefs({ left: false })}>Rejoin the Group</button>
         </Card>
       </div>
@@ -4547,6 +4549,29 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
           </p>
         </div>
       </div>
+
+      {isCoach && flaggedPosts.length > 0 && (
+        <div className="report-queue">
+          <div className="report-queue-head">
+            <Flag size={15} aria-hidden="true" />
+            {flaggedPosts.length} reported {flaggedPosts.length === 1 ? "post" : "posts"}
+          </div>
+          {flaggedPosts.map((p) => (
+            <div className="report-item" key={p.id}>
+              <div className="report-meta">
+                {p.author_name || "Athlete"} · {timeAgo(p.created_at)}
+                {p.parent_id ? " · a reply" : ""}{p.channel ? ` · ${channelMeta(p.channel).label}` : ""}
+              </div>
+              {p.body ? <p className="report-body">{p.body}</p> : null}
+              {p.video_url ? <div className="report-meta">Has a video attached.</div> : null}
+              <div className="report-acts">
+                <button className="btn-ghost sm" onClick={() => dismissReport(p.id)}>Looks fine</button>
+                <button className="btn-ghost sm danger" onClick={() => setConfirmHide(p)}>Remove it</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="view-toggle-row" role="tablist" aria-label="Channels">
         {COMMUNITY_CHANNELS.map((c) => (
@@ -4601,34 +4626,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       )}
 
       <div className="community-prefs" role="group" aria-label="Community settings">
-        {notifyState === "granted" ? (
-          <button className={`pref-btn ${prefs.muted ? "" : "on"}`} onClick={() => savePrefs({ muted: !prefs.muted })}
-            aria-pressed={!prefs.muted}>
-            {prefs.muted ? <BellOff size={14} aria-hidden="true" /> : <Bell size={14} aria-hidden="true" />}
-            {prefs.muted ? "Notifications off" : "Notifications on"}
-          </button>
-        ) : notifyState === "unsupported" || notifyState === "denied" || notifyState === "undeliverable" ? (
-          <span className="pref-note">
-            {notifyState === "denied"
-              ? "Notifications are blocked for this site in your browser settings."
-              : notifyState === "undeliverable"
-                ? "This phone won't deliver notifications from the app — open the Group tab to see new posts."
-                : "This browser can't show notifications."}
-          </span>
-        ) : (
-          <button className="pref-btn" onClick={askNotifications}>
-            <Bell size={14} aria-hidden="true" />Turn on notifications
-          </button>
-        )}
         <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
           <LogOut size={14} aria-hidden="true" />Leave
         </button>
       </div>
-      {notifyState === "granted" && !prefs.muted && (
-        <p className="muted community-fineprint">
-          You'll get a notification while the app is open or recently used. Waking a fully closed phone needs push, which isn't built yet.
-        </p>
-      )}
 
       {iAmBlocked ? (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -4707,6 +4708,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
             {results.map((p) => (
               <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
                 onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
+                reportedReplyIds={reportedIds}
                 reactedBy={reactedBy[p.id] || []} onReact={react}
                 onReply={(parentId, text, vid) => send(text, vid, parentId)}
                 onHide={(post) => setConfirmHide(post)}
@@ -4730,6 +4732,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         {results === null && roots.map((p) => (
           <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
             onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
+            reportedReplyIds={reportedIds}
             reactedBy={reactedBy[p.id] || []} onReact={react}
             onReply={(parentId, text, vid) => send(text, vid, parentId)}
             onHide={(post) => setConfirmHide(post)}
@@ -9881,8 +9884,6 @@ function GlobalStyle() {
       .pref-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); color: var(--text-dim); border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
       .pref-btn.on { color: var(--accent); border-color: var(--accent); }
       .pref-btn.quiet { margin-left: auto; }
-      .pref-note { font-size: 12px; color: var(--text-dim); }
-      .community-fineprint { font-size: 11.5px; margin: -2px 0 10px; line-height: 1.45; }
       .composer { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 16px; }
       .composer-text, .composer-url { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); padding: 10px; font: inherit; font-size: 14px; resize: vertical; }
       .composer-url { margin-top: 8px; font-size: 13px; }
@@ -9907,6 +9908,8 @@ function GlobalStyle() {
       /* Until it's tapped a clip is a still and a play button, so a feed of
          videos costs nothing to scroll past. */
       .post-video.poster { display: block; border: 0; padding: 0; padding-top: 56.25%; cursor: pointer; background: #0b0d10; }
+      .post-video.poster.native { padding-top: 0; min-height: 120px; }
+      .post-video.poster.native video { display: block; width: 100%; max-height: 68vh; background: #000; pointer-events: none; }
       .post-video.poster img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
       .post-play { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 54px; height: 54px; border-radius: 50%; background: rgba(8,10,12,.72); border: 1.5px solid rgba(255,255,255,.85); }
       .post-play::after { content: ''; position: absolute; top: 50%; left: 54%; transform: translate(-50%, -50%); border-style: solid; border-width: 9px 0 9px 15px; border-color: transparent transparent transparent #fff; }
@@ -10081,6 +10084,17 @@ function GlobalStyle() {
       .rg-req:last-child { border-bottom: none; }
       .rg-req-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
       .rg-must, .rg-not { margin: 0 0 6px; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+      .report-queue { border: 1px solid var(--red); border-radius: 12px; padding: 12px 13px; margin-bottom: 14px;
+        background: rgba(255,90,90,.05); }
+      .report-queue-head { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700;
+        color: var(--red); margin-bottom: 8px; }
+      .report-item { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+      .report-item:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+      .report-meta { font-size: 11.5px; color: var(--text-dim); }
+      .report-body { font-size: 13.5px; line-height: 1.5; margin: 5px 0 8px; white-space: pre-wrap; word-break: break-word; }
+      .report-acts { display: flex; gap: 8px; }
+      .report-acts .sm { font-size: 12.5px; padding: 6px 12px; margin-top: 0; }
+      .report-acts .danger { color: var(--red); border-color: var(--red); }
       .verdict-line { font-size: 14.5px; line-height: 1.5; font-weight: 600; margin: 10px 0 12px; }
       .verdict-list { list-style: none; margin: 0 0 10px; padding: 0; }
       .verdict-item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
