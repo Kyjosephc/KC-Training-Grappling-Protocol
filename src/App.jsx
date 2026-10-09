@@ -3442,11 +3442,13 @@ const MENTAL_COACHING_LIBRARY = [
   { quote: "Smooth seas do not make skillful sailors.", author: "African Proverb" },
 ];
 
-function mentalTipForDate(dateStr) {
+function mentalTipFor(key) {
+  const str = String(key || "");
   let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
   return MENTAL_COACHING_LIBRARY[hash % MENTAL_COACHING_LIBRARY.length];
 }
+const mentalTipForDate = (dateStr) => mentalTipFor(dateStr);
 
 /* ============================== READINESS ============================== */
 
@@ -7300,6 +7302,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
 
   return (
     <div className="pad">
+      <button className="today-hero-quote" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
+        <p>{todaysMentalTip.quote}</p>
+        <span>{todaysMentalTip.author}</span>
+      </button>
+
       {showDebrief && (
         <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
           <div className="nudge-card-title">How did it go?</div>
@@ -7603,10 +7610,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         <p>{pos.phase.intensityNote}</p>
       </details>
 
-      <button className="today-quote" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
-        <p>{todaysMentalTip.quote}</p>
-        <span>{todaysMentalTip.author}</span>
-      </button>
 
       {showReadiness && (
         <ReadinessModal existing={readinessToday} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
@@ -8291,6 +8294,18 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   </div>
                   {collapsedSummary && <div className="last-logged" style={{ marginTop: 2 }}>{collapsedSummary}</div>}
                   {exOpen && (<>
+                  {/* Keyed on the day and the lift, so each exercise carries its
+                      own line and a different one next block — and it never
+                      reshuffles while somebody is part-way through their sets. */}
+                  {(() => {
+                    const exTip = mentalTipFor(`${dayId}:${displayName}`);
+                    return (
+                      <div className="ex-quote">
+                        <p>{exTip.quote}</p>
+                        <span>{exTip.author}</span>
+                      </div>
+                    );
+                  })()}
                   {sec.type === "conditioning" ? (
                     <ConditioningPlan target={en.target} name={displayName} />
                   ) : (
@@ -9856,6 +9871,12 @@ function GlobalStyle() {
       .today-milestone span { font-size: 11.5px; color: var(--text-dim); text-align: right; min-width: 0; }
       .today-track { height: 2px; background: var(--border); margin-bottom: 9px; }
       .today-track-fill { height: 100%; background: var(--text); }
+      .today-hero-quote { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border); padding: 0 0 16px; margin-bottom: 16px; cursor: pointer; }
+      .today-hero-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 20px; line-height: 1.25; color: var(--text); margin: 0 0 8px; text-wrap: balance; }
+      .today-hero-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); }
+      .ex-quote { border-left: 2px solid var(--accent); padding: 3px 0 3px 10px; margin: 0 0 12px; }
+      .ex-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 13.5px; line-height: 1.35; color: var(--text); margin: 0 0 3px; }
+      .ex-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.18em; font-size: 9px; font-weight: 600; color: var(--text-dim); }
       .today-quote { display: block; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid var(--border); margin-top: 18px; padding: 14px 0 0; cursor: pointer; }
       .today-quote p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-dim); line-height: 1.55; }
       .today-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; color: var(--text-dim); font-weight: 600; }
