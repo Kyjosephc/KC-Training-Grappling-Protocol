@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "verify:rules": "sh scripts/verify-rules.sh",
     "verify:payment": "sh scripts/verify-payment.sh",
-    "verify:journey": "sh scripts/verify-journey.sh"
+    "verify:journey": "sh scripts/verify-journey.sh",
+    "program:balance": "sh scripts/program-balance.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

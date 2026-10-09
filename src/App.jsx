@@ -2130,6 +2130,61 @@ function needsWeight(name) {
   return !NO_WEIGHT_EXERCISES.has(normalizeExerciseKey(name));
 }
 const rpeProgramCues = {
+  // Coaching for every exercise that previously opened its notes and showed
+  // nothing. One entry here cues every copy of that movement, in all three
+  // programs and in the swap pools.
+  "Assault Bike or Incline Treadmill Walk — Aerobic Base (Zone 2)": "Easy pace, 130 to 150 beats a minute if you have a monitor, conversational if you do not. Walking on an incline is the lowest-impact version and the right pick if your legs are beaten up from the mat.",
+  "Assault Bike or Treadmill — Easy Aerobic": "Easy and conversational the whole way. If you finish feeling like you trained, it was too hard — this is here to help you recover, not to add to the week.",
+  "Assault Bike or Treadmill — Match-Duration Round": "One continuous round at the length of a real match. Set the pace so the last ninety seconds are hard but you never have to stop. If you fall apart in the middle, you went out too fast — note it and start slower next time.",
+  "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)": "This should feel genuinely easy the whole way through — the test is that you could hold a conversation without gasping. If you can only manage short sentences, slow down. It is meant to feel almost boring, and that is correct.",
+  "Band Pull-Apart": "Arms straight, pull the band apart until it touches your chest, shoulder blades together at the end. Keep the ribs down and do not shrug. Light band, slow return.",
+  "Banded Clamshell": "Side lying, heels together, knees open against the band. Do not let the hips roll backwards to get more range — if the top hip rotates back, stop and reset.",
+  "Banded Face Pulls": "Pull toward the bridge of your nose with the elbows high and finish with the hands beside your ears. Think about rotating the shoulders back at the end rather than just pulling.",
+  "Banded Single Leg Single Arm Row": "Standing on one leg, rowing with the opposite arm. The challenge is keeping the hips square while one side pulls. Slow and controlled — if you are hopping to stay up, drop the load.",
+  "Banded Terminal Knee Extension": "Band behind the knee pulling it forward, you push the knee back until the leg is straight and squeeze the quad at the top. Small range, slow. This is for the tissue around the knee, not a leg exercise — keep it light.",
+  "Bent Over Barbell Row": "Chest down near parallel and hold that position for the whole set — the moment your torso rises, the set is over. Pull to the bottom of the ribs. Reset the brace between reps.",
+  "Bent Over Single Arm Dumbbell Row": "Chest low, back flat, pull the dumbbell to the hip rather than the armpit. Do not let the shoulder rotate open as you pull. One side at a time with the free hand braced.",
+  "Cable Face Pull": "Elbows high, pull to the face and externally rotate at the end so the knuckles end up beside your ears. Light. This is shoulder health, so never let it turn into a heavy row.",
+  "Cable Lat Row": "Pull to the bottom of the ribs with the elbow close to the body, hold for a beat, and let it stretch out at the front under control. No leaning back to move more weight.",
+  "Dumbbell Glute Bridge Floor Press": "Hips up and held there the whole set, ribs down. Upper arms stop when the triceps touch the floor, pause for a beat, then press. The bridge is what keeps your lower back out of it.",
+  "Five-Ten-Five Pro Agility Shuttle": "Five yards one way, ten back, five home, touching the line each time. Get the hips low into the turn rather than rounding it. Never run this cold and stop the set the moment the changes of direction get sloppy.",
+  "Front-Foot-Elevated Split Squat (dumbbells)": "Front foot on a low plate so the front hip gets more range. Shin stays vertical, back knee travels down rather than forward. Control the way down.",
+  "Glute Hip Thrust with Medicine Ball": "Upper back on the bench, chin tucked, drive through the heels and squeeze the glutes at the top. Ribs down — do not finish the rep by arching the lower back.",
+  "Half-Kneeling Landmine Press Hold (each side)": "Half-kneeling with the glute of the back leg switched on. Press out and hold — the trunk stops you leaning away from the load. If you have to lean to hold it, go lighter.",
+  "Hanging Leg Raise": "Hang still before the first rep so you are not swinging. Lift with the lower abs and lower slowly — the lowering half is where this is earned. Bend the knees if the back starts to arch.",
+  "Heavy Farmer Carry": "Heavy enough that the grip is the limit. Stand tall, do not lean back, and breathe. Set them down under control rather than dropping them from the top.",
+  "Heavy Landmine Anti-Rotation Hold (each side)": "Hold the end of the bar out in front of the sternum and do not let it drift to either side. Genuinely heavy, so this is a real grinding effort. Ribs down, hips square, breathe.",
+  "Heavy Pallof Press Hold (each side)": "Stand side-on to the cable, arms locked straight out from the sternum. The cable is trying to turn you and the whole job is not letting it. Hips and shoulders stay square — if you are twisting toward the machine, go lighter.",
+  "Hip Adduction Machine": "Squeeze the knees together under control and take three seconds letting them open. Do not let the pads fling your legs apart at the end of the set. Adductor strength is what keeps you out of a six-week groin injury.",
+  "Incline Chest-Supported Dumbbell Row": "Chest stays on the pad the entire set, which is the point — nothing from the low back. Pull to the hips, squeeze at the top, lower all the way.",
+  "Incline Close Grip Bench Press": "Hands just inside shoulder width — not narrow enough to hurt the wrists. Elbows tucked close to the body. Touch the upper chest and press straight up.",
+  "Landmine Punch Press": "Press and let the shoulder travel forward at the end, as if throwing a punch, with the opposite hip turning through. Ribs down. Light enough that the end of the rep is fast.",
+  "Landmine Rotational Press (each side)": "Turn from the back foot and hip and let the arm finish the movement. The press and the rotation happen together. Light and fast — this is a power exercise, not a shoulder exercise.",
+  "Medicine Ball Abdominal Extension": "Slow and controlled through the range, no throwing or swinging at the end. The trunk moves the ball, not momentum.",
+  "Moderate Farmer Carry": "Tall posture, shoulders down, short quick steps. Both hands loaded, so this is grip and trunk rather than anti-side-bend. Put them down before your hands open.",
+  "Multi-Planar Lunge Matrix": "Step forward, out to the side, and back on a diagonal, one controlled rep each. Knee tracks over the foot in every direction. This is movement quality on a recovery day — no load, no rush.",
+  "Neck Curl and Neck Extension (light plate or manual resistance)": "Very light and very slow, through a small range. Build the pressure over two seconds rather than jerking into it. Stop the set immediately if anything pinches or any sensation travels down an arm.",
+  "Offset Single Arm Dumbbell Press": "One dumbbell, so the trunk has to stop you tipping. Keep the hips and shoulders square and the ribs down. If you have to lean away to press it, go lighter.",
+  "Pallof Press (Anti-Rotation)": "Press straight out from the sternum and back in without letting your ribs turn. Slow out, slow back. The weight should be light enough that nothing rotates.",
+  "Plate Pinch Hold (each hand)": "Pinch two smooth plates together between thumb and fingers and hold them at your side. Set them down deliberately rather than letting them slip. Pinch grip is the one hand quality a gi does not already train.",
+  "Pogo Hops": "Stay on the balls of the feet with the ankles stiff and bounce — minimal knee bend. Short ground contacts are the whole point. Quiet landings; if you are thudding, you are staying on the ground too long.",
+  "Prone Bench Y, T, W's": "Face down on an incline bench, thumbs up, raise into each letter and lower under control. Tiny dumbbells or none at all. If you are shrugging, it is too heavy.",
+  "Pull-Up Bar Dead Hang": "Hang relaxed with the shoulders allowed to come up by your ears. Breathe. This is for the grip and to decompress the shoulders, so let go well before the hands fail — dropping off a bar is how wrists get hurt.",
+  "Pull-Up Hold": "Chin over the bar, chest high, shoulder blades pulled down. Hold still — no slow sagging. End the set when you start dropping rather than fighting the last second.",
+  "Scapular Push-Up": "Arms stay straight the whole time. Let the chest sink between the shoulder blades, then push the upper back toward the ceiling. Tiny range, all shoulder blade.",
+  "Side Plank": "Elbow under the shoulder, body in a straight line, hips lifted and stacked. Do not let the top shoulder roll forward. Drop to the knees version rather than letting the hips sag.",
+  "Single Leg Glute Bridge Dumbbell Floor Press": "One foot planted, hips lifted and level — do not let the free hip drop. Press with the opposite arm. Keeping the hips square under an uneven load is the whole point, so stop the set when they start tilting.",
+  "Single Leg Romanian Deadlift": "Hinge from the hip of the standing leg and let the back leg rise behind you in a straight line. Hips stay square to the floor. If you are wobbling, touch a wall with the free hand rather than losing the hinge.",
+  "Split Stance Romanian Deadlift": "Most of the weight on the front leg, back toe for balance only. Hips go back, bar stays close, three seconds down. Stop the rep the moment the lower back rounds — the range comes from the hip.",
+  "Standing Barbell Overhead Press": "Squeeze the glutes and keep the ribs down so your lower back does not arch to get the bar up. Head moves back out of the way, then through at the top. Stop the set if you start leaning back.",
+  "Suitcase Carry (each side)": "One hand only. Stand tall and do not let the weight pull you sideways — the side you are not loading is doing the work. Walk, do not rush, and set it down before the grip fails.",
+  "Supine Hamstring Single Leg Glute Bridge (ball or slides)": "One heel on the ball, hips lifted and level, curl the heel in and press the hips up at the same time. The free leg stays still. Lower slowly.",
+  "Supine Y, T, W": "Lying face up, slide the arms into each letter shape with the backs of the hands staying in contact with the floor. Ribs stay down. The limitation is the shoulder, not the weight.",
+  "Valslide Hamstring Curls": "Heels on the sliders, hips lifted, drag the heels in and then take three seconds letting them slide back out. The hips do not drop. If your hamstrings cramp, shorten the range rather than stopping.",
+  "Weighted Plank": "Straight line from ear to ankle with the plate on the upper back. Ribs down, glutes on, breathe normally. End the set when the hips start to drop, not when the clock says.",
+  "Weighted Pull-Up": "Full hang at the bottom of every rep — no half reps to get the number. Pull the chest toward the bar rather than the chin over it, and lower under control. Drop the added weight before you start kipping.",
+  "Weighted Push-Ups": "Plate or vest on the upper back, body in one line from ear to ankle. Chest to the floor, elbows about 45 degrees from the body. The hips do not sag or pike — when they do, the set is finished.",
+  "Weighted Scarecrows": "Elbows up at shoulder height, rotate the forearms up and back under control, then lower. Very light — this is the rotator cuff and it does not need load. Slow is the point.",
   "Back Squat": "Brace before you unrack, not after. Knees track over the middle of the foot the whole way down, and the hips and chest rise together out of the bottom — if the hips shoot up first, that set is done.",
   "Front Squat": "Elbows stay high and the bar stays on your shoulders, not your hands. The moment the elbows drop the bar rolls forward and your back takes it. Finish the set there.",
   "Bench Press": "Shoulder blades pulled back and down into the bench and kept there. Feet planted. Lower to the same spot on your chest every rep — control the bar down, do not let it drop onto you.",
@@ -2159,6 +2214,15 @@ function ex(o) {
   // lines away. Every exercise gets it now.
   if (!base.cues) base.cues = rpeProgramCues[base.name] || "";
   return base;
+}
+function deUpperPull() {
+  return ex({
+    name: "Inverted Row", sets: 4, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty",
+    rir: 2, rest: "taken in the rest between speed bench sets — this costs no extra time",
+    tempo: "2/1/1", quality: "Accessory",
+    purpose: "Eight sets of speed bench is a lot of pushing on a day that otherwise has no pulling in it at all. Grappling pulls far more than it presses, and this evens the week up. It sits in the rest periods you are already taking, and because it is bodyweight and horizontal it puts nothing back on a spine that just worked up to a heavy squat.",
+    cues: "Set the bar or rings so the hardest version you can still control has you near horizontal — feet on the floor to make it easier, feet raised to make it harder. Pull the chest to the bar, not the chin. Hold the top for a beat with the shoulder blades pulled together and down, then take two seconds to lower. If your hips sag, raise the bar until they do not.",
+  });
 }
 function meWorkingSets() {
   // Ramps from lighter warm-up triples down to a true heavy single, so no two sets are identical.
@@ -2382,7 +2446,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: 3, reps: "6 per leg", load: "moderate", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — trains the single-leg loading pattern a sprawl or single-leg takedown defense actually uses, which bilateral squatting alone under-trains", quality: "Accessory" }),
-              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
+              ex({ name: "Barbell Romanian Deadlift", sets: 4, reps: "6", load: "moderate — leave the last rep comfortably in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Sandbag Bear-Hug Carry", sets: 3, reps: "30 meters", load: "heavy — a sandbag, a heavy bag, or a loaded duffel", rir: 1, rest: "90 seconds",
@@ -2439,7 +2503,7 @@ const conjugateProgram = {
           sections: [
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
-              ex({ name: "Barbell Romanian Deadlift", sets: 3, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
+              ex({ name: "Barbell Romanian Deadlift", sets: 4, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
               ex({ name: "Front-Foot-Elevated Split Squat (dumbbells)", sets: 3, reps: "6 per leg", load: "moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — a different single-leg loading angle than the base phase to keep the movement fresh while still training the pattern a sprawl or single-leg takedown defense relies on", quality: "Accessory" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
@@ -3247,6 +3311,147 @@ function backfillVideos(program) {
   return program;
 }
 
+// ---------------------------------------------------------------------------
+// PROGRAM D — IN-SEASON MAINTENANCE (two days a week)
+//
+// There was a two-day Program C once and it was retired for good reason: it was
+// Program A with the third day deleted and its contents pushed into the other
+// two, so its first session was the densest in the catalogue and it never
+// progressed. This is not that. It is written as a two-day program from the
+// start, and it is built on the one thing in-season training has to get right:
+// strength is held with intensity, not volume. The load stays respectable and
+// almost everything else comes off, because the mat is already the hard part of
+// the week and nothing here is allowed to cost a round on Tuesday.
+//
+// What never comes out, in any block: the neck, the adductors, grip, and one
+// hinge. Those are the four that stop injuries, and they are the four people
+// drop first when they get busy.
+// ---------------------------------------------------------------------------
+function inSeasonDayOne(tier) {
+  const mainSets = tier === "peak" ? 2 : tier === "build" ? 4 : tier === "deload" ? 2 : 3;
+  const mainReps = tier === "peak" ? "3" : "5";
+  // A deload has to be the lightest week in the block, including lighter than
+  // the competition weeks, so the accessory pairs come down to one set too.
+  const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
+  const rir = tier === "deload" ? 5 : 3;
+  return {
+    id: uid(), label: "1", name: "Lower Emphasis — Full Body",
+    intent: tier === "peak"
+      ? "Competition weeks. The weight stays heavy and the number of sets comes down — that is what keeps strength without leaving anything in your legs for the weekend."
+      : "One heavy pull, one heavy pull-up, and the durability work that keeps you training. In and out in about thirty-five minutes.",
+    sections: [
+      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
+        ex({ name: "Broad Jump", sets: 3, reps: "3", load: "bodyweight", rir: 5, rest: "60 seconds", quality: "Neuromuscular",
+          purpose: "Power is the first quality you lose in a hard season and the cheapest to keep. Three jumps cost nothing and keep the nervous system used to producing force fast.",
+          cues: "Land and stick it. If you are not landing under control, you are jumping further than you can absorb — shorten it." }) ]},
+      { id: uid(), type: "strength", name: "Working Sets", exercises: [
+        ex({ name: "Trap Bar Deadlift", sets: mainSets, reps: mainReps, load: "heavy enough to be a real set, with the reps below left in the tank", rir, rest: "rest as needed between the paired lifts, 2 to 3 minutes after both", tempo: "2/0/X", quality: "Strength",
+          purpose: "The heaviest thing in the week, and deliberately the one with the lowest technical and recovery cost. Neutral grip, shorter lever, nothing to grind — you can push this in a competition week in a way you cannot push a back squat.",
+          cues: "Chest up, push the floor away. Stop the set the moment bar speed drops off, not when the rep count says to." }),
+        ex({ name: "Weighted Pull-Up", sets: mainSets, reps: tier === "peak" ? "3" : "5", load: "added weight, or bodyweight if that is already hard", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
+          purpose: "Paired with the pull so the session is two movements deep before you have rested twice. Pulling strength is the one quality that transfers to grappling almost one for one, and it is the first thing to go when training time gets cut.",
+          cues: "Full hang at the bottom every rep. Chest to the bar, not chin over it." }),
+        ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: accSets, reps: "6 each side", load: "moderate", rir: rir + 1, rest: "straight into the next pair", quality: "Accessory",
+          purpose: "Single-leg loading, which is what a sprawl and a shot actually use. Kept light in season — this is maintenance, not a leg day.",
+          cues: "Front shin vertical, back knee travels down rather than forward. Stop two reps short on both sides." }),
+        ex({ name: "Half-Kneeling Single Arm Dumbbell Press", sets: accSets, reps: "6 each side", load: "moderate", rir: rir + 1, rest: "90 seconds, then back to the split squat", quality: "Accessory",
+          purpose: "Overhead strength with the trunk doing the work to stop you leaning. Half-kneeling because it takes the low back out of it in a week where the mat is already loading it.",
+          cues: "Ribs down, glute of the back leg switched on. If you have to lean back to finish the rep, the weight is too heavy." }) ]},
+      { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
+        ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: tier === "deload" ? "15 seconds per side" : "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "60 seconds", quality: "Durability",
+          purpose: "Adductor strain is the injury that takes grapplers out for six weeks, and this is the single best-supported thing you can do about it. Two sets, twice a week, all season.",
+          cues: "Top leg on the bench, hips lifted and level. Drop to the short-lever version with the knee on the bench if the hips sag." }),
+        ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction", load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
+          purpose: "The neck is loaded every round you train and it is the first thing dropped when the session gets short. It is isometric, so it costs almost nothing to recover from and can run every week of the season.",
+          cues: "Six directions including the two rotation holds. Build the pressure over two seconds rather than jerking into it. Stop the set if anything pinches or travels down an arm." }) ]},
+    ],
+  };
+}
+
+function inSeasonDayTwo(tier) {
+  const mainSets = tier === "peak" ? 2 : tier === "build" ? 4 : tier === "deload" ? 2 : 3;
+  // A deload has to be the lightest week in the block, including lighter than
+  // the competition weeks, so the accessory pairs come down to one set too.
+  const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
+  const rir = tier === "deload" ? 5 : 3;
+  return {
+    id: uid(), label: "2", name: "Upper Emphasis — Full Body",
+    intent: tier === "peak"
+      ? "Same again on the press and the row — heavy, short, and nothing that leaves you sore for a competition weekend."
+      : "One press, one row, one hinge, and the carry. The hinge stays in every week of the season on purpose.",
+    sections: [
+      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
+        ex({ name: "Medicine Ball Rotational Scoop Throw (each side)", sets: 3, reps: "4 per side", load: "a light ball", rir: 5, rest: "60 seconds", quality: "Rotational Power",
+          purpose: "The only rotational power work in the week, and rotation is how almost every throw and pass is actually expressed. Light and fast, three sets, done.",
+          cues: "Turn from the hips and let the arms follow. Throw it as hard as you can — the point is speed, not the ball." }) ]},
+      { id: uid(), type: "strength", name: "Working Sets", exercises: [
+        ex({ name: "Dumbbell Floor Press", sets: mainSets, reps: tier === "peak" ? "4" : "6", load: "heavy enough to be a real set, with the reps below left in the tank", rir, rest: "rest as needed between the paired lifts, 2 to 3 minutes after both", tempo: "2/0/X", quality: "Strength",
+          purpose: "Pressing strength with the floor cutting the bottom range off, which is the part that bothers shoulders already doing a season of grappling. Dumbbells so each side works for itself.",
+          cues: "Upper arms stop when the triceps touch the floor. Pause there for a beat rather than bouncing off it." }),
+        ex({ name: "Seal Row", sets: mainSets, reps: tier === "peak" ? "5" : "8", load: "moderate to heavy", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
+          purpose: "A row with the chest supported, so the low back contributes nothing. In a week where you are already getting stacked and scrambled, that matters more than the extra few pounds a bent-over row would allow.",
+          cues: "Pull to the bottom of the ribs, hold for a beat, lower under control. No body English — if you are rocking the bench, go lighter." }),
+        ex({ name: "Barbell Romanian Deadlift", sets: accSets, reps: "6", load: "moderate — leave the last two reps", rir: rir + 1, rest: "straight into the next pair", tempo: "3/0/1", quality: "Posterior Chain",
+          purpose: "The hinge that stays in all season. Hamstrings loaded long and slow is the best protection there is against the strain that a scramble produces, and it is the first thing people cut when the session gets short.",
+          cues: "Hips back, bar close, three full seconds down. Stop the rep the moment the lower back rounds." }),
+        ex({ name: "Inverted Row", sets: accSets, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty", rir: rir + 1, rest: "90 seconds, then back to the Romanian deadlift", tempo: "2/1/1", quality: "Accessory",
+          purpose: "More pulling, no load on the spine, and it costs nothing to recover from. Grappling pulls far more than it presses and the week should look like that.",
+          cues: "Chest to the bar, shoulder blades together and down at the top, two seconds to lower. Raise the bar if your hips sag." }) ]},
+      { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
+        ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
+          purpose: "Grip and the whole side of the trunk at once, which is the carry that looks most like holding somebody who does not want to be held. Grip is the quality a gi season builds and a no-gi season quietly loses.",
+          cues: "Stand tall and do not let the weight pull you sideways. Walk, do not rush. Set it down before the grip fails rather than after." }),
+        ex({ name: "Heavy Pallof Press Hold (each side)", sets: 2, reps: tier === "deload" ? "15 seconds each side" : "20 seconds each side", load: "heavy enough that holding still is the work", rir: 3, rest: "60 seconds", quality: "Core",
+          purpose: "Anti-rotation, held rather than repped. Resisting a turn under load is what the trunk actually does in a scramble.",
+          cues: "Arms locked out straight from the sternum, hips square. The cable is trying to turn you — do not let it." }),
+        ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction", load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
+          purpose: "Twice a week, every week. See the note on the first session — this is the one item in the program that should never be skipped.",
+          cues: "Six directions including the two rotation holds. Resist, do not nod. Stop if anything pinches or travels down an arm." }) ]},
+    ],
+  };
+}
+
+function inSeasonPhase(name, weekStart, weekEnd, tier, objective, intensityNote) {
+  return { id: uid(), name, weekStart, weekEnd, objective, intensityNote,
+    days: [inSeasonDayOne(tier), inSeasonDayTwo(tier)] };
+}
+
+function buildInSeasonProgram() {
+  return {
+    id: uid(),
+    name: "In-Season Maintenance — Twelve-Week Program (Program D)",
+    sport: "Brazilian Jiu-Jitsu / Wrestling",
+    sessionsPerWeek: 2,
+    variant: "D",
+    objective: "Hold the strength you built, keep the neck, adductors, grip and hamstrings covered, and take nothing away from the mat. Two sessions a week, about thirty-five minutes each, written for the stretch of the year when you are competing or training hard and the gym is not the priority.",
+    methodology:
+      "Strength is kept with intensity, not volume. That is the whole idea here and it is why this is not simply a shorter version of the other programs. The loads stay respectable — heavy fives, and heavy triples in the competition weeks — while almost everything else comes off, because the mat is already the hard part of your week.\n\nBoth sessions are full body rather than split. If you miss one, you have missed some of everything rather than all of your lower body, which is what actually happens in a season.\n\nFour things never come out, in any block: the neck, the adductors, grip, and one hinge. Those are the four that keep you training, and they are the four everybody drops first when they get busy.\n\nThere is no conditioning programmed here. In season your mat work is the conditioning, and adding intervals on top of hard rounds is how people arrive at a competition flat. If you have a genuinely light training week, one easy twenty to thirty minute aerobic session on a non-lifting day is plenty.",
+    philosophy: "Nothing in this program should ever cost you a round. Every set is prescribed to stop short — the reps-in-reserve number on each exercise is the point, not a suggestion. If a session leaves you sore enough to notice it on the mat two days later, it was too much, and the answer is less volume rather than skipping the week.",
+    coachNote: "Use this when there are competitions on the calendar, or any stretch where mat volume is high and gym time is short. When the season ends, switch to Program B in Settings and build again — this program is designed to hold ground, not to take it.",
+    warmup: defaultWarmup(),
+    phases: [
+      inSeasonPhase("In-Season Base — Weeks 1 to 3", 1, 3, "base",
+        "Settle into two sessions a week and establish what a real working weight is for each of the four main lifts. The load should climb a little each week while the sets and reps stay the same.",
+        "Leave three reps in the tank on the main lifts and four on the accessories. If you competed or had an unusually hard week on the mat, cut the accessory pairs to one set and keep the main lifts — that is the right trade, every time."),
+      inSeasonPhase("Deload — Week 4", 4, 4, "deload",
+        "A week off the gas in the gym. Same movements, half the sets, deliberately light.",
+        "Five reps in reserve throughout. This should feel too easy. That is the dose, not a mistake."),
+      inSeasonPhase("In-Season Build — Weeks 5 to 7", 5, 7, "build",
+        "One extra set on each of the main lifts, the same everywhere else. This is as much volume as this program ever carries.",
+        "Still three reps in reserve. If the fourth set is costing you anything on the mat, drop back to three and stay there — holding ground beats pushing in season."),
+      inSeasonPhase("Deload — Week 8", 8, 8, "deload",
+        "Second deload. Same as the first.",
+        "Five reps in reserve throughout. Light on purpose."),
+      inSeasonPhase("Competition Weeks — Weeks 9 to 11", 9, 11, "peak",
+        "The weeks that matter. Load stays heavy, sets come down to two, accessories to one. You should leave the gym feeling like you could have done more — that is the design.",
+        "Heavy triples on the pull and the pull-up, heavy fours and fives on the press and the row, two sets each. Nothing to failure and nothing new. If you compete this week, do the session no later than seventy-two hours before you step on, or skip it entirely — missing one in-season session costs you nothing."),
+      inSeasonPhase("Deload — Week 12", 12, 12, "deload",
+        "Close the block out light, then decide what comes next.",
+        "Five reps in reserve. If your season is over, switch to Program B in Settings and start building again. If it is not, start this program over — it is designed to be run back as many times as the season needs."),
+    ],
+  };
+}
+
 function buildProgramVariant(variant) {
   // Program C — the two-day hybrid — was retired. It turned out to be Program A
   // with the third day deleted and its contents crammed into the other two, so
@@ -3255,6 +3460,9 @@ function buildProgramVariant(variant) {
   // program rebuild lands them on A, which is the program C was a worse version
   // of anyway.
   if (variant === "C") variant = "A";
+  // D is its own program rather than a trim of another one, so it is built
+  // whole and skips the conjugate scaffolding below entirely.
+  if (variant === "D") return finishProgram(buildInSeasonProgram());
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
     base.name = "Condensed Conjugate — Twelve-Week Program (Program A)";
@@ -3269,7 +3477,7 @@ function buildProgramVariant(variant) {
           day.name = day.name.replace("Max Effort Lower", "Max Effort Lower + Dynamic Effort Upper");
           day.intent = "Two qualities in one session, Settlage-style — a true max effort on the lower body lift first while you're fresh, then explosive speed work on the upper body press once the main lift is done. Keep the Dynamic Effort set genuinely fast, not just lighter.";
           const strengthIdx = day.sections.findIndex((s) => s.type === "strength");
-          day.sections.splice(strengthIdx + 1, 0, { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [deBench(dePct)] });
+          day.sections.splice(strengthIdx + 1, 0, { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [deBench(dePct), deUpperPull()] });
         }
         if (day.label === "2" && day.name.includes("Max Effort Upper")) {
           day.name = day.name.replace("Max Effort Upper", "Max Effort Upper + Dynamic Effort Lower");
@@ -3301,7 +3509,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     profilePicture: profilePicture || null,
     createdAt: todayStr(),
-    program: useTemplate ? buildProgramVariant(["A", "B"].includes(programVariant) ? programVariant : "B") : blankProgram(),
+    program: useTemplate ? buildProgramVariant(["A", "B", "D"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -3389,7 +3597,7 @@ const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purp
 const PROGRAM_VARIANT_LABELS = {
   A: "Program A — Condensed Conjugate",
   B: "Program B — Offseason Strength Build",
-
+  D: "Program D — In-Season Maintenance",
 };
 
 // Replacing the suffering-as-virtue quotes with coaching. These are the lines
@@ -5618,6 +5826,10 @@ function OnboardingScreen({ onSubmit }) {
         <div className="program-choice-title">Program B — Offseason Strength Build</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal.</p>
       </div>
+      <div className={`program-choice-card ${programVariant === "D" ? "active" : ""}`} onClick={() => setProgramVariant("D")} role="radio" aria-checked={programVariant === "D"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("D"); } }}>
+        <div className="program-choice-title">Program D — In-Season Maintenance</div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>2 days a week, about 35 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends.</p>
+      </div>
       </div>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it: it is a note to yourself, and you can update it anytime in Settings.</p>
@@ -6575,7 +6787,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <p className="muted" style={{ marginBottom: 10 }}>
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
-      {["A", "B"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
+      {["A", "B", "D"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
         <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setSwitched(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>

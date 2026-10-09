@@ -300,6 +300,102 @@ check("the dashboard renders while it is still loading", () => {
   if (!txt().trim()) throw new Error("blank dashboard");
 });
 
+console.log("\nThe programs themselves");
+// What each program promises, checked against what it actually builds.
+const VARIANTS = ["A", "B", "D"];
+const PAT = {
+  press: /bench|floor press|push-?up|dip|overhead press|landmine punch|spoto|dumbbell press/i,
+  pull: /row|pull-?up|chin-?up|pulldown|face pull|band pull-apart|renegade|scarecrow/i,
+  squat: /squat|leg press|step-?up|lunge/i,
+  hinge: /deadlift|romanian|rdl|good morning|hip thrust|glute bridge|hamstring curl|valslide/i,
+};
+const clean = (n) => String(n).replace(/\([^)]*\)/g, " ");
+const countIn = (prog, re, hardOnly = true) => {
+  let n = 0;
+  (prog.phases || [])
+    .filter((ph) => !hardOnly || !/deload/i.test(ph.name))
+    .forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
+      (sec.exercises || []).forEach((e) => { if (re.test(clean(e.name || ""))) n += Number(e.sets) || 0; }))));
+  return n;
+};
+
+VARIANTS.forEach((v) => {
+  check(`program ${v} builds with phases, days and a name`, () => {
+    const p = A.buildProgramVariant(v);
+    if (!p || !p.phases || !p.phases.length) throw new Error("no phases");
+    if (!p.name) throw new Error("no name");
+    if (!p.sessionsPerWeek) throw new Error("no sessionsPerWeek");
+    p.phases.forEach((ph) => { if (!ph.days || !ph.days.length) throw new Error(`${ph.name} has no days`); });
+  });
+  check(`program ${v} runs twelve weeks`, () => {
+    const p = A.buildProgramVariant(v);
+    const last = p.sessionsPerWeek * 12 - 1;
+    if (A.positionAtIndex(p, 0).weekNumber !== 1) throw new Error("does not start in week 1");
+    if (A.positionAtIndex(p, last).weekNumber !== 12) throw new Error(`session ${last} is not in week 12`);
+  });
+  check(`program ${v} coaches every exercise it prescribes`, () => {
+    const p = A.buildProgramVariant(v);
+    const bare = [];
+    (p.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
+      (sec.exercises || []).forEach((e) => { if (e.name && !e.cues) bare.push(e.name); }))));
+    if (bare.length) throw new Error(`${bare.length} exercises with no cues, e.g. ${bare.slice(0, 3).join(", ")}`);
+  });
+  check(`program ${v} is named in the switcher`, () => {
+    if (!A.PROGRAM_VARIANT_LABELS[v]) throw new Error("no label, so it cannot be switched to");
+  });
+});
+
+check("no program presses more than it pulls", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const press = countIn(p, PAT.press), pull = countIn(p, PAT.pull);
+    // Grappling pulls far more than it presses. Program A used to run about
+    // four pressing sets for every three pulling, with no pulling at all on
+    // its first day.
+    if (press > pull) throw new Error(`program ${v} is ${press} press to ${pull} pull`);
+  });
+});
+check("every program's first day has pulling in it", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const d1 = p.phases.find((ph) => !/deload/i.test(ph.name)).days.find((d) => d.label === "1");
+    const pulls = (d1.sections || []).flatMap((s) => s.exercises || [])
+      .filter((e) => PAT.pull.test(clean(e.name || "")));
+    if (!pulls.length) throw new Error(`program ${v} day 1 has no pulling`);
+  });
+});
+check("the in-season program is genuinely lighter than the others", () => {
+  const sets = (v) => {
+    const p = A.buildProgramVariant(v);
+    const ph = p.phases.find((x) => !/deload/i.test(x.name));
+    return ph.days.reduce((n, d) => n + (d.sections || []).reduce((m, s) =>
+      m + (s.exercises || []).reduce((k, e) => k + (Number(e.sets) || 0), 0), 0), 0);
+  };
+  const d = sets("D"), a = sets("A"), b = sets("B");
+  if (d >= a || d >= b) throw new Error(`in-season is ${d} sets a week against ${a} and ${b}`);
+});
+check("the four that keep you training are in every block of the in-season program", () => {
+  const p = A.buildProgramVariant("D");
+  const must = [["neck", /neck/i], ["adductor", /copenhagen|adduction/i],
+    ["grip", /carry/i], ["hinge", /romanian|trap bar deadlift/i]];
+  p.phases.forEach((ph) => {
+    const names = ph.days.flatMap((d) => (d.sections || []).flatMap((s) => (s.exercises || []).map((e) => e.name || "")));
+    const missing = must.filter(([, re]) => !names.some((n) => re.test(n))).map(([k]) => k);
+    if (missing.length) throw new Error(`${ph.name} drops ${missing.join(", ")}`);
+  });
+});
+check("a deload is never the hardest week in a block", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const wk = (ph) => ph.days.reduce((n, d) => n + (d.sections || []).reduce((m, s) =>
+      m + (s.exercises || []).reduce((k, e) => k + (Number(e.sets) || 0), 0), 0), 0);
+    const hardest = Math.max(...p.phases.filter((ph) => !/deload/i.test(ph.name)).map(wk));
+    p.phases.filter((ph) => /deload/i.test(ph.name)).forEach((ph) => {
+      if (wk(ph) > hardest) throw new Error(`program ${v}: ${ph.name} is heavier than every hard week`);
+    });
+  });
+});
+
 console.log("\nProgress and settings, both athletes");
 check("progress renders for a full history", () => {
   mount(React.createElement(A.ProgressTab, { client: marcusHalfYear }));
