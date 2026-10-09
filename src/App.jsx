@@ -688,6 +688,19 @@ function leaderboardTotalsFor(client) {
     weekRatio: bw ? week / bw : 0,
   };
 }
+// Pounds a person can picture. "1.6M lb" lands; "8,816x your bodyweight",
+// which is what six months of accumulated volume divided by bodyweight actually
+// comes to, does not. The ratio still decides the ranking — it is the only fair
+// way to compare a 135 lb athlete with a 220 lb one — it is just not a number
+// worth showing anybody.
+function fmtTonnage(n) {
+  const v = Math.max(0, Math.round(Number(n) || 0));
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M lb`;
+  if (v >= 10000) return `${Math.round(v / 1000)}k lb`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}k lb`;
+  return `${v.toLocaleString()} lb`;
+}
+
 // "500x bodyweight". Below ten it is worth a decimal; above it, never.
 function fmtRatio(r) {
   const n = Number(r) || 0;
@@ -4789,9 +4802,9 @@ function BoardList({ rows, ratioField, lbsField, youId, empty }) {
           <span className="board-rank">{MEDALS[i] || i + 1}</span>
           <span className="board-name">
             {r.display_name || "Athlete"}{r.user_id === youId ? " (you)" : ""}
-            <span className="board-sub">{formatWeight(r[lbsField] || 0)}</span>
+            <span className="board-sub">{fmtRatio(r[ratioField])} bodyweight</span>
           </span>
-          <span className="board-lbs">{fmtRatio(r[ratioField])}</span>
+          <span className="board-lbs">{fmtTonnage(r[lbsField] || 0)}</span>
         </li>
       ))}
     </ol>
@@ -4821,8 +4834,8 @@ function LeaderboardTab({ client, userId }) {
   return (
     <div className="pad">
       <div className="stat-chip-row" style={{ marginBottom: 14 }}>
-        <StatChip label="Your week" value={fmtRatio(mine.weekRatio)} />
-        <StatChip label="Your all time" value={fmtRatio(mine.totalRatio)} />
+        <StatChip label="Your week" value={fmtTonnage(mine.week)} />
+        <StatChip label="Your all time" value={fmtTonnage(mine.total)} />
       </div>
 
       {!mine.bodyweight && (
@@ -8408,6 +8421,76 @@ function lastAllTimeBest(client, exerciseName) {
 // session (heaviest weight for loaded lifts, highest reps/seconds/meters for
 // exercises with no external load). Falls back to the Personal Record entry
 // itself if a flagged PR has no matching session log.
+// Six months of training produces a volume chart and a heatmap, and neither one
+// answers the only question the athlete actually has: did any of this work?
+// This turns the logs into a verdict — which lifts moved, which did not, and
+// how much of the time they actually showed up.
+const VERDICT_MIN_SESSIONS = 3;
+const VERDICT_MIN_DAYS = 21;
+
+function strengthVerdict(client) {
+  const logs = [...(client.logs || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (logs.length < VERDICT_MIN_SESSIONS) return null;
+
+  // Best estimated one-rep max per lift per day.
+  const byLift = new Map();
+  logs.forEach((log) => {
+    (log.exercises || []).forEach((en) => {
+      if (!needsWeight(en.name)) return;
+      const best = bestSetOf(en.sets);
+      if (!best) return;
+      const arr = byLift.get(en.name) || [];
+      const sameDay = arr.find((p) => p.date === log.date);
+      if (sameDay) { if (best.e1rm > sameDay.e1rm) sameDay.e1rm = best.e1rm; }
+      else arr.push({ date: log.date, e1rm: best.e1rm });
+      byLift.set(en.name, arr);
+    });
+  });
+
+  const lifts = [];
+  byLift.forEach((pts, name) => {
+    if (pts.length < VERDICT_MIN_SESSIONS) return;
+    const spanDays = Math.round((new Date(pts[pts.length - 1].date) - new Date(pts[0].date)) / 86400000);
+    if (spanDays < VERDICT_MIN_DAYS) return;
+    // Two points at each end rather than one, so a single heavy day or a single
+    // bad day does not become the whole story.
+    const avg = (a) => a.reduce((n, p) => n + p.e1rm, 0) / a.length;
+    const from = Math.round(avg(pts.slice(0, 2)));
+    const to = Math.round(avg(pts.slice(-2)));
+    if (!from) return;
+    const pct = Math.round(((to - from) / from) * 100);
+    lifts.push({ name, from, to, pct, sessions: pts.length, spanDays,
+      verdict: pct >= 5 ? "up" : pct <= -5 ? "down" : "flat" });
+  });
+  lifts.sort((a, b) => b.pct - a.pct);
+
+  // Showing up. Weeks with at least one logged session, out of the weeks since
+  // the first one — the number that actually explains the rest of the page.
+  const weeks = new Set(logs.map((l) => weekStartOf(l.date)));
+  const firstWeek = new Date(weekStartOf(logs[0].date) + "T00:00:00");
+  const lastWeek = new Date(weekStartOf(todayStr()) + "T00:00:00");
+  const totalWeeks = Math.max(1, Math.round((lastWeek - firstWeek) / (7 * 86400000)) + 1);
+  const sortedWeeks = [...weeks].sort();
+  let streak = 0, best = 0, prev = null;
+  sortedWeeks.forEach((w) => {
+    const d = new Date(w + "T00:00:00");
+    streak = prev && Math.round((d - prev) / (7 * 86400000)) === 1 ? streak + 1 : 1;
+    if (streak > best) best = streak;
+    prev = d;
+  });
+
+  const bw = client.bodyweightLog || [];
+  const bodyweight = bw.length >= 2
+    ? { from: bw[0].weight, to: bw[bw.length - 1].weight, change: Math.round((bw[bw.length - 1].weight - bw[0].weight) * 10) / 10 }
+    : null;
+
+  return {
+    lifts, totalVolume: logs.reduce((n, l) => n + (l.totalVolume || 0), 0),
+    sessions: logs.length, firstDate: logs[0].date,
+    weeksTrained: weeks.size, totalWeeks, longestStreak: best, bodyweight,
+  };
+}
+
 function exerciseHistorySeries(client, exerciseName) {
   const useWeight = needsWeight(exerciseName);
   const byDate = new Map();
@@ -9226,6 +9309,71 @@ function DetailBarToggle({ label, entries, dataKey, domain }) {
   );
 }
 
+// The answer to "has any of this worked?", which no chart on this page was
+// giving. Needs three sessions on a lift spanning three weeks before it will
+// say anything about it — below that it is noise, and a confident number drawn
+// from two sessions a week apart is worse than no number.
+function VerdictCard({ client }) {
+  const v = useMemo(() => strengthVerdict(client), [client.logs, client.bodyweightLog]);
+  if (!v) return null;
+  const up = v.lifts.filter((l) => l.verdict === "up");
+  const flat = v.lifts.filter((l) => l.verdict === "flat");
+  const down = v.lifts.filter((l) => l.verdict === "down");
+  const consistency = Math.round((v.weeksTrained / v.totalWeeks) * 100);
+  // "One lift is up, 1 is holding" reads like a bug. Small numbers stay words.
+  const n = (x) => ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][x] || String(x);
+
+  return (
+    <Card title="What's changed">
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        {v.sessions} sessions since {fmtDate(v.firstDate)} · {fmtTonnage(v.totalVolume)} moved ·
+        trained in {v.weeksTrained} of {v.totalWeeks} weeks ({consistency}%)
+        {v.longestStreak > 1 ? ` · best run ${v.longestStreak} weeks straight` : ""}
+      </p>
+
+      {v.lifts.length === 0 ? (
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Keep logging. Once a lift has three sessions across three weeks, this is where you will
+          see whether it actually moved.
+        </p>
+      ) : (
+        <>
+          <div className="verdict-line">
+            {up.length > 0
+              ? `${up.length === 1 ? "One lift is" : `${n(up.length)} lifts are`} up${flat.length ? `, ${n(flat.length)} ${flat.length === 1 ? "is" : "are"} holding` : ""}${down.length ? `, ${n(down.length)} ${down.length === 1 ? "has" : "have"} slipped` : ""}.`
+              : down.length > 0
+                ? `Nothing is up yet and ${n(down.length)} ${down.length === 1 ? "lift has" : "lifts have"} slipped. ${consistency < 70 ? "Consistency is the first thing to fix — the sessions matter more than the programme." : "Worth checking sleep, food and how hard you are rolling."}`
+                : "Everything is holding steady. Nothing has gone backwards."}
+          </div>
+          <ul className="verdict-list">
+            {v.lifts.slice(0, 8).map((l) => (
+              <li key={l.name} className={`verdict-item ${l.verdict}`}>
+                <span className="verdict-name">{l.name}</span>
+                <span className="verdict-change">
+                  {l.pct > 0 ? "+" : ""}{l.pct}%
+                  <span className="verdict-detail">{l.from} → {l.to} lb est. max</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {v.lifts.length > 8 && (
+            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+              Showing the 8 that moved most, of {v.lifts.length} lifts with enough history.
+            </p>
+          )}
+        </>
+      )}
+
+      {v.bodyweight && v.bodyweight.change !== 0 && (
+        <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
+          Bodyweight {v.bodyweight.change > 0 ? "up" : "down"} {Math.abs(v.bodyweight.change)} lb
+          over that time, {v.bodyweight.from} to {v.bodyweight.to}.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function ProgressTab({ client }) {
   const CHART_WINDOW = 90;
   const bwData = (client.bodyweightLog || []).map((b) => ({ date: b.date, weight: b.weight })).slice(-CHART_WINDOW);
@@ -9278,6 +9426,8 @@ function ProgressTab({ client }) {
           display={`${sessionsThisWeek}/${perWeekTarget}`} sublabel="Sessions" />
         <MetricRing label="Block" value={blockPct} display={`${blockPct}%`} sublabel={`${client.sessionsCompleted || 0} of ${totalSessionsAll}`} />
       </div>
+
+      <VerdictCard client={client} />
 
       <div className="metric-row">
         <MetricTile label="This week" value={`${compact(thisWeekVolume)} lb`} sub="Total tonnage" />
@@ -9931,6 +10081,19 @@ function GlobalStyle() {
       .rg-req:last-child { border-bottom: none; }
       .rg-req-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
       .rg-must, .rg-not { margin: 0 0 6px; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+      .verdict-line { font-size: 14.5px; line-height: 1.5; font-weight: 600; margin: 10px 0 12px; }
+      .verdict-list { list-style: none; margin: 0 0 10px; padding: 0; }
+      .verdict-item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+        padding: 9px 0; border-bottom: 1px solid var(--border); }
+      .verdict-item:last-child { border-bottom: none; }
+      .verdict-name { font-size: 13.5px; flex: 1; min-width: 0; }
+      .verdict-change { font-family: 'Oswald', sans-serif; font-size: 17px; font-weight: 600;
+        text-align: right; flex-shrink: 0; }
+      .verdict-item.up .verdict-change { color: var(--green); }
+      .verdict-item.down .verdict-change { color: var(--red); }
+      .verdict-item.flat .verdict-change { color: var(--text-dim); }
+      .verdict-detail { display: block; font-family: inherit; font-size: 11px; font-weight: 400;
+        color: var(--text-dim); margin-top: 1px; }
       .rg-scene { font-size: 13px; line-height: 1.5; margin: 4px 0 6px; padding-left: 11px;
         border-left: 2px solid var(--accent); color: var(--text); }
       .rg-verdict { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
