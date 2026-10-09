@@ -7201,6 +7201,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
   const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
   const shape = useMemo(() => sessionShape(resolvedRaw), [resolvedRaw]);
+  // Third number on the day's strip. Sets and minutes say how long it is;
+  // this says how much there is to move between.
+  const exerciseCount = useMemo(
+    () => (resolvedRaw || []).reduce((n, sec) => n + ((sec.exercises || []).length), 0),
+    [resolvedRaw]);
   const readinessPattern = useMemo(() => (isCurrent ? readinessTrend(client.readiness, today) : null), [client.readiness, today, isCurrent]);
   const adjustment = useMemo(() => (isCurrent ? adjustSectionsForReadiness(resolvedRaw, readinessToday, readinessPattern) : { sections: resolvedRaw, adjustedNote: null }), [resolvedRaw, readinessToday, readinessPattern, isCurrent]);
   // A run of below-par days outranks whatever was scored this morning, so the
@@ -7295,11 +7300,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
 
   return (
     <div className="pad">
-      <button className="quote-hero" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
-        <p className="quote-hero-text">{todaysMentalTip.quote}</p>
-        <span className="quote-hero-attr"><span className="quote-hero-dash" />{todaysMentalTip.author}</span>
-      </button>
-
       {showDebrief && (
         <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
           <div className="nudge-card-title">How did it go?</div>
@@ -7377,34 +7377,89 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           <p className="muted" style={{ marginBottom: 0 }}>{nudgeMessage}</p>
         </div>
       )}
-      <div className="stat-row">
-        <StatChip label="Block" value={`${client.blockNumber || 1}`} />
-        <StatChip label="Week" value={`${pos.weekNumber}`} />
-        <StatChip label="Bodyweight" value={latestBW ? `${latestBW.weight}` : "—"} />
-        <StatChip label="Total Lifted" value={totalLifted ? formatWeight(totalLifted) : "—"} />
-      </div>
-
       <div className="hero-card">
-        <div className="hero-top-row">
-          <button className="hero-nav-btn" disabled={viewIndex <= 0} onClick={() => setViewIndex((i) => Math.max(0, i - 1))}><ChevronLeft size={16} /></button>
-          <div className="hero-eyebrow" style={{ marginBottom: 0 }}>Week {pos.weekNumber} · Day {pos.day.label}</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button className="hero-nav-btn" onClick={() => setShowJumpPicker((s) => !s)} title="Preview or skip ahead to a different day"><CalendarDays size={14} /></button>
-            <button className="hero-nav-btn" disabled={viewIndex >= totalSessions - 1} onClick={() => setViewIndex((i) => Math.min(totalSessions - 1, i + 1))}><ChevronRight size={16} /></button>
+        <div className="today-eyebrow">
+          <span>Block {client.blockNumber || 1} — Week {pos.weekNumber} — Day {pos.day.label}</span>
+          <span className="today-eyebrow-nav">
+            <button className="hero-nav-btn" disabled={viewIndex <= 0} onClick={() => setViewIndex((i) => Math.max(0, i - 1))} aria-label="Previous day"><ChevronLeft size={16} /></button>
+            <button className="hero-nav-btn" onClick={() => setShowJumpPicker((s) => !s)} title="Preview or skip ahead to a different day" aria-label="Jump to a day"><CalendarDays size={14} /></button>
+            <button className="hero-nav-btn" disabled={viewIndex >= totalSessions - 1} onClick={() => setViewIndex((i) => Math.min(totalSessions - 1, i + 1))} aria-label="Next day"><ChevronRight size={16} /></button>
+          </span>
+        </div>
+
+        <h2 className="today-title">{mainLift}</h2>
+        <p className="today-sub">
+          {pos.day.name}
+          {shape.buildUps > 0 ? ` · ${shape.buildUps} build-up${shape.buildUps === 1 ? "" : "s"} before the working sets` : ""}
+        </p>
+
+        <div className="today-metrics">
+          <div className="today-metric">
+            <b>{shape.working}</b>
+            <span>Working set{shape.working === 1 ? "" : "s"}</span>
+          </div>
+          <div className="today-metric">
+            <b>{exerciseCount}</b>
+            <span>Exercise{exerciseCount === 1 ? "" : "s"}</span>
+          </div>
+          <div className="today-metric">
+            <b>{shape.minutes}</b>
+            <span>Minutes</span>
           </div>
         </div>
 
-        <div className="hero-select-row">
-          <select className="hero-select" value={pos.phase.id} disabled><option>{pos.phase.name}</option></select>
-          <select className="hero-select" value={pos.day.id} disabled><option>Day {pos.day.label} — {pos.day.name}</option></select>
-        </div>
-
-        <div className="hero-title">{mainLift}</div>
-        <div className="hero-duration">
-          {pos.day.name} · {shape.working} working set{shape.working === 1 ? "" : "s"}
-          {shape.buildUps > 0 ? ` plus ${shape.buildUps} build-up${shape.buildUps === 1 ? "" : "s"}` : ""}
-          {" · about "}{shape.minutes} minutes with the warm-up
-        </div>
+        {isCurrent ? (
+          awaitingPayment ? (
+            <div className="adjust-box" style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Week 1 is complete</div>
+              <div className="pay-amount">${PROGRAM_PRICE - (client.promoDiscount || 0)}</div>
+              <p className="muted pay-lede">
+                One payment unlocks the whole program and it is yours to keep — no subscription,
+                nothing to cancel. Scan a code or tap it to open the app.
+              </p>
+              {(coachVenmo || coachCashApp) ? (
+                <div className="pay-methods">
+                  <PayMethod brand="venmo" label="Venmo" handle={coachVenmo}
+                    href={venmoUrl(coachVenmo)} src="/venmo-qr.png" />
+                  <PayMethod brand="cashapp" label="Cash App" handle={coachCashApp}
+                    href={cashAppUrl(coachCashApp)} src="/cashapp-qr.png" />
+                </div>
+              ) : null}
+              <p className="muted pay-after">
+                Once Kyle confirms it, this screen unlocks on its own within a minute.
+              </p>
+              <button className="btn-ghost wide" style={{ marginTop: 0, marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
+              {paidCheckEmpty && !checkingPaid && (
+                <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                  Not showing as paid yet. This screen keeps checking on its own.
+                  {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
+                </p>
+              )}
+              <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 0 }}>
+                You signed a liability waiver before your first session. It still applies: this is
+                software, you train unsupervised and at your own risk, and the fee buys access to
+                the program, not coaching or supervision.
+              </p>
+              {!coachVenmo && !coachCashApp && (
+                <p className="muted" style={{ marginBottom: 0 }}>Payment isn't set up yet. Try again shortly.</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {tapered.sections.every((s) => s.skipped) ? (
+                <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>No session to log today — see the note above.</div>
+              ) : (
+                <button className="today-cta" onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
+              )}
+              <div className="today-secondary-row">
+                <button onClick={onStartMobility}>Recovery · {mobilityMinutes} min</button>
+                <button onClick={() => setShowPreview(true)}>Full Plan</button>
+              </div>
+            </>
+          )
+        ) : (
+          <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
+        )}
 
         {isCurrent && (
           readinessToday ? (
@@ -7414,7 +7469,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             </div>
           ) : (
             <>
-              <div className="mood-row-label">How do you feel today?</div>
+              <div className="today-label first">How do you feel today</div>
               <div className="mood-row">
                 {[{ key: "fresh", label: "Good", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 4, readiness: 4 } }, { key: "beat", label: "Rough", entry: { sleep: 1, readiness: 1 } }].map((m) => (
                   <button key={m.key} className="mood-pill" onClick={async () => {
@@ -7427,7 +7482,10 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             </>
           )
         )}
-        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>{readinessToday ? "Edit full check-in (bodyweight, sleep, readiness)" : "Or do a full check-in instead"}</button>
+        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>
+          {readinessToday ? "Edit full check-in — bodyweight, sleep, readiness" : "Or do a full check-in instead"}
+          {latestBW ? ` · ${latestBW.weight} lb` : ""}
+        </button>
 
         {!isCurrent && (
           <div className="adjust-box">
@@ -7474,7 +7532,12 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           </div>
         )}
 
-        {pos.day.intent && <div className="intent-box">{pos.day.intent}</div>}
+        {pos.day.intent && (
+          <>
+            <div className="today-label">Today's intent</div>
+            <p className="today-line dim">{pos.day.intent}</p>
+          </>
+        )}
         {tapered.taperNote && <div className="intent-box"><Prose text={tapered.taperNote} /></div>}
         {isCurrent && daysToComp != null && daysToComp >= 0 && daysToComp <= TAPER_HEADS_UP_DAYS && (
           <div className="intent-box" style={{ marginTop: 8 }}>
@@ -7499,92 +7562,51 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             ))}
           </div>
         )}
-        {isCurrent ? (
-          awaitingPayment ? (
-            <div className="adjust-box" style={{ marginTop: 14 }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Week 1 is complete</div>
-              <div className="pay-amount">${PROGRAM_PRICE - (client.promoDiscount || 0)}</div>
-              <p className="muted pay-lede">
-                One payment unlocks the whole program and it is yours to keep — no subscription,
-                nothing to cancel. Scan a code or tap it to open the app.
-              </p>
-              {(coachVenmo || coachCashApp) ? (
-                <div className="pay-methods">
-                  <PayMethod brand="venmo" label="Venmo" handle={coachVenmo}
-                    href={venmoUrl(coachVenmo)} src="/venmo-qr.png" />
-                  <PayMethod brand="cashapp" label="Cash App" handle={coachCashApp}
-                    href={cashAppUrl(coachCashApp)} src="/cashapp-qr.png" />
-                </div>
-              ) : null}
-              <p className="muted pay-after">
-                Once Kyle confirms it, this screen unlocks on its own within a minute.
-              </p>
-              <button className="btn-ghost wide" style={{ marginTop: 0, marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
-              {paidCheckEmpty && !checkingPaid && (
-                <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-                  Not showing as paid yet. This screen keeps checking on its own.
-                  {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
-                </p>
-              )}
-              <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 0 }}>
-                You signed a liability waiver before your first session. It still applies: this is
-                software, you train unsupervised and at your own risk, and the fee buys access to
-                the program, not coaching or supervision.
-              </p>
-              {!coachVenmo && !coachCashApp && (
-                <p className="muted" style={{ marginBottom: 0 }}>Payment isn't set up yet. Try again shortly.</p>
-              )}
-            </div>
-          ) : (
-            <>
-              {tapered.sections.every((s) => s.skipped) ? (
-                <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>No session to log today — see the note above.</div>
-              ) : (
-                <button className="hero-start-btn" style={{ marginTop: 14 }} onClick={() => onStartLog(pos.phase.id, pos.day.id)}>Start Workout</button>
-              )}
-              <div className="hero-secondary-row">
-                <button className="hero-secondary-btn" onClick={onStartMobility}>Start Recovery</button>
-                <button className="hero-secondary-btn" onClick={() => setShowPreview(true)}>See Full Plan</button>
-              </div>
-            </>
-          )
-        ) : (
-          <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
-        )}
       </div>
 
-      <Card title="Lifting Milestones" subtitle={formatWeight(totalLifted) + " lifted since you started"}>
-        {nextMilestoneIdx >= 0 ? (
-          <>
-            <p className="muted" style={{ marginBottom: 10 }}>Next up: the weight of {LIFT_MILESTONES[nextMilestoneIdx].emoji} {LIFT_MILESTONES[nextMilestoneIdx].name} ({formatWeight(LIFT_MILESTONES[nextMilestoneIdx].weight)}).</p>
-            <div className="progress-bar-track"><div className="progress-bar-fill" style={{ width: `${Math.min(100, Math.round((totalLifted / LIFT_MILESTONES[nextMilestoneIdx].weight) * 100))}%` }} /></div>
-          </>
-        ) : (
-          <p className="muted" style={{ marginBottom: 10 }}>You've hit every milestone there is. Incredible.</p>
-        )}
-        <button className="btn-ghost wide" style={{ marginTop: 12 }} onClick={() => setShowAccomplishments(true)}>View All Accomplishments</button>
-      </Card>
-
+      <div className="today-label">Lifted since you started</div>
+      {nextMilestoneIdx >= 0 ? (
+        <>
+          <div className="today-milestone">
+            <b>{totalLifted ? formatWeight(totalLifted) : "0 lb"}</b>
+            <span>Next: {formatWeight(LIFT_MILESTONES[nextMilestoneIdx].weight)} — {LIFT_MILESTONES[nextMilestoneIdx].emoji} {LIFT_MILESTONES[nextMilestoneIdx].name}</span>
+          </div>
+          <div className="today-track"><div className="today-track-fill" style={{ width: `${Math.min(100, Math.round((totalLifted / LIFT_MILESTONES[nextMilestoneIdx].weight) * 100))}%` }} /></div>
+        </>
+      ) : (
+        <p className="today-line">You've hit every milestone there is. Incredible.</p>
+      )}
+      <button className="today-link" onClick={() => setShowAccomplishments(true)}>View all accomplishments</button>
 
       {recentPR && (
-        <Card title="Most Recent Personal Record"><div className="pr-line"><Trophy size={16} color="var(--accent)" /><span><b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {unitFor(recentPR.reps, recentPR.name)} ({fmtDate(recentPR.date)})</span></div></Card>
+        <>
+          <div className="today-label">Most recent personal record</div>
+          <p className="today-line">
+            <b>{recentPR.name}</b> — {recentPR.weight ? `${recentPR.weight} pounds × ` : ""}{recentPR.reps} {unitFor(recentPR.reps, recentPR.name)}
+            <span className="today-line dim" style={{ display: "block" }}>{fmtDate(recentPR.date)}</span>
+          </p>
+        </>
       )}
 
+      <div className="today-label">This week, off the gym floor</div>
+      <p className="today-line">{AEROBIC_BASE_STANDING.title}</p>
+      <details className="today-more">
+        <summary>Why it matters</summary>
+        <p>{AEROBIC_BASE_STANDING.detail}</p>
+      </details>
 
+      <div className="today-label">Phase notes</div>
+      <p className="today-line">{pos.phase.name}</p>
+      <details className="today-more">
+        <summary>What this block is doing</summary>
+        <p>{pos.phase.objective}</p>
+        <p>{pos.phase.intensityNote}</p>
+      </details>
 
-      <Card title="Recovery & Mobility" subtitle={`${mobilityMinutes} minutes — slow breathing first, then range-of-motion work`}>
-        <p className="muted" style={{ marginBottom: 10 }}>Also available any time on its own, not just after training.</p>
-        <button className="btn-ghost wide" onClick={onStartMobility}>Start recovery session</button>
-      </Card>
-
-      <Card title={AEROBIC_BASE_STANDING.title}>
-        <p className="muted">{AEROBIC_BASE_STANDING.detail}</p>
-      </Card>
-
-      <Card title="Phase Notes">
-        <p className="muted" style={{ marginBottom: 6 }}>{pos.phase.objective}</p>
-        <p className="muted" style={{ fontSize: 13 }}>{pos.phase.intensityNote}</p>
-      </Card>
+      <button className="today-quote" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
+        <p>{todaysMentalTip.quote}</p>
+        <span>{todaysMentalTip.author}</span>
+      </button>
 
       {showReadiness && (
         <ReadinessModal existing={readinessToday} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
@@ -9805,10 +9827,38 @@ function GlobalStyle() {
       .settings-avatar-preview { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .settings-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
       .settings-avatar-preview span { font-size: 24px; font-weight: 700; color: var(--text-dim); }
-      .quote-hero { display: block; width: 100%; text-align: left; background: none; border: none; padding: 2px 0 0; margin-bottom: 18px; cursor: pointer; }
-      .quote-hero-text { font-size: 19px; font-weight: 700; line-height: 1.38; color: var(--text); margin: 0 0 9px; }
-      .quote-hero-attr { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
-      .quote-hero-dash { width: 18px; height: 1px; background: var(--text-dim); flex-shrink: 0; }
+      /* ---- The day screen. Condensed display type for anything that is a
+         statement, hairlines instead of a box around every block, and the
+         accent spent once, on the only thing you press. ---- */
+      .today-eyebrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 11px; font-weight: 500; color: var(--text-dim); padding-bottom: 10px; }
+      .today-eyebrow-nav { display: flex; gap: 6px; flex-shrink: 0; }
+      .today-title { font-family: 'Oswald', sans-serif; font-weight: 700; text-transform: uppercase; font-size: 40px; line-height: 0.95; margin: 2px 0 8px; text-wrap: balance; color: var(--text); }
+      .today-sub { color: var(--text-dim); font-size: 13px; line-height: 1.45; margin: 0 0 18px; }
+      .today-metrics { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+      .today-metric { padding: 13px 0; min-width: 0; }
+      .today-metric + .today-metric { border-left: 1px solid var(--border); padding-left: 14px; }
+      .today-metric b { display: block; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+      .today-metric span { display: block; margin-top: 5px; font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.16em; font-weight: 600; }
+      .today-cta { display: block; width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 4px; padding: 16px; cursor: pointer; font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; font-size: 15px; margin-bottom: 10px; }
+      .today-secondary-row { display: flex; gap: 8px; margin-bottom: 22px; }
+      .today-secondary-row button { flex: 1; min-width: 0; background: none; border: 1px solid var(--border); color: var(--text); padding: 11px 6px; cursor: pointer; font-family: 'Oswald', sans-serif; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; border-radius: 4px; }
+      .today-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); padding-top: 16px; margin-bottom: 9px; border-top: 1px solid var(--border); }
+      .today-label.first { border-top: none; padding-top: 0; }
+      .today-line { font-size: 13.5px; line-height: 1.5; margin: 0 0 4px; color: var(--text); }
+      .today-line.dim { color: var(--text-dim); }
+      .today-link { display: block; width: 100%; text-align: left; background: none; border: none; padding: 6px 0 2px; cursor: pointer; color: var(--text-dim); font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; }
+      .today-more { margin: 2px 0 4px; }
+      .today-more > summary { list-style: none; cursor: pointer; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-family: 'Oswald', sans-serif; font-weight: 600; padding: 4px 0; }
+      .today-more > summary::-webkit-details-marker { display: none; }
+      .today-more p { margin: 6px 0 0; color: var(--text-dim); font-size: 12.5px; line-height: 1.65; }
+      .today-milestone { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+      .today-milestone b { font-family: 'Oswald', sans-serif; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+      .today-milestone span { font-size: 11.5px; color: var(--text-dim); text-align: right; min-width: 0; }
+      .today-track { height: 2px; background: var(--border); margin-bottom: 9px; }
+      .today-track-fill { height: 100%; background: var(--text); }
+      .today-quote { display: block; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid var(--border); margin-top: 18px; padding: 14px 0 0; cursor: pointer; }
+      .today-quote p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-dim); line-height: 1.55; }
+      .today-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; color: var(--text-dim); font-weight: 600; }
       /* ---- Title block: emblem + wordmark + ruled subtitle ---- */
       .brand-block { display: flex; align-items: center; gap: 11px; min-width: 0; }
       .brand-stack { min-width: 0; }
@@ -9838,17 +9888,12 @@ function GlobalStyle() {
       @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } .topbar { padding-left: 10px; padding-right: 10px; } .topbar-icons { gap: 6px; } }
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
-      .stat-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
       .hero-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
       .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
       .hero-nav-btn:disabled { opacity: 0.55; }
-      .hero-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
-      .hero-select-row { display: flex; gap: 8px; margin-bottom: 16px; }
-      .hero-select { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
       .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
-      .mood-row-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
       .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
       .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
       .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -9925,9 +9970,6 @@ function GlobalStyle() {
       .dash-row-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
       .dash-row-body { padding: 0 14px 14px; border-top: 1px solid var(--border); padding-top: 12px; }
       .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
-      .hero-start-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 12px; padding: 15px; font-size: 15.5px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.03em; box-shadow: none; }
-      .hero-secondary-row { display: flex; gap: 8px; margin-top: 8px; }
-      .hero-secondary-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 12px 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
       .hero-readiness-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
       .hero-dot { width: 8px; height: 8px; border-radius: 50%; }
       .stat-chip { flex: 1 1 45%; min-width: 90px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
