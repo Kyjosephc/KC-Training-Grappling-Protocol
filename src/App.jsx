@@ -872,6 +872,11 @@ async function removeStanding(clientUserId) {
 // deliberately different from false.
 async function fetchPaidFlag(userId) {
   if (!supabase || !userId) return null;
+  // The coach is never waiting on a payment. Saying so here, by id, is the
+  // whole of that exception. It used to be inferred from "this person has no
+  // link row", which was also true of every athlete whose row had not been
+  // written yet, and handed them the program for nothing.
+  if (COACH_USER_ID && userId === COACH_USER_ID) return true;
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("client_links")
       .select("paid").eq("client_user_id", userId).maybeSingle();
@@ -879,9 +884,9 @@ async function fetchPaidFlag(userId) {
     return data;
   });
   if (!outcome.ok) return null;
-  // No link row at all is the coach's own account, or a profile the coach made
-  // themselves. Neither is waiting on a payment.
-  if (!outcome.result) return true;
+  // No link row means nobody has marked this person as paid, so they have not
+  // been. The coach is handled above, by id.
+  if (!outcome.result) return false;
   return !!outcome.result.paid;
 }
 
@@ -5099,7 +5104,14 @@ function MainApp({ userId, onSignOut }) {
       if (activeIdRef.current !== requestedId) return;
       let healedReadiness = false;
       if (c) {
-        if (linkPaid !== null) c.paid = linkPaid;
+        // Payment is decided here and nowhere else. The authority is the
+        // client_links row read above, in a column only the coach may write.
+        // Paid is true when that column came back true, and in no other
+        // circumstance: not because the record says so (the athlete can write
+        // their record), not because the row is missing, and not because the
+        // read failed. Anything short of a yes leaves the wall up until the
+        // coach marks them paid in the dashboard.
+        c.paid = linkPaid === true;
         if (!c.bodyweightLog) c.bodyweightLog = [];
         if (!c.mobilityLogs) c.mobilityLogs = [];
         if (!c.prLog) c.prLog = [];
@@ -5118,11 +5130,6 @@ function MainApp({ userId, onSignOut }) {
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
         if (!c.rulesProgress) c.rulesProgress = emptyRulesProgress();
-        // Whatever the record says about payment is ignored. The authority is
-        // the client_links row read above, which the athlete cannot write to.
-        // A failed read leaves them unblocked rather than locking out somebody
-        // who has paid because the network dropped.
-        if (c.paid === undefined) c.paid = true;
         if (!c.program) {
           // Nothing sensible to render without a program, and silently throwing
           // here used to leave the app on a spinner with no way out.

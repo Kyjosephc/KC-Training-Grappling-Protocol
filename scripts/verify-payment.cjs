@@ -60,6 +60,23 @@ check("paid, through a program restart (day back to 0, block 2)",
 check("paid, deep into block 2", paid({ sessionsCompleted: 20, blockNumber: 2, logs: Array(56).fill({}) }), false);
 check("paid, block 5, a year in", paid({ sessionsCompleted: 11, blockNumber: 5, logs: Array(155).fill({}) }), false);
 
+console.log("\nOnly an explicit yes opens the wall");
+// loadActiveClient sets c.paid = (linkPaid === true), so every other shape the
+// server read can come back as has to leave the athlete blocked. These are the
+// shapes that used to let somebody through.
+const spent = { sessionsCompleted: 3, logs: [{}, {}, {}] };
+check("a brand new athlete starts out not paid", athlete().paid, false);
+check("paid missing from the record blocks", blocked(athlete({ ...spent, paid: undefined })), true);
+check("paid false blocks", blocked(athlete({ ...spent, paid: false })), true);
+check("a failed read (null) blocks", blocked(athlete({ ...spent, paid: null })), true);
+// The gate itself only asks whether paid is truthy, so a junk truthy value
+// would open it. That is exactly why loadActiveClient assigns
+// `c.paid = (linkPaid === true)` and never the raw read: the normalising is
+// what makes the two checks above hold, and this records the dependency.
+check("any truthy paid opens the gate — hence the === true on the way in",
+  blocked(athlete({ ...spent, paid: "anything" })), false);
+check("a real true opens it", blocked(athlete({ ...spent, paid: true })), false);
+
 console.log("\nRestarting the program is not a fresh free week for the unpaid");
 check("unpaid, restarted to day 0 with a block of logs behind them",
   blocked(athlete({ sessionsCompleted: 0, blockNumber: 2, logs: Array(36).fill({}) })), true);
