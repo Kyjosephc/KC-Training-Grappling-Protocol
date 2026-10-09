@@ -7005,6 +7005,50 @@ function lastWeekBest(client, exerciseName, currentWeekNumber) {
   return best;
 }
 
+// Four exercises in five carry no percentage — they say "moderate" or "light" or
+// nothing at all, and the athlete is left to guess. They should not have to: the
+// app is holding every weight they have ever lifted on that movement.
+//
+// The rule is the one a coach would use out loud. Did you get the prescribed
+// reps last time? Then go up a little. Did you not? Then repeat it. Nothing
+// clever, and deliberately conservative — a suggestion that is slightly light is
+// a set they finish, and a suggestion that is heavy is a set they fail.
+const LOWER_BARBELL = /squat|deadlift|trap bar|hinge|good morning|romanian|rdl|hip thrust|lunge|step[- ]?up|leg press|sled/i;
+
+function suggestFromHistory(client, exerciseName, target, isDeload) {
+  if (!exerciseName || !needsWeight(exerciseName)) return null;
+  // Find the most recent session that actually has loaded sets on this lift.
+  let prev = null;
+  for (let i = (client.logs || []).length - 1; i >= 0 && !prev; i--) {
+    const log = client.logs[i];
+    const en = (log.exercises || []).find((e) => e.name === exerciseName);
+    if (!en) continue;
+    let top = null;
+    for (const st of en.sets || []) {
+      const w = Number(st.weight) || 0, r = Number(st.reps) || 0;
+      if (!w || !r || r > E1RM_REP_CAP) continue;
+      if (!top || w > top.weight || (w === top.weight && r > top.reps)) {
+        top = { weight: w, reps: r, rir: st.rir };
+      }
+    }
+    if (top) prev = { date: log.date, top };
+  }
+  if (!prev) return null;
+
+  const targetReps = Number(String((target && target.reps) || "").match(/\d+/)?.[0]) || null;
+  const hitTarget = targetReps ? prev.top.reps >= targetReps : false;
+  // A deload is not the week to add weight to the bar, whatever they managed
+  // last time. Repeat it lighter and say so.
+  if (isDeload) {
+    return { weight: Math.round((prev.top.weight * 0.8) / 5) * 5, date: prev.date,
+      last: prev.top, reason: "deload" };
+  }
+  const step = LOWER_BARBELL.test(exerciseName) ? 10 : 5;
+  const weight = hitTarget ? Math.round((prev.top.weight + step) / 5) * 5
+    : Math.round(prev.top.weight / 5) * 5;
+  return { weight, date: prev.date, last: prev.top, reason: hitTarget ? "up" : "repeat", step, targetReps };
+}
+
 // Working sets, build-up sets, and a time estimate built from the actual rest
 // prescriptions rather than a guess per section.
 function sessionShape(sections) {
@@ -8209,6 +8253,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   // session meant the suggestion never arrived for the main lifts at
                   // all, while the screen promised it twice.
                   const priorBestForPct = loggedSessions >= 1 ? lastAllTimeBest(client, displayName) : null;
+                  // The fallback for everything the percentages do not cover.
+                  const isDeloadWeek = /deload/i.test(phase?.name || "") || /deload/i.test(en.target.quality || "");
+                  const hist = suggestFromHistory(client, displayName, en.target, isDeloadWeek);
                   const pctForSet = (i) => {
                     if (i < 0 || i >= en.sets.length) return null;
                     const ps = en.target.perSetTargets ? en.target.perSetTargets[i] : null;
@@ -8225,7 +8272,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     const thisSetE1rm = est1RM(Number(s.weight) || 0, Number(s.reps) || 0);
                     const beatsBest = thisSetE1rm > 0 && (!allTimeBest || thisSetE1rm >= allTimeBest.e1rm);
                     const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
-                    const targetWeight = effectivePct && priorBestForPct ? Math.round((priorBestForPct.e1rm * effectivePct) / 100) : null;
+                    const targetWeight = effectivePct && priorBestForPct
+                      ? Math.round((priorBestForPct.e1rm * effectivePct) / 100)
+                      : (hist ? hist.weight : null);
                     // Consecutive sets at the same percentage share one note above
                     // them, rather than repeating an identical line under each.
                     const startsRun = !!effectivePct && (setIdx === 0 || pctForSet(setIdx - 1) !== effectivePct);
@@ -8252,6 +8301,20 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     const isFirstRun = !en.sets.some((_, i) => i < setIdx && pctForSet(i));
                     return (
                       <React.Fragment key={setIdx}>
+                        {setIdx === 0 && !effectivePct && hist && (
+                          <div className="pct-1rm-row">
+                            {hist.reason === "deload"
+                              ? `Deload — try about ${hist.weight} lb, roughly 80% of the ${hist.last.weight} lb you did on ${fmtDate(hist.date)}. Lighter on purpose.`
+                              : hist.reason === "up"
+                                ? `Try about ${hist.weight} lb. You got ${hist.last.reps} reps at ${hist.last.weight} lb on ${fmtDate(hist.date)}, which met the target — so this is ${hist.step} lb more.`
+                                : `Try about ${hist.weight} lb again. Last time was ${hist.last.reps} reps at ${hist.last.weight} lb on ${fmtDate(hist.date)}${hist.targetReps ? `, short of the ${hist.targetReps} prescribed` : ""} — repeat it and own the reps before adding weight.`}
+                          </div>
+                        )}
+                        {setIdx === 0 && !effectivePct && !hist && needsWeight(displayName) && (
+                          <div className="pct-1rm-row">
+                            First time logging this one. Build up until the last rep is hard but you could still manage the reps-in-reserve above, and the app will suggest a weight from here on.
+                          </div>
+                        )}
                         {startsRun && (
                           <div className="pct-1rm-row">
                             {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max{runEffort ? ` \u00b7 effort ${runEffort}` : ""}
