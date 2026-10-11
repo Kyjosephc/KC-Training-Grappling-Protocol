@@ -474,6 +474,48 @@ check("the four that keep you training are in every block of the in-season progr
     if (missing.length) throw new Error(`${ph.name} drops ${missing.join(", ")}`);
   });
 });
+check("the warm-up does not repeat the jump the session already prescribes", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const warm = (p.warmup || []).flatMap((b) => (b.items || []).map((i) => i.name || ""));
+    const primers = [];
+    (p.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) => {
+      if (sec.type !== "power") return;
+      (sec.exercises || []).forEach((e) => primers.push(e.name || ""));
+    })));
+    const clash = warm.filter((w) => primers.some((pr) => pr && w && pr.toLowerCase() === w.toLowerCase()));
+    if (clash.length) throw new Error(`program ${v}: ${clash.join(", ")} is in the warm-up and prescribed again as a primer`);
+  });
+});
+check("no in-season session runs longer than the three-day programs' sessions", () => {
+  const p = A.buildProgramVariant("D");
+  let worst = 0, where = "";
+  p.phases.forEach((ph) => ph.days.forEach((d) => {
+    const shape = A.sessionShape((d.sections || []).map((sec) => ({ ...sec, exercises: sec.exercises || [] })));
+    if (shape.minutes > worst) { worst = shape.minutes; where = `${ph.name} day ${d.label}`; }
+  }));
+  // It is the short-session program. If one of its sessions reaches 50 minutes
+  // it is no longer the thing it says it is on the signup card.
+  if (worst > 45) throw new Error(`${where} estimates ${worst} minutes`);
+});
+check("the in-season block does not deload more than twice", () => {
+  const p = A.buildProgramVariant("D");
+  const n = p.phases.filter((ph) => /deload/i.test(ph.name)).length;
+  // The fatigue is coming from the mat, which does not deload on this
+  // calendar. Three scheduled easy weeks in twelve cost ground.
+  if (n > 2) throw new Error(`${n} deloads in twelve weeks`);
+});
+check("the in-season program never progresses by adding sets", () => {
+  const p = A.buildProgramVariant("D");
+  const mainSetsIn = (ph) => {
+    const d = ph.days.find((x) => x.label === "1");
+    const work = (d.sections || []).find((sec) => /working sets/i.test(sec.name || ""));
+    return Math.max(...(work.exercises || []).map((e) => Number(e.sets) || 0));
+  };
+  const hard = p.phases.filter((ph) => !/deload/i.test(ph.name)).map(mainSetsIn);
+  if (Math.max(...hard) > 3) throw new Error(`a block carries ${Math.max(...hard)} sets on a main lift`);
+});
+
 check("a deload is never the hardest week in a block", () => {
   VARIANTS.forEach((v) => {
     const p = A.buildProgramVariant(v);

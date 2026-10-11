@@ -2953,7 +2953,6 @@ function defaultWarmup() {
     ]},
     { id: uid(), block: "Potentiate", duration: "1 to 2 minutes", items: [
       { id: uid(), name: "Box Jumps", detail: "3 reps. Step down off the box every single rep — never jump down. Jumping down roughly doubles the landing force for no added benefit and is the most common way people hurt an Achilles or patellar tendon on this.", videoUrl: "https://www.youtube.com/shorts/bCNpPn5b3Y4" },
-      { id: uid(), name: "Broad Jumps", detail: "3 reps. Stick the landing and reset fully between each one. Three good jumps prime you; ten leave you worse off for the session. Land soft with the knees tracking over the toes.", videoUrl: "https://www.youtube.com/shorts/v0yrBWA3eEs" },
     ]},
   ];
 }
@@ -3353,14 +3352,14 @@ function backfillVideos(program) {
 // drop first when they get busy.
 // ---------------------------------------------------------------------------
 function inSeasonDayOne(tier) {
-  const mainSets = tier === "peak" ? 2 : tier === "build" ? 4 : tier === "deload" ? 2 : 3;
+  const mainSets = (tier === "peak" || tier === "deload") ? 2 : 3;
   const mainReps = tier === "peak" ? "3" : "5";
   // A deload has to be the lightest week in the block, including lighter than
   // the competition weeks, so the accessory pairs come down to one set too.
   const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
   // Two in reserve in the competition weeks: the sets come down, so what is
   // left has to be genuinely heavy or it holds nothing.
-  const rir = tier === "deload" ? 5 : tier === "peak" ? 2 : 3;
+  const rir = tier === "deload" ? 5 : (tier === "peak" || tier === "build") ? 2 : 3;
   return {
     id: uid(), label: "1", name: "Lower Emphasis — Full Body",
     intent: tier === "peak"
@@ -3384,23 +3383,26 @@ function inSeasonDayOne(tier) {
         ex({ name: "Half-Kneeling Single Arm Dumbbell Press", sets: accSets, reps: "6 each side", load: "moderate", rir, rest: "90 seconds, then back to the split squat", quality: "Accessory",
           purpose: "Overhead strength with the trunk doing the work to stop you leaning. Half-kneeling because it takes the low back out of it in a week where the mat is already loading it.",
           cues: "Ribs down, glute of the back leg switched on. If you have to lean back to finish the rep, the weight is too heavy." }) ]},
-      { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
         ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: tier === "deload" ? "15 seconds per side" : "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "60 seconds", quality: "Durability",
           purpose: "Adductor strain is the injury that takes grapplers out for six weeks, and this is the single best-supported thing you can do about it. Two sets, twice a week, all season.",
           cues: "Top leg on the bench, hips lifted and level. Drop to the short-lever version with the knee on the bench if the hips sag." }),
         ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction", load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
           purpose: "The neck is loaded every round you train and it is the first thing dropped when the session gets short. It is isometric, so it costs almost nothing to recover from and can run every week of the season.",
-          cues: "Six directions including the two rotation holds. Build the pressure over two seconds rather than jerking into it. Stop the set if anything pinches or travels down an arm." }) ]},
+          cues: "Six directions including the two rotation holds. Build the pressure over two seconds rather than jerking into it. Stop the set if anything pinches or travels down an arm." }),
+        ex({ name: "Gi or Towel Hang", sets: 2, reps: tier === "deload" ? "20 seconds" : "to near failure, capped at 30 seconds", load: "bodyweight, hanging from a gi lapel or a towel over the bar", rir: 1, rest: "90 seconds", quality: "Grip",
+          purpose: "The carries train crushing a thick handle. This trains holding a fistful of cloth while somebody tries to rip it out of your hand, which is the grip a gi match is actually decided by and the one thing in a gi athlete's week that nothing else here covers. Two sets, three minutes.",
+          cues: "A gi jacket or a towel over the bar, one in each hand. Hang with the shoulders allowed to come up by your ears. Let go deliberately before the hands open on their own — dropping off a bar is how wrists get hurt. Thirty seconds is the cap even if you could hold longer; go to one hand or add weight instead of going longer." }) ]},
     ],
   };
 }
 
 function inSeasonDayTwo(tier) {
-  const mainSets = tier === "peak" ? 2 : tier === "build" ? 4 : tier === "deload" ? 2 : 3;
+  const mainSets = (tier === "peak" || tier === "deload") ? 2 : 3;
   // A deload has to be the lightest week in the block, including lighter than
   // the competition weeks, so the accessory pairs come down to one set too.
   const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
-  const rir = tier === "deload" ? 5 : tier === "peak" ? 2 : 3;
+  const rir = tier === "deload" ? 5 : (tier === "peak" || tier === "build") ? 2 : 3;
   return {
     id: uid(), label: "2", name: "Upper Emphasis — Full Body",
     intent: tier === "peak"
@@ -3421,7 +3423,10 @@ function inSeasonDayTwo(tier) {
         ex({ name: "Valslide Hamstring Curls", sets: accSets, reps: tier === "peak" ? "5" : "6 to 8", load: "bodyweight — slide further out to make it harder", rir, rest: "90 seconds", tempo: "3/0/1", quality: "Posterior Chain",
           purpose: "The only knee-flexion work in the program, and the pattern with the strongest injury-prevention evidence behind it. It replaced a second Romanian deadlift: the trap bar on the first session already covers the hinge, and a heavy eccentric hinge forty-eight hours later was the surest way to be sore the day before a hard round. Here the slow half is the point rather than a side effect, and there is no load on the spine.",
           cues: "Heels on sliders, hips lifted and held there, drag the heels in and take three seconds letting them slide back out. The hips do not drop. Shorten the slide rather than stopping if they cramp. Leave this one out inside seventy-two hours of competing — it is the one exercise here that can make you sore." }) ]},
-      { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
+        ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
+          purpose: "The only loaded work in the program for the back of the shoulder and the muscles that hold the shoulder blade down. Everything else on this day pushes or pulls through the front. Put here deliberately: without it the app was adding one on its own, and landing it on a different day each block.",
+          cues: "Elbows high, pull toward the bridge of your nose, finish with the knuckles beside your ears. Light — this is shoulder health, not a row." }),
         ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
           purpose: "Grip and the whole side of the trunk at once, which is the carry that looks most like holding somebody who does not want to be held. Grip is the quality a gi season builds and a no-gi season quietly loses.",
           cues: "Stand tall and do not let the weight pull you sideways. Walk, do not rush. Set it down before the grip fails rather than after." }),
@@ -3449,26 +3454,30 @@ function buildInSeasonProgram() {
     variant: "D",
     objective: "Hold the strength you built, keep the neck, adductors, grip and hamstrings covered, and take nothing away from the mat. Two sessions a week, around forty to forty-five minutes each including the warm-up, written for the stretch of the year when you are competing or training hard and the gym is not the priority.",
     methodology:
-      "Strength is kept with intensity, not volume. That is the whole idea here and it is why this is not simply a shorter version of the other programs. The loads stay respectable — heavy fives, and heavy triples in the competition weeks — while almost everything else comes off, because the mat is already the hard part of your week.\n\nBoth sessions are full body rather than split. If you miss one, you have missed some of everything rather than all of your lower body, which is what actually happens in a season.\n\nFour things never come out, in any block: the neck, the adductors, grip, and one hinge. Those are the four that keep you training, and they are the four everybody drops first when they get busy.\n\nThere is no conditioning programmed here. In season your mat work is the conditioning, and adding intervals on top of hard rounds is how people arrive at a competition flat. If you have a genuinely light training week, one easy twenty to thirty minute aerobic session on a non-lifting day is plenty.",
+      "Strength is kept with intensity, not volume. That is the whole idea here, it is why this is not simply a shorter version of the other programs, and it is why the sets never climb — the block progresses by getting closer to the limit and by the load the app adds from what you logged, not by getting longer. The loads stay respectable — heavy fives, and heavy triples in the competition weeks — while almost everything else comes off, because the mat is already the hard part of your week.\n\nBoth sessions are full body rather than split. If you miss one, you have missed some of everything rather than all of your lower body, which is what actually happens in a season.\n\nFour things never come out, in any block: the neck, the adductors, grip, and one hinge. Those are the four that keep you training, and they are the four everybody drops first when they get busy.\n\nThere is no conditioning programmed here. In season your mat work is the conditioning, and adding intervals on top of hard rounds is how people arrive at a competition flat. If you have a genuinely light training week, one easy twenty to thirty minute aerobic session on a non-lifting day is plenty.",
     philosophy: "Nothing in this program should ever cost you a round. Every set is prescribed to stop short — the reps-in-reserve number on each exercise is the point, not a suggestion. If a session leaves you sore enough to notice it on the mat two days later, it was too much, and the answer is less volume rather than skipping the week.",
     coachNote: "Use this when there are competitions on the calendar, or any stretch where mat volume is high and gym time is short. When the season ends, switch to Program B in Settings and build again — this program is designed to hold ground, not to take it.",
     warmup: defaultWarmup(),
     phases: [
-      inSeasonPhase("In-Season Base — Weeks 1 to 3", 1, 3, "base",
+      // Two deloads in twelve weeks, not three. The fatigue an in-season
+      // athlete is carrying comes from the mat, and the mat does not deload on
+      // this calendar — so a scheduled easy week off the back of an already
+      // easy block buys nothing, and three of them in a program whose only job
+      // is to not lose ground will cost ground. The week 4 deload is gone and
+      // the base block runs four weeks instead. The two that remain are the
+      // mid-season one and the one that closes the block out.
+      inSeasonPhase("In-Season Base — Weeks 1 to 4", 1, 4, "base",
         "Settle into two sessions a week and establish what a real working weight is for each of the four main lifts. The load should climb a little each week while the sets and reps stay the same.",
-        "Leave three reps in the tank on the main lifts and four on the accessories. If you competed or had an unusually hard week on the mat, cut the accessory pairs to one set and keep the main lifts — that is the right trade, every time."),
-      inSeasonPhase("Deload — Week 4", 4, 4, "deload",
-        "A week off the gas in the gym. Same movements, half the sets, deliberately light.",
-        "Five reps in reserve throughout. This should feel too easy. That is the dose, not a mistake."),
+        "Leave three reps in the tank on everything. If you competed or had an unusually hard week on the mat, cut the accessory pairs to one set and keep the main lifts heavy — that is the right trade, every time, and it is better than skipping the session."),
       inSeasonPhase("In-Season Build — Weeks 5 to 7", 5, 7, "build",
-        "One extra set on each of the main lifts, the same everywhere else. This is as much volume as this program ever carries.",
-        "Still three reps in reserve. If the fourth set is costing you anything on the mat, drop back to three and stay there — holding ground beats pushing in season."),
+        "Same sessions, one rep closer to the limit. Nothing gets longer — the main lifts just get harder, and the app keeps adding load from what you logged.",
+        "Two reps in reserve on the main lifts instead of three. That is the whole progression, and it is deliberate: adding sets in the weeks your mat load is climbing is how an in-season program turns into a problem. If two in reserve is costing you anything on the mat, go back to three and stay there."),
       inSeasonPhase("Deload — Week 8", 8, 8, "deload",
-        "Second deload. Same as the first.",
-        "Five reps in reserve throughout. Light on purpose."),
+        "The one scheduled easy week in the block, halfway through. Same movements, half the sets, deliberately light.",
+        "Five reps in reserve throughout. This should feel too easy. That is the dose, not a mistake. If your mat week was light and you feel good, you can skip this and carry on — the week is here for the season that has been hard, not the calendar."),
       inSeasonPhase("Competition Weeks — Weeks 9 to 11", 9, 11, "peak",
-        "The weeks that matter. Load stays heavy, sets come down to two, accessories to one. You should leave the gym feeling like you could have done more — that is the design.",
-        "Heavy triples on the pull and the pull-up, heavy fours and fives on the press and the row, two sets each. Nothing to failure and nothing new. If you compete this week, do the session no later than seventy-two hours before you step on, or skip it entirely — missing one in-season session costs you nothing."),
+        "The weeks that matter. Load stays heavy and the sets come down to two. You should leave the gym feeling like you could have done more — that is the design.",
+        "Two reps in reserve on the main lifts, two sets each. Heavy is the point: the volume came off so what is left could be genuinely hard. Nothing to failure and nothing new. If you compete this week, do the session no later than forty-eight hours before you step on, leave the hamstring curl out, and skip it entirely inside twenty-four — missing one in-season session costs you nothing."),
       inSeasonPhase("Deload — Week 12", 12, 12, "deload",
         "Close the block out light, then decide what comes next.",
         "Five reps in reserve. If your season is over, switch to Program B in Settings and start building again. If it is not, start this program over — it is designed to be run back as many times as the season needs."),
