@@ -545,6 +545,51 @@ check("neither two-day program progresses by adding sets", () => {
   });
 });
 
+check("no deload week asks for a maximal single", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    p.phases.filter((ph) => /deload/i.test(ph.name)).forEach((ph) => {
+      ph.days.forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+        const tops = (e.perSetTargets || []).some((t) => Number(t.rir) === 0);
+        // A week with a true top single in it is not a deload.
+        if (tops) throw new Error(`program ${v}, ${ph.name} day ${d.label}: ${e.name} ramps to a set at RIR 0`);
+      })));
+    });
+  });
+});
+check("every supersetted exercise has as many sets as the lift it sits inside", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    p.phases.forEach((ph) => ph.days.forEach((d) => (d.sections || []).forEach((sec) => {
+      const list = sec.exercises || [];
+      // "rest 0 seconds" means the work happens inside the previous lift's rest,
+      // so its set count has to match or the last sets have nowhere to go.
+      list.forEach((e, i) => {
+        if (!/^0 seconds/.test(String(e.rest || "")) || i === 0) return;
+        const host = list[i - 1];
+        if ((Number(e.sets) || 0) > (Number(host.sets) || 0)) {
+          throw new Error(`program ${v}, ${ph.name} d${d.label}: ${e.name} has ${e.sets} sets inside ${host.name}'s ${host.sets}`);
+        }
+      });
+    })));
+  });
+});
+check("no bilateral lift is prescribed per side", () => {
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    p.phases.forEach((ph) => ph.days.forEach((d) => (d.sections || []).forEach((sec) =>
+      (sec.exercises || []).forEach((e) => {
+        const perSide = /each side|per side|\/side/i.test(String(e.reps || ""));
+        // Name the lifts that are unambiguously two-sided rather than trying to
+        // guess which ones are not — most accessories genuinely are per-side.
+        const BILATERAL = /^(back squat|front squat|box squat|zercher squat|anderson squat|bench press|incline bench press|wide-grip bench press|close-grip bench press|spoto press|standing barbell overhead press|barbell romanian deadlift|trap bar deadlift|seal row|bent over barbell row|pendlay row|weighted pull-up|inverted row|barbell good morning|weighted dip|weighted push-ups|medicine ball slam|broad jump|pogo hops)$/i;
+        if (perSide && BILATERAL.test(String(e.name || "").trim())) {
+          throw new Error(`program ${v}: ${e.name} is prescribed "${e.reps}" but has no sides`);
+        }
+      }))));
+  });
+});
+
 check("a deload is never the hardest week in a block", () => {
   VARIANTS.forEach((v) => {
     const p = A.buildProgramVariant(v);

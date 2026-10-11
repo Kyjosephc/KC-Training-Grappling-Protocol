@@ -3507,6 +3507,11 @@ const TWO_DAY_NECK = (tier) => ex({
   load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
   purpose: "Twice a week, every week, in both of the two-day programs. It is isometric, so it costs almost nothing to recover from, and the neck is loaded every round you train.",
 });
+const TWO_DAY_FACE_PULL = () => ex({
+  name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2,
+  rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
+  purpose: "The back of the shoulder and the muscles that hold the shoulder blade down, on both days. Placed deliberately: without it the app adds one itself to meet the weekly minimum, and lands it on a different day each block.",
+});
 const TWO_DAY_COPENHAGEN = (tier) => ex({
   name: "Copenhagen Plank (each side)", sets: 2,
   reps: tier === "deload" ? "15 seconds per side" : "25 seconds per side",
@@ -3520,9 +3525,22 @@ const TWO_DAY_COPENHAGEN = (tier) => ex({
 // Program A already carries that entirely on its first two days, so the two-day
 // version keeps the engine intact and loses the third day.
 
+function meDeload(which) {
+  const lower = which === "lower";
+  return ex({
+    name: (lower ? meLowerPool : meUpperPool)[0].name,
+    rotatingPool: lower ? "meLowerPool" : "meUpperPool",
+    sets: 4, reps: "light doubles and triples", load: "autoregulated, and deliberately light",
+    rir: 3, rest: "2 minutes", quality: "Max Effort (Deload)",
+    purpose: "A deload week with a maximal single in it is not a deload. The movement stays so the groove stays; the weight does not.",
+    cues: "Work up only as far as a weight that still moves fast and feels easy, and stop there. Nothing today should be a grind, and there is no top single this week. If you find yourself wondering whether you could take more, you are at the right weight — leave it.",
+  });
+}
 function conjugateTwoDayOne(tier, dePct) {
   const deSets = tier === "deload" ? 4 : tier === "peak" ? 4 : 6;
-  const rowSets = tier === "deload" ? 4 : 6;
+  // The row lives inside the speed bench's rest periods, so its set count has
+  // to track the bench's or the last sets have nowhere to go.
+  const rowSets = deSets;
   const rir = tier === "deload" ? 4 : tier === "build" || tier === "peak" ? 2 : 3;
   const hingeSets = tier === "deload" ? 1 : 2;
   return {
@@ -3532,7 +3550,8 @@ function conjugateTwoDayOne(tier, dePct) {
       : "Two qualities in one session — a true heavy top set while you are fresh, then speed work on the press once the hard part is done. Keep the speed sets genuinely fast.",
     sections: [
       { id: uid(), type: "strength", name: "Main Strength", exercises: [
-        { ...meLowerBlock(), rest: "90 seconds on the build-up sets, 2 to 3 minutes before the top one" } ] },
+        tier === "deload" ? meDeload("lower")
+          : { ...meLowerBlock(), rest: "90 seconds on the build-up sets, 3 to 4 minutes before each top single" } ] },
       { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [
         { ...deBench(dePct), sets: deSets },
         ex({ name: "Inverted Row", sets: rowSets, reps: "6", load: "bodyweight — raise your feet to make it harder", rir, rest: "0 seconds — taken inside the speed bench rest, so it costs no extra time", tempo: "2/1/1", quality: "Accessory",
@@ -3546,7 +3565,7 @@ function conjugateTwoDayOne(tier, dePct) {
           purpose: "Grip for free. You are already holding the bar at the end of the set, so this costs the time you were going to spend putting it down. Thumbs around the bar, no straps, no hook grip — the point is the hand.",
           cues: "Finish the last rep standing and just hold it. Let go deliberately before the hands open on their own. Build from twenty-five seconds to forty before adding weight." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
     ],
   };
 }
@@ -3563,7 +3582,8 @@ function conjugateTwoDayTwo(tier, dePct) {
       : "Max effort on the press first while you are fresh, then explosive work on the lower body. Two qualities a session is what lets two sessions cover a week.",
     sections: [
       { id: uid(), type: "strength", name: "Main Strength", exercises: [
-        { ...meUpperBlock(), rest: "90 seconds on the build-up sets, 2 to 3 minutes before the top one" } ] },
+        tier === "deload" ? meDeload("upper")
+          : { ...meUpperBlock(), rest: "90 seconds on the build-up sets, 3 to 4 minutes before each top single" } ] },
       { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [
         { ...deSquat(dePct), sets: deSets },
         ex({ name: "Weighted Pull-Up", sets: pullSets, reps: tier === "peak" ? "3" : "4", load: "added weight, or bodyweight if that is already hard", rir, rest: "0 seconds — taken inside the jump squat rest", tempo: "2/1/X", quality: "Strength",
@@ -3577,7 +3597,7 @@ function conjugateTwoDayTwo(tier, dePct) {
           purpose: "Grip and the whole side of the trunk at once, and the closest thing in the gym to carrying somebody who does not want to be carried. It is also the only anti-side-bend work in this program.",
           cues: "Stand tall and do not let it pull you over. Walk, do not rush. Set it down before the grip fails rather than after." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
     ],
   };
 }
@@ -3657,7 +3677,7 @@ function offseasonTwoDayOne(tier) {
           purpose: "The highest-transfer upper body lift for grappling, and the week's vertical pull. More pulling sets than pressing sets, every week, because that is what the sport is.",
           cues: "Full hang at the bottom of every rep, chest toward the bar, lower under control. Drop the added weight before you start kipping." }) ]},
       { id: uid(), type: "strength", name: "Posterior Chain & Grip", exercises: [
-        ex({ name: "Barbell Romanian Deadlift", sets: tier === "deload" ? 2 : 3, reps: tier === "peak" ? "5 each side" : tier === "base" ? "6" : "5", load: "moderate to heavy — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 2 minutes", tempo: tier === "peak" ? "2/0/1" : "3/0/1", quality: "Posterior Chain",
+        ex({ name: "Barbell Romanian Deadlift", sets: tier === "deload" ? 2 : 3, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "moderate to heavy — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 2 minutes", tempo: "3/0/1", quality: "Posterior Chain",
           purpose: "This day's hinge. Both days own one independently, so a missed session never costs you the pattern.",
           cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment the lower back rounds." }),
         ex({ name: "Double-Overhand Bar Hold", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "60 seconds", quality: "Grip",
@@ -7119,13 +7139,22 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Switch Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
-        Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
+        Four programs: A and B are three sessions a week, C and D are the same two methods on two sessions.
+        Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
-      {["A", "B", "C", "D"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
-        <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setSwitched(true); }}>
-          Switch to {PROGRAM_VARIANT_LABELS[v]}
-        </button>
-      ))}
+      {/* All four are listed, with the current one marked. Filtering it out
+          showed three buttons and read as though there were only three
+          programs. */}
+      {PROGRAM_CHOICES.map(({ id: v, days }) => {
+        const current = v === (client?.program?.variant || "B");
+        return (
+          <button key={v} className="btn-ghost wide program-switch-row" disabled={current}
+            onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setSwitched(true); }}>
+            <span>{PROGRAM_VARIANT_LABELS[v]} · {days} days</span>
+            <span className="program-switch-tag">{current ? "Current" : "Switch"}</span>
+          </button>
+        );
+      })}
       {switched && (
         <div className="adjust-box" style={{ borderColor: "var(--green)" }}>Switched. Your next session comes from the new program.</div>
       )}
@@ -10371,6 +10400,10 @@ function GlobalStyle() {
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
       .program-choice-card.locked { opacity: 0.45; cursor: default; }
+      .program-switch-row { justify-content: space-between; width: 100%; text-align: left; gap: 10px; }
+      .program-switch-row:disabled { opacity: 1; border-color: var(--accent); }
+      .program-switch-tag { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); flex-shrink: 0; }
+      .program-switch-row:disabled .program-switch-tag { color: var(--accent); }
       .program-choice-card.locked .program-choice-title { color: var(--text-dim); }
       .program-choice-locked { margin: 8px 0 0; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 10px; font-weight: 600; color: var(--amber); line-height: 1.5; }
       .program-choice-card.active { border-color: var(--accent); }
