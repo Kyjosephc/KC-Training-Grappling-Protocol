@@ -151,9 +151,17 @@ check("a complete profile submits, and carries the signed waiver with it", () =>
   if (!signedUp.waiver) throw new Error("the signed waiver did not travel with the profile");
   if (signedUp.firstName !== "Marcus") throw new Error("the name did not come through");
   if (!(Number(signedUp.weight) > 0)) throw new Error("bodyweight did not come through");
+  // The schedule and the program have to agree: two lifting days means the
+  // two-day program, three or more means a three-day one.
   const picked = Object.values(signedUp.weeklySchedule || {})
     .filter((v) => Array.isArray(v) && v.some((x) => /strength/i.test(x))).length;
-  if (picked < 3) throw new Error(`submitted with only ${picked} strength days on the calendar`);
+  if (picked < 2) throw new Error(`submitted with only ${picked} strength days on the calendar`);
+  if (picked === 2 && signedUp.programVariant !== "D") {
+    throw new Error(`two lifting days submitted on program ${signedUp.programVariant}`);
+  }
+  if (picked >= 3 && signedUp.programVariant === "D") {
+    throw new Error(`${picked} lifting days submitted on the two-day program`);
+  }
 });
 check("and the answers build a real twelve-week program", () => {
   const built = A.buildClient({ ...signedUp, useTemplate: true, id: "new" });
@@ -186,28 +194,64 @@ const pickStrengthDays = (howMany) => {
   for (let i = 0; i < howMany; i++) hit(picks[i]);
 };
 
-check("Program D lets you start on two lifting days", () => {
+const cardFor = (title) => [...host.querySelectorAll('[role="radio"]')]
+  .find((el) => new RegExp(title, "i").test(el.textContent));
+const locked = (title) => {
+  const c = cardFor(title);
+  if (!c) throw new Error(`no card matching ${title}`);
+  return c.getAttribute("aria-disabled") === "true";
+};
+
+check("one lifting day is not enough to start at all", () => {
   fillProfile();
-  pickProgram("In-Season Maintenance");
-  pickStrengthDays(2);
-  if (byText(/get started/i).disabled) throw new Error("two days is not enough for a two-day program");
+  pickStrengthDays(1);
+  if (!byText(/get started/i).disabled) throw new Error("accepted a single lifting day");
 });
-check("Program B still wants three", () => {
+check("two lifting days unlock the two-day program and lock the three-day ones", () => {
   fillProfile();
-  pickProgram("Offseason Strength Build");
   pickStrengthDays(2);
-  if (!byText(/get started/i).disabled) throw new Error("a three-day program accepted two lifting days");
-  // Picking the same day again clears it, so start over rather than adding.
+  if (locked("In-Season Maintenance")) throw new Error("the two-day program is locked on two days");
+  if (!locked("Condensed Conjugate")) throw new Error("a three-day program is selectable on two days");
+  if (!locked("Offseason Strength Build")) throw new Error("a three-day program is selectable on two days");
+});
+check("two lifting days can start, on the two-day program", () => {
+  if (byText(/get started/i).disabled) throw new Error("two days cannot start");
+});
+check("three lifting days unlock the three-day programs and lock the two-day one", () => {
   fillProfile();
-  pickProgram("Offseason Strength Build");
   pickStrengthDays(3);
-  if (byText(/get started/i).disabled) throw new Error("three days is still not enough");
+  if (locked("Condensed Conjugate")) throw new Error("a three-day program is locked on three days");
+  if (locked("Offseason Strength Build")) throw new Error("a three-day program is locked on three days");
+  if (!locked("In-Season Maintenance")) throw new Error("the two-day program is selectable on three days");
+  if (byText(/get started/i).disabled) throw new Error("three days cannot start");
 });
-check("Program A still wants three", () => {
+check("more than three days still means the three-day programs", () => {
   fillProfile();
-  pickProgram("Condensed Conjugate");
+  pickStrengthDays(5);
+  if (locked("Offseason Strength Build")) throw new Error("five days locked the three-day programs");
+  if (!locked("In-Season Maintenance")) throw new Error("the two-day program is selectable on five days");
+});
+check("changing the schedule moves the selection off a program it no longer fits", () => {
+  fillProfile();
   pickStrengthDays(2);
-  if (!byText(/get started/i).disabled) throw new Error("a three-day program accepted two lifting days");
+  const onTwo = cardFor("In-Season Maintenance");
+  if (onTwo.getAttribute("aria-checked") !== "true") throw new Error("two days did not select the two-day program");
+  // Add a third day: the selection has to move to a three-day program on its own.
+  const more = buttons().filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
+  hit(more[2]);
+  if (cardFor("In-Season Maintenance").getAttribute("aria-checked") === "true") {
+    throw new Error("still selected on a program that no longer fits the schedule");
+  }
+  if (byText(/get started/i).disabled) throw new Error("three days cannot start after the switch");
+});
+check("a locked card cannot be chosen by clicking it", () => {
+  fillProfile();
+  pickStrengthDays(3);
+  const twoDay = cardFor("In-Season Maintenance");
+  hit(twoDay);
+  if (cardFor("In-Season Maintenance").getAttribute("aria-checked") === "true") {
+    throw new Error("clicking a locked card selected it");
+  }
 });
 
 console.log("\nWeek one, free");

@@ -3018,7 +3018,26 @@ const REQUIRED_STRENGTH_DAYS = 3;
 // in-season program is two sessions a week, so asking for three was blocking
 // signup for exactly the people it was written for.
 function requiredStrengthDaysFor(variant) {
-  return variant === "D" ? 2 : REQUIRED_STRENGTH_DAYS;
+  return variant === "D" ? MIN_STRENGTH_DAYS : REQUIRED_STRENGTH_DAYS;
+}
+const MIN_STRENGTH_DAYS = 2;
+const PROGRAM_CHOICES = [
+  { id: "A", days: 3, title: "Program A — Condensed Conjugate",
+    blurb: "3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week." },
+  { id: "B", days: 3, title: "Program B — Offseason Strength Build",
+    blurb: "3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal." },
+  { id: "D", days: 2, title: "Program D — In-Season Maintenance",
+    blurb: "2 days a week, about 35 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends." },
+];
+// At signup the schedule picks the program rather than the other way round.
+// Two lifting days on the calendar means the two-day program; three or more
+// means the three-day ones. Running a three-day program on two days is the
+// most common way one quietly stops working, and the two-day program on three
+// days is just leaving a session unused.
+function programsForStrengthDays(n) {
+  if (n >= REQUIRED_STRENGTH_DAYS) return ["A", "B"];
+  if (n >= MIN_STRENGTH_DAYS) return ["D"];
+  return [];
 }
 function strengthDayCount(schedule) {
   return SCHEDULE_DAYS.filter(([key]) => (schedule?.[key] || []).includes(STRENGTH_ACTIVITY)).length;
@@ -5719,9 +5738,17 @@ function OnboardingScreen({ onSubmit }) {
   const [picError, setPicError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const strengthDays = strengthDayCount(schedule);
-  const requiredStrengthDays = requiredStrengthDaysFor(programVariant);
-  const hasEnoughStrengthDays = strengthDays >= requiredStrengthDays;
-  const canSubmit = firstName.trim() && lastName.trim() && weight && hasEnoughStrengthDays;
+  const allowedVariants = programsForStrengthDays(strengthDays);
+  const hasEnoughStrengthDays = allowedVariants.length > 0;
+  const allowedKey = allowedVariants.join(",");
+  // Changing the schedule can make the chosen program the wrong one. Move the
+  // selection rather than leaving a card selected that can no longer be used.
+  useEffect(() => {
+    if (!allowedVariants.length || allowedVariants.includes(programVariant)) return;
+    setProgramVariant(allowedVariants.includes("B") ? "B" : allowedVariants[0]);
+  }, [allowedKey, programVariant]);
+  const canSubmit = firstName.trim() && lastName.trim() && weight
+    && hasEnoughStrengthDays && allowedVariants.includes(programVariant);
   const handlePictureUpload = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -5808,12 +5835,14 @@ function OnboardingScreen({ onSubmit }) {
         </select>
       </label>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Pick <b>at least three Strength/Conditioning days</b> — both programs are written for three sessions a week, and running one on two days is the most common way it stops working. Then tap whatever else you do each day: Low Intensity BJJ, High Intensity BJJ, any combination, or leave a day blank. You can change this any time in Settings.</p>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Pick <b>at least two Strength/Conditioning days</b>. How many you pick decides which programs you can choose below: two days gives you the two-day in-season program, three or more gives you the two three-day programs. Then tap whatever else you do each day: Low Intensity BJJ, High Intensity BJJ, any combination, or leave a day blank. You can change this any time in Settings.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
       <div className={`schedule-requirement ${hasEnoughStrengthDays ? "met" : ""}`} role="status">
-        {hasEnoughStrengthDays
-          ? `${strengthDays} strength days selected — you're set.`
-          : `${strengthDays} of ${requiredStrengthDays} strength days selected. Pick ${requiredStrengthDays - strengthDays} more to continue.`}
+        {!hasEnoughStrengthDays
+          ? `${strengthDays} of ${MIN_STRENGTH_DAYS} strength days selected. Pick ${MIN_STRENGTH_DAYS - strengthDays} more to continue.`
+          : strengthDays >= REQUIRED_STRENGTH_DAYS
+            ? `${strengthDays} strength days selected — that unlocks the three-day programs below.`
+            : `${strengthDays} strength days selected — that unlocks the two-day in-season program below.`}
       </div>
       {programVariant === "A" && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
@@ -5823,20 +5852,35 @@ function OnboardingScreen({ onSubmit }) {
       </>)}
 
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Choose Your Program</h3>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Not sure? Pick either — you can switch anytime in Settings.</p>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        {strengthDays >= REQUIRED_STRENGTH_DAYS
+          ? "You picked three or more lifting days, so these are the three-day programs. Not sure? Either one — you can switch anytime in Settings."
+          : strengthDays >= MIN_STRENGTH_DAYS
+            ? "You picked two lifting days, so this is the two-day program. Add a third day above if you want the three-day programs instead."
+            : "Pick your Strength/Conditioning days above and the programs that fit them will unlock."}
+      </p>
       <div role="radiogroup" aria-label="Choose Your Program">
-      <div className={`program-choice-card ${programVariant === "A" ? "active" : ""}`} onClick={() => setProgramVariant("A")} role="radio" aria-checked={programVariant === "A"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("A"); } }}>
-        <div className="program-choice-title">Program A — Condensed Conjugate</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week.</p>
-      </div>
-      <div className={`program-choice-card ${programVariant === "B" ? "active" : ""}`} onClick={() => setProgramVariant("B")} role="radio" aria-checked={programVariant === "B"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("B"); } }}>
-        <div className="program-choice-title">Program B — Offseason Strength Build</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal.</p>
-      </div>
-      <div className={`program-choice-card ${programVariant === "D" ? "active" : ""}`} onClick={() => setProgramVariant("D")} role="radio" aria-checked={programVariant === "D"} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setProgramVariant("D"); } }}>
-        <div className="program-choice-title">Program D — In-Season Maintenance</div>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>2 days a week, about 35 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends.</p>
-      </div>
+      {PROGRAM_CHOICES.map((p) => {
+        const allowed = allowedVariants.includes(p.id);
+        const choose = () => { if (allowed) setProgramVariant(p.id); };
+        return (
+          <div key={p.id}
+            className={`program-choice-card ${programVariant === p.id ? "active" : ""} ${allowed ? "" : "locked"}`}
+            onClick={choose} role="radio" aria-checked={programVariant === p.id}
+            aria-disabled={!allowed} tabIndex={allowed ? 0 : -1}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); } }}>
+            <div className="program-choice-title">{p.title}</div>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>{p.blurb}</p>
+            {!allowed && (
+              <p className="program-choice-locked">
+                {p.days === MIN_STRENGTH_DAYS
+                  ? "Two sessions a week. Set exactly two Strength/Conditioning days above to choose this one."
+                  : "Three sessions a week. Set three or more Strength/Conditioning days above to choose this one."}
+              </p>
+            )}
+          </div>
+        );
+      })}
       </div>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it: it is a note to yourself, and you can update it anytime in Settings.</p>
@@ -5846,8 +5890,7 @@ function OnboardingScreen({ onSubmit }) {
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
       {!hasEnoughStrengthDays && (firstName.trim() && lastName.trim() && weight) && (
         <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0, color: "var(--amber)" }}>
-          Go back up to your weekly schedule and pick {requiredStrengthDays - strengthDays} more Strength/Conditioning {requiredStrengthDays - strengthDays === 1 ? "day" : "days"} before you start.
-          {programVariant === "D" ? " Program D only needs two." : ""}
+          Go back up to your weekly schedule and pick {MIN_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {MIN_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start. Two is the minimum, and it decides which programs you can choose.
         </p>
       )}
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver || submitting}
@@ -10044,6 +10087,9 @@ function GlobalStyle() {
       .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
       .program-choice-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; }
+      .program-choice-card.locked { opacity: 0.45; cursor: default; }
+      .program-choice-card.locked .program-choice-title { color: var(--text-dim); }
+      .program-choice-locked { margin: 8px 0 0; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 10px; font-weight: 600; color: var(--amber); line-height: 1.5; }
       .program-choice-card.active { border-color: var(--accent); }
       .program-choice-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
       .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand avatar" "icons icons"; align-items: center; gap: 12px 10px; padding: 16px 16px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg); z-index: 5; }
