@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3 } from "lucide-react";
+import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3, RotateCcw, Flame, Gavel } from "lucide-react";
 import { RULESETS, RULESET_IDS, COMPARE_ROWS, DISCLAIMER } from "./rules/rulesets.js";
-import { buildQuestionBank, pickQuestions, rankFor } from "./rules/engine.js";
+import { buildQuestionBank, pickQuestions, rankFor, buildMatch, REF_POINT_CHOICES } from "./rules/engine.js";
 import { REQUIREMENTS, HOLD_SECONDS, SCENES } from "./rules/requirements.js";
 
 const BANK = buildQuestionBank();
@@ -9,8 +9,27 @@ const XP_RIGHT = 10, XP_STREAK_BONUS = 5;
 
 // Progress lives on the athlete's own record, like everything else they log.
 export function emptyRulesProgress() {
-  return { xp: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0, topics: {}, lastSeen: null };
+  return {
+    xp: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0, topics: {}, lastSeen: null,
+    // Question ids they have got wrong, each with how many more times it should
+    // come back. Getting one right in a review takes one off; getting it wrong
+    // again puts it back to full.
+    missed: {},
+    // Days in a row with at least one answer. lastSeen was already written on
+    // every answer and never read by anything.
+    dayStreak: 0, bestDayStreak: 0,
+  };
 }
+const REVIEW_TIMES = 2;
+const todayStamp = () => new Date().toISOString().slice(0, 10);
+function dayStreakAfter(progress) {
+  const today = todayStamp();
+  if (progress.lastSeen === today) return progress.dayStreak || 1;
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (progress.lastSeen === yesterday) return (progress.dayStreak || 0) + 1;
+  return 1;
+}
+const missedIds = (progress) => Object.keys(progress.missed || {});
 function topicStats(progress) {
   return Object.entries(progress.topics || {})
     .map(([t, v]) => ({ topic: t, pct: v.n ? Math.round((v.ok / v.n) * 100) : 0, n: v.n }))
@@ -30,16 +49,27 @@ export default function RulesGame({ progress, onProgress }) {
   const [view, setView] = useState("home");
   const [ruleset, setRuleset] = useState("all");
   const [quiz, setQuiz] = useState(null);
+  const [match, setMatch] = useState(null);
 
   const weak = useMemo(() => topicStats(p).filter((x) => x.pct < 70).map((x) => x.topic), [p]);
   const rank = rankFor(p.xp);
   const accuracy = p.answered ? Math.round((p.correct / p.answered) * 100) : 0;
 
-  const startQuiz = useCallback((rsId, count, difficulty, minDifficulty) => {
-    const qs = pickQuestions(BANK, { ruleset: rsId, count, difficulty, minDifficulty, weakTopics: weak, seed: Date.now() });
-    setQuiz({ qs, i: 0, picked: null, right: 0, showWhy: false });
+  const startQuiz = useCallback((rsId, count, difficulty, minDifficulty, opts = {}) => {
+    const qs = pickQuestions(BANK, {
+      ruleset: rsId, count, difficulty, minDifficulty, weakTopics: weak,
+      reviewIds: opts.onlyReview ? missedIds(p) : (opts.noReview ? [] : missedIds(p)),
+      seed: Date.now(),
+    });
+    setQuiz({ qs, i: 0, picked: null, right: 0, showWhy: false, wrong: [] });
     setView("quiz");
-  }, [weak]);
+  }, [weak, p]);
+
+  const startMatch = useCallback((rsId) => {
+    const id = rsId === "all" ? "ibjjf" : rsId;
+    setMatch({ ...buildMatch(id, Date.now()), i: 0, picked: null, calls: [] });
+    setView("ref");
+  }, []);
 
   const answer = (choice) => {
     if (!quiz || quiz.picked) return;
@@ -53,9 +83,25 @@ export default function RulesGame({ progress, onProgress }) {
     next.xp += ok ? XP_RIGHT + (next.streak >= 3 ? XP_STREAK_BONUS : 0) : 0;
     const t = next.topics[q.topic] || { n: 0, ok: 0 };
     next.topics = { ...next.topics, [q.topic]: { n: t.n + 1, ok: t.ok + (ok ? 1 : 0) } };
-    next.lastSeen = new Date().toISOString().slice(0, 10);
+    // The question itself is what comes back, not merely its topic.
+    const missed = { ...(next.missed || {}) };
+    if (ok) {
+      if (missed[q.id] !== undefined) {
+        const left = missed[q.id] - 1;
+        if (left <= 0) delete missed[q.id]; else missed[q.id] = left;
+      }
+    } else {
+      missed[q.id] = REVIEW_TIMES;
+    }
+    next.missed = missed;
+    next.dayStreak = dayStreakAfter(next);
+    next.bestDayStreak = Math.max(next.bestDayStreak || 0, next.dayStreak);
+    next.lastSeen = todayStamp();
     onProgress(next);
-    setQuiz({ ...quiz, picked: choice, right: quiz.right + (ok ? 1 : 0) });
+    setQuiz({
+      ...quiz, picked: choice, right: quiz.right + (ok ? 1 : 0),
+      wrong: ok ? quiz.wrong : [...(quiz.wrong || []), { ...q, picked: choice }],
+    });
   };
 
   const nextQ = () => {
@@ -124,6 +170,33 @@ export default function RulesGame({ progress, onProgress }) {
           <div className="muted">{pct}% on this round</div>
           <div className="rg-rank">{rank.name}{rank.next ? ` · ${rank.toNext} XP to ${rank.next.name}` : ""}</div>
         </div>
+        {(quiz.wrong || []).length > 0 ? (
+          <>
+            <div className="rg-review-head">What you missed</div>
+            {quiz.wrong.map((q) => (
+              <div key={q.id} className="rg-review">
+                <div className="rg-review-q">{q.prompt}</div>
+                <div className="rg-review-line bad"><X size={13} /> You said {q.picked}</div>
+                <div className="rg-review-line good"><Check size={13} /> {q.answer}</div>
+                <p className="rg-review-why">{q.why}</p>
+                {q.wrong && q.wrong[q.picked] && <p className="rg-review-why dim">{q.wrong[q.picked]}</p>}
+                <div className="rg-review-foot">
+                  <span className="rg-cite">{q.cite}</span>
+                  {q.ruleset && RULESETS[q.ruleset] && (
+                    <button className="link-btn" onClick={() => { setRuleset(q.ruleset); setView("learn"); }}>Read the rule</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="adjust-box" style={{ marginBottom: 12 }}>
+              {quiz.wrong.length === 1 ? "This one comes" : `These ${quiz.wrong.length} come`} back in your next couple of rounds until you have them.
+            </div>
+          </>
+        ) : (
+          <div className="adjust-box" style={{ marginBottom: 12, borderColor: "var(--green)" }}>
+            Clean round — nothing missed.
+          </div>
+        )}
         {topicStats(p).filter((x) => x.pct < 70).length > 0 && (
           <div className="adjust-box" style={{ marginBottom: 12 }}>
             <strong>Worth drilling:</strong> {topicStats(p).filter((x) => x.pct < 70).slice(0, 3).map((x) => `${tLabel(x.topic)} (${x.pct}%)`).join(", ")}. These come up more often from now on.
@@ -131,6 +204,98 @@ export default function RulesGame({ progress, onProgress }) {
         )}
         <button className="btn-primary wide" onClick={() => startQuiz(ruleset, 10, 3)}>Another round</button>
         <button className="btn-ghost wide" onClick={() => setView("home")}>Back</button>
+      </div>
+    );
+  }
+
+  // ---------- REFEREE ----------
+  // One exchange at a time, and the only question is the one a referee has to
+  // answer in the moment: how many is that worth? The running score is theirs
+  // to keep, not the app's to show.
+  if (view === "ref" && match) {
+    const done = match.i >= match.events.length;
+    const ev = done ? null : match.events[match.i];
+
+    if (done) {
+      const right = match.calls.filter((c) => c.ok).length;
+      const yourBlue = match.calls.reduce((n, c) => n + (c.who === "Blue" ? c.said : 0), 0);
+      const yourWhite = match.calls.reduce((n, c) => n + (c.who === "White" ? c.said : 0), 0);
+      const cardRight = yourBlue === match.finalBlue && yourWhite === match.finalWhite;
+      return (
+        <div className="pad">
+          <div className="rg-result">
+            <Gavel size={30} color="var(--accent)" />
+            <div className="rg-big">{right} / {match.events.length}</div>
+            <div className="muted">calls correct · {match.rulesetName}</div>
+          </div>
+          <div className={`rg-card-compare ${cardRight ? "ok" : "off"}`}>
+            <div>
+              <span>Your card</span>
+              <strong>Blue {yourBlue} — {yourWhite} White</strong>
+            </div>
+            <div>
+              <span>The real score</span>
+              <strong>Blue {match.finalBlue} — {match.finalWhite} White</strong>
+            </div>
+          </div>
+          <div className="rg-review-head">Every exchange</div>
+          {match.events.map((e, i) => {
+            const call = match.calls[i];
+            return (
+              <div key={i} className={`rg-review ${call && call.ok ? "ok" : ""}`}>
+                <div className="rg-review-q">{e.text}</div>
+                <div className={`rg-review-line ${call && call.ok ? "good" : "bad"}`}>
+                  {call && call.ok ? <Check size={13} /> : <X size={13} />}
+                  You called {call ? call.said : 0} · it is {e.points}
+                </div>
+                <p className="rg-review-why">{e.why}</p>
+                <span className="rg-cite">{e.cite}</span>
+              </div>
+            );
+          })}
+          <button className="btn-primary wide" onClick={() => startMatch(match.ruleset)}>Another match</button>
+          <button className="btn-ghost wide" onClick={() => { setMatch(null); setView("home"); }}>Back</button>
+        </div>
+      );
+    }
+
+    const picked = match.picked;
+    return (
+      <div className="pad">
+        <div className="rg-quiz-top">
+          <span className="rg-progress">Exchange {match.i + 1} of {match.events.length} · {match.rulesetName}</span>
+          <button className="link-btn" onClick={() => { setMatch(null); setView("home"); }}>Quit</button>
+        </div>
+        <div className="rg-scorecard">
+          <div><span>Blue</span><strong>{match.calls.reduce((n, c) => n + (c.who === "Blue" ? c.said : 0), 0)}</strong></div>
+          <div className="rg-scorecard-sep">your card</div>
+          <div><span>White</span><strong>{match.calls.reduce((n, c) => n + (c.who === "White" ? c.said : 0), 0)}</strong></div>
+        </div>
+        <div className="rg-ref-event">{ev.text}</div>
+        <p className="muted" style={{ marginBottom: 10 }}>How many points?</p>
+        {REF_POINT_CHOICES.map((n) => {
+          const chosen = picked === n;
+          const isRight = n === ev.points;
+          const cls = picked == null ? "" : isRight ? " right" : chosen ? " wrong" : "";
+          return (
+            <button key={n} className={`rg-option${cls}`} disabled={picked != null}
+              onClick={() => setMatch({ ...match, picked: n })}>
+              {n === 0 ? "No points" : `${n} points`}
+            </button>
+          );
+        })}
+        {picked != null && (
+          <>
+            <div className={`adjust-box ${picked === ev.points ? "" : ""}`} style={{ marginTop: 12, borderColor: picked === ev.points ? "var(--green)" : "var(--amber)" }}>
+              <strong>{picked === ev.points ? "Correct." : `It is ${ev.points}.`}</strong> {ev.why}
+              <div className="rg-cite" style={{ marginTop: 6 }}>{ev.cite}</div>
+            </div>
+            <button className="btn-primary wide" onClick={() => {
+              const call = { who: ev.who, said: picked, ok: picked === ev.points };
+              setMatch({ ...match, i: match.i + 1, picked: null, calls: [...match.calls, call] });
+            }}>{match.i + 1 >= match.events.length ? "See the card" : "Next exchange"}</button>
+          </>
+        )}
       </div>
     );
   }
@@ -296,6 +461,7 @@ export default function RulesGame({ progress, onProgress }) {
         <div className="rg-hero-stats">
           <div><strong>{p.answered ? `${accuracy}%` : "—"}</strong><span>accuracy</span></div>
           <div><strong>{p.bestStreak || 0}</strong><span>best run</span></div>
+          <div><strong>{p.lastSeen === todayStamp() ? (p.dayStreak || 1) : 0}</strong><span>day streak</span></div>
         </div>
       </div>
 
@@ -306,8 +472,23 @@ export default function RulesGame({ progress, onProgress }) {
         ))}
       </div>
 
+      {p.lastSeen !== todayStamp() && (p.dayStreak || 0) > 0 && (
+        <div className="rg-streak-nudge">
+          <Flame size={14} />
+          <span>{p.dayStreak} day{p.dayStreak === 1 ? "" : "s"} in a row. One round today keeps it.</span>
+        </div>
+      )}
+
       <button className="rg-mode" onClick={() => startQuiz(ruleset, 10, 3)}>
         <Zap size={18} /><div><strong>Five-minute drill</strong><span>10 questions, mixed difficulty</span></div><ChevronRight size={16} />
+      </button>
+      {missedIds(p).length > 0 && (
+        <button className="rg-mode" onClick={() => startQuiz(ruleset, Math.min(10, missedIds(p).length), 3, undefined, { onlyReview: true })}>
+          <RotateCcw size={18} /><div><strong>Put it right</strong><span>{missedIds(p).length} question{missedIds(p).length === 1 ? "" : "s"} you have got wrong</span></div><ChevronRight size={16} />
+        </button>
+      )}
+      <button className="rg-mode" onClick={() => startMatch(ruleset)}>
+        <Gavel size={18} /><div><strong>You are the referee</strong><span>Score a match as it happens, then check your card</span></div><ChevronRight size={16} />
       </button>
       <button className="rg-mode" onClick={() => startQuiz(ruleset, 5, 1)}>
         <BookOpen size={18} /><div><strong>Basics</strong><span>5 questions, scoring values only</span></div><ChevronRight size={16} />

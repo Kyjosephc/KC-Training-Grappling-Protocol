@@ -384,8 +384,16 @@ export function buildQuestionBank() {
   return all;
 }
 
-export function pickQuestions(bank, { ruleset, count = 10, difficulty, minDifficulty, weakTopics = [], seed = Date.now() } = {}) {
+export function pickQuestions(bank, { ruleset, count = 10, difficulty, minDifficulty, weakTopics = [], reviewIds = [], seed = Date.now() } = {}) {
   const rnd = mulberry(seed);
+  // Questions they have already got wrong come back first, and come back as
+  // themselves rather than as "a question about that topic". Weighting topics
+  // is not the same thing: you can be weak at penalties and still never see
+  // again the one penalty question you actually misread.
+  const byId = new Map(bank.map((q) => [q.id, q]));
+  const returning = reviewIds.map((id) => byId.get(id)).filter(Boolean)
+    .filter((q) => !ruleset || ruleset === "all" || q.ruleset === ruleset || q.ruleset === "compare")
+    .slice(0, Math.max(0, Math.min(count - 1, Math.ceil(count / 2))));
   let pool = bank.filter((q) => (!ruleset || ruleset === "all" || q.ruleset === ruleset || q.ruleset === "compare"));
   if (difficulty) pool = pool.filter((q) => q.difficulty <= difficulty);
   // A hard round is only hard if the easy questions are excluded, not merely
@@ -399,14 +407,65 @@ export function pickQuestions(bank, { ruleset, count = 10, difficulty, minDiffic
   // tracking them.
   const weighted = [];
   pool.forEach((q) => { weighted.push(q); if (weakTopics.includes(q.topic)) weighted.push(q); });
-  const seen = new Set(); const out = [];
+  const seen = new Set(returning.map((q) => q.id));
+  const out = returning.map((q) => ({ ...q, options: shuffle(q.options, rnd), isReview: true }));
   while (out.length < Math.min(count, pool.length) && weighted.length) {
     const q = weighted[Math.floor(rnd() * weighted.length)];
     if (!seen.has(q.id)) { seen.add(q.id); out.push({ ...q, options: shuffle(q.options, rnd) }); }
     if (seen.size >= pool.length) break;
   }
-  return out;
+  // A review question first every time would make the opening predictable.
+  return shuffle(out, rnd);
 }
+
+// ---------------------------------------------------------------------------
+// REFEREE MODE
+//
+// The quiz asks what a position is worth. This asks the thing a referee
+// actually does: watch a match go by one exchange at a time and keep the score
+// in your head. Built from the same scoring tables, so it can never disagree
+// with the rest of the app.
+// ---------------------------------------------------------------------------
+const REF_EVENTS = {
+  takedown: "lands a takedown and holds it three seconds",
+  cleanTakedown: "lands a takedown straight past the legs and holds it",
+  guardPass: "passes the guard and settles in side control",
+  kneeOnBelly: "steps up into knee on belly and holds it",
+  mount: "climbs into mount and holds it",
+  backMount: "takes back mount and holds it",
+  backControl: "takes the back with both hooks in",
+  sideControl: "settles into side control",
+  sweep: "sweeps from guard and comes up on top",
+  cleanSweep: "sweeps straight past the legs and comes up on top",
+  submissionAttempt: "catches a deep submission but it is stopped out of bounds",
+};
+
+export function buildMatch(rsId, seed = Date.now()) {
+  const rs = RULESETS[rsId];
+  if (!rs) return null;
+  const rnd = mulberry(seed);
+  const scorable = Object.keys(rs.scoring).filter((k) => REF_EVENTS[k]);
+  const n = 5 + Math.floor(rnd() * 2); // five or six exchanges
+  const events = [];
+  let blue = 0, white = 0;
+  for (let i = 0; i < n; i++) {
+    const key = scorable[Math.floor(rnd() * scorable.length)];
+    const who = rnd() < 0.5 ? "Blue" : "White";
+    const pts = rs.scoring[key] && rs.scoring[key].points != null ? rs.scoring[key].points : 0;
+    if (who === "Blue") blue += pts; else white += pts;
+    events.push({
+      i, key, who, points: pts,
+      text: `${who} ${REF_EVENTS[key]}.`,
+      why: pts > 0
+        ? `${pts} to ${who}. ${rs.scoring[key].control}`
+        : `No points. ${rs.scoring[key].control}`,
+      cite: `${rs.name} ${rs.version}${rs.scoring[key].cite ? ` — ${rs.scoring[key].cite}` : ""}`,
+      runningBlue: blue, runningWhite: white,
+    });
+  }
+  return { ruleset: rsId, rulesetName: rs.name, events, finalBlue: blue, finalWhite: white };
+}
+export const REF_POINT_CHOICES = [0, 2, 3, 4];
 
 export const RANKS = [
   { at: 0, name: "Beginner" }, { at: 300, name: "Novice" }, { at: 800, name: "Competitor" },

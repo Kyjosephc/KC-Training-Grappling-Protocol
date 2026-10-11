@@ -92,7 +92,7 @@ check("a full round scores, streaks, awards xp and records topics", () => {
     const correct = opts.find((b) => b.textContent.trim() === q.answer);
     if (!correct) throw new Error(`${q.id}: its answer "${q.answer}" is not among the rendered options`);
     hit(correct); asked++;
-    const next = byText(/Next question|See how you did|Next/);
+    const next = byText(/Next question|See how you did|Finish|Next/);
     if (next) hit(next);
   }
   if (asked < 5) throw new Error(`only answered ${asked} questions`);
@@ -103,6 +103,125 @@ check("a full round scores, streaks, awards xp and records topics", () => {
   if (!Object.keys(prog.topics).length) throw new Error("no weak-topic data recorded");
   if (/\[object Object\]/.test(txt())) throw new Error("an object leaked into the result screen");
   console.log(`       ${asked} correct · xp ${prog.xp} · best streak ${prog.bestStreak} · rank ${rankFor(prog.xp).name} · ${Object.keys(prog.topics).length} topics tracked`);
+});
+
+
+// ---------------------------------------------------------------------------
+// Getting one wrong has to lead somewhere. These cover the three things that
+// turn the quiz into something that teaches: you see what you missed, it comes
+// back, and the referee round exists.
+// ---------------------------------------------------------------------------
+
+// Walk back to the home screen from wherever the last check left off, rather
+// than assuming it ended somewhere tidy.
+const goHome = () => {
+  for (let n = 0; n < 40; n++) {
+    if (/Five-minute drill/.test(txt())) return;
+    const b = byText(/^Quit$/) || byText(/^Back$/) || byText(/Next question|See how you did|Next exchange|See the card|Finish|Next/);
+    if (!b) break;
+    hit(b);
+  }
+  if (!/Five-minute drill/.test(txt())) {
+    throw new Error(`could not get back to home — saw: ${[...host.querySelectorAll("button")].map((x) => x.textContent.trim().slice(0, 22)).join(" | ")}`);
+  }
+};
+
+check("a wrong answer is shown back to you at the end of the round", () => {
+  goHome();
+  prog = RG.emptyRulesProgress(); render();
+  click(/Five-minute drill/);
+  let missedPrompt = null;
+  for (let n = 0; n < 30; n++) {
+    const opts = [...host.querySelectorAll("button.rg-option")];
+    if (!opts.length) break;
+    const q = bank.find((x) => txt().includes(x.prompt));
+    if (!q) throw new Error("the on-screen question is not in the bank");
+    // Answer everything wrong on purpose.
+    const wrongBtn = opts.find((b) => b.textContent.trim() !== q.answer);
+    if (!missedPrompt) missedPrompt = q.prompt;
+    hit(wrongBtn || opts[0]);
+    const next = byText(/Next question|See how you did|Finish|Next/);
+    if (next) hit(next);
+  }
+  const t = txt();
+  if (!/What you missed/.test(t)) throw new Error("the result screen does not show what was missed");
+  if (missedPrompt && !t.includes(missedPrompt)) throw new Error("the missed question itself is not listed");
+  if (!/You said/.test(t)) throw new Error("the answer they gave is not shown back");
+  if (!/Read the rule/.test(t)) throw new Error("no way to jump to the rule from a miss");
+});
+
+check("missed questions are remembered", () => {
+  if (!Object.keys(prog.missed || {}).length) throw new Error("nothing recorded as missed");
+});
+
+check("and they come back in the next round", () => {
+  const owed = Object.keys(prog.missed);
+  goHome();
+  const t = txt();
+  if (!/Put it right/.test(t)) throw new Error("no review mode offered when questions are owed");
+  click(/Put it right/);
+  const seen = [];
+  for (let n = 0; n < 30; n++) {
+    const opts = [...host.querySelectorAll("button.rg-option")];
+    if (!opts.length) break;
+    const q = bank.find((x) => txt().includes(x.prompt));
+    if (q) seen.push(q.id);
+    const correct = opts.find((b) => q && b.textContent.trim() === q.answer) || opts[0];
+    hit(correct);
+    const next = byText(/Next question|See how you did|Finish|Next/);
+    if (next) hit(next);
+  }
+  const returned = seen.filter((id) => owed.includes(id));
+  if (!returned.length) throw new Error(`none of the ${owed.length} missed questions came back`);
+  console.log(`       ${returned.length} of ${seen.length} questions in the review round were ones previously missed`);
+});
+
+check("getting a review question right clears it", () => {
+  const before = Object.keys(prog.missed || {}).length;
+  if (before === 0) return; // already clean
+  goHome();
+  click(/Put it right/);
+  for (let n = 0; n < 30; n++) {
+    const opts = [...host.querySelectorAll("button.rg-option")];
+    if (!opts.length) break;
+    const q = bank.find((x) => txt().includes(x.prompt));
+    const correct = opts.find((b) => q && b.textContent.trim() === q.answer) || opts[0];
+    hit(correct);
+    const next = byText(/Next question|See how you did|Finish|Next/);
+    if (next) hit(next);
+  }
+  const after = Object.keys(prog.missed || {}).length;
+  if (after >= before) throw new Error(`still owed ${after} after a clean review round (was ${before})`);
+});
+
+check("a day streak is counted", () => {
+  if (!prog.dayStreak || prog.dayStreak < 1) throw new Error("no day streak recorded after playing");
+  if (prog.lastSeen !== new Date().toISOString().slice(0, 10)) throw new Error("lastSeen not set to today");
+});
+
+check("the referee round plays and scores a card", () => {
+  goHome();
+  click(/You are the referee/);
+  if (!/Exchange 1 of/.test(txt())) throw new Error("referee round did not start");
+  if (!/your card/i.test(txt())) throw new Error("no running scorecard shown");
+  let exchanges = 0;
+  for (let n = 0; n < 20; n++) {
+    const opts = [...host.querySelectorAll("button.rg-option")];
+    if (!opts.length) break;
+    hit(opts[0]);
+    exchanges++;
+    if (!/It is \d|Correct\./.test(txt())) throw new Error("no ruling shown after a call");
+    const next = byText(/Next exchange|See the card/);
+    if (!next) throw new Error("no way forward after a call");
+    hit(next);
+  }
+  if (exchanges < 5) throw new Error(`only ${exchanges} exchanges played`);
+  const t = txt();
+  if (!/calls correct/.test(t)) throw new Error("no result shown for the referee round");
+  if (!/Your card/.test(t) || !/The real score/.test(t)) throw new Error("the card is not compared against the real score");
+  if (!/Every exchange/.test(t)) throw new Error("no exchange-by-exchange breakdown");
+  if (/\[object Object\]/.test(t)) throw new Error("an object leaked into the referee result");
+  console.log(`       ${exchanges} exchanges called, card compared against the real score`);
 });
 
 console.log(bad ? `\n*** ${bad} FAILURES ***` : "\nALL CHECKS PASSED");

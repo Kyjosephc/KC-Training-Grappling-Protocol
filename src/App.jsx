@@ -10763,6 +10763,30 @@ function GlobalStyle() {
       .rg-prompt { font-size: 16.5px; line-height: 1.45; font-weight: 600; margin: 0 0 16px; }
       .rg-options { display: flex; flex-direction: column; gap: 9px; }
       .rg-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+      /* The end-of-round review, the referee's scorecard and the day streak. */
+      .rg-review-head { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); margin: 18px 0 10px; }
+      .rg-review { border-left: 2px solid var(--red); padding: 2px 0 2px 12px; margin-bottom: 16px; }
+      .rg-review.ok { border-left-color: var(--green); }
+      .rg-review-q { font-size: 13.5px; line-height: 1.5; margin-bottom: 8px; color: var(--text); }
+      .rg-review-line { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-bottom: 3px; }
+      .rg-review-line.bad { color: var(--red); }
+      .rg-review-line.good { color: var(--green); }
+      .rg-review-why { margin: 7px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
+      .rg-review-why.dim { opacity: 0.75; }
+      .rg-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+      .rg-streak-nudge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--amber); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--amber); }
+      .rg-scorecard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin-bottom: 16px; }
+      .rg-scorecard > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .rg-scorecard span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); }
+      .rg-scorecard strong { font-family: 'Oswald', sans-serif; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
+      .rg-scorecard-sep { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.18em; font-size: 9px; color: var(--text-dim); text-align: center; }
+      .rg-ref-event { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 21px; line-height: 1.25; margin-bottom: 14px; text-wrap: balance; }
+      .rg-card-compare { display: grid; gap: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 14px; margin-bottom: 8px; }
+      .rg-card-compare.ok { border-color: var(--green); }
+      .rg-card-compare.off { border-color: var(--amber); }
+      .rg-card-compare > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+      .rg-card-compare span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); }
+      .rg-card-compare strong { font-family: 'Oswald', sans-serif; font-size: 17px; font-variant-numeric: tabular-nums; }
         background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 14px 15px;
         min-height: 52px; font-size: 15px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
       .rg-option:disabled { cursor: default; }
