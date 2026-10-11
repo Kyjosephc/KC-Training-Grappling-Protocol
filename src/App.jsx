@@ -2218,7 +2218,7 @@ function ex(o) {
 function deUpperPull() {
   return ex({
     name: "Inverted Row", sets: 4, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty",
-    rir: 2, rest: "taken in the rest between speed bench sets — this costs no extra time",
+    rir: 2, rest: "0 seconds — taken inside the speed bench rest, so it costs no extra time",
     tempo: "2/1/1", quality: "Accessory",
     purpose: "Eight sets of speed bench is a lot of pushing on a day that otherwise has no pulling in it at all. Grappling pulls far more than it presses, and this evens the week up. It sits in the rest periods you are already taking, and because it is bodyweight and horizontal it puts nothing back on a spine that just worked up to a heavy squat.",
     cues: "Set the bar or rings so the hardest version you can still control has you near horizontal — feet on the floor to make it easier, feet raised to make it harder. Pull the chest to the bar, not the chin. Hold the top for a beat with the shoulder blades pulled together and down, then take two seconds to lower. If your hips sag, raise the bar until they do not.",
@@ -3025,8 +3025,10 @@ const PROGRAM_CHOICES = [
     blurb: "3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week." },
   { id: "B", days: 3, title: "Program B — Offseason Strength Build",
     blurb: "3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal." },
-  { id: "D", days: 2, title: "Program D — In-Season Maintenance",
-    blurb: "2 days a week, around 40 to 45 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends." },
+  { id: "C", days: 2, title: "Program C — Conjugate, Two Days",
+    blurb: "Program A's method on 2 days. One true Max Effort lift and one fast Dynamic Effort lift every session, on a main lift that rotates every two weeks. The sprint and agility day is gone — your mat work already covers it. This is the two-day program to pick if you are competing." },
+  { id: "D", days: 2, title: "Program D — Offseason Strength, Two Days",
+    blurb: "Program B's method on 2 days. No percentages and no maximal singles — every set is prescribed by how hard it should feel, the lifts are paired, and the load climbs while the sets stay put. Best for a genuine offseason with nothing on the calendar. It builds strength and holds the muscle you have; adding size takes three days." },
 ];
 // At signup the schedule picks the program rather than the other way round.
 // Two lifting days on the calendar means the two-day program; three or more
@@ -3035,7 +3037,7 @@ const PROGRAM_CHOICES = [
 // days is just leaving a session unused.
 function programsForStrengthDays(n) {
   if (n >= REQUIRED_STRENGTH_DAYS) return ["A", "B"];
-  if (n >= MIN_STRENGTH_DAYS) return ["D"];
+  if (n >= MIN_STRENGTH_DAYS) return ["C", "D"];
   return [];
 }
 function strengthDayCount(schedule) {
@@ -3485,6 +3487,271 @@ function buildInSeasonProgram() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// THE TWO-DAY PROGRAMS — C and D
+//
+// Not Programs A and B with a day deleted. The retired first attempt at a
+// two-day program was exactly that, and it failed because its first session
+// became the densest in the catalogue. These are built from each three-day
+// program's defining method, with the volume that does not survive the cut
+// removed on purpose rather than squeezed in somewhere else.
+//
+// Four things appear every week in every block of both: neck, adductors, grip,
+// and a hinge. Those are the four that keep somebody training, and they are
+// the four people drop first when the session gets short.
+// ---------------------------------------------------------------------------
+
+const TWO_DAY_NECK = (tier) => ex({
+  name: "6-Way Isometric Neck Holds", sets: 2,
+  reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction",
+  load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
+  purpose: "Twice a week, every week, in both of the two-day programs. It is isometric, so it costs almost nothing to recover from, and the neck is loaded every round you train.",
+});
+const TWO_DAY_COPENHAGEN = (tier) => ex({
+  name: "Copenhagen Plank (each side)", sets: 2,
+  reps: tier === "deload" ? "15 seconds per side" : "25 seconds per side",
+  load: "bodyweight", rir: 3, rest: "60 seconds", quality: "Durability",
+  purpose: "Adductor strain is the injury that takes grapplers out for six weeks and this is the best-supported thing you can do about it. Progress it by sliding the support point from the knee toward the ankle, never by adding sets.",
+});
+
+/* ===================== PROGRAM C — CONJUGATE, TWO DAYS ===================== */
+// The method is the weekly pairing of a max effort lift with dynamic effort
+// speed work, plus a rotating main lift so you never accommodate to one.
+// Program A already carries that entirely on its first two days, so the two-day
+// version keeps the engine intact and loses the third day.
+
+function conjugateTwoDayOne(tier, dePct) {
+  const deSets = tier === "deload" ? 4 : tier === "peak" ? 4 : 6;
+  const rowSets = tier === "deload" ? 4 : 6;
+  const rir = tier === "deload" ? 4 : tier === "build" || tier === "peak" ? 2 : 3;
+  const hingeSets = tier === "deload" ? 1 : 2;
+  return {
+    id: uid(), label: "1", name: "Max Effort Lower + Dynamic Effort Upper",
+    intent: tier === "peak"
+      ? "Competition weeks. The max effort lift is the heaviest it gets in the block; everything after it comes down so you can actually express that."
+      : "Two qualities in one session — a true heavy top set while you are fresh, then speed work on the press once the hard part is done. Keep the speed sets genuinely fast.",
+    sections: [
+      { id: uid(), type: "strength", name: "Main Strength", exercises: [
+        { ...meLowerBlock(), rest: "90 seconds on the build-up sets, 2 to 3 minutes before the top one" } ] },
+      { id: uid(), type: "power", name: "Dynamic Effort Upper", exercises: [
+        { ...deBench(dePct), sets: deSets },
+        ex({ name: "Inverted Row", sets: rowSets, reps: "6", load: "bodyweight — raise your feet to make it harder", rir, rest: "0 seconds — taken inside the speed bench rest, so it costs no extra time", tempo: "2/1/1", quality: "Accessory",
+          purpose: "Six sets of speed pressing on a day that otherwise has no pulling in it. Grappling pulls far more than it presses, and this sits in rest you are already taking — and because it is bodyweight and horizontal it puts nothing back on a spine that just worked up to a heavy squat.",
+          cues: "Chest to the bar, shoulder blades together and down for a beat at the top, two seconds to lower. Raise the bar if your hips sag." }) ]},
+      { id: uid(), type: "strength", name: "Posterior Chain & Grip", exercises: [
+        ex({ name: "Barbell Romanian Deadlift", sets: hingeSets, reps: tier === "peak" ? "4" : "6", load: "moderate — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 90 seconds", tempo: tier === "peak" ? "2/0/1" : "3/0/1", quality: "Posterior Chain",
+          purpose: "The hinge that stays in every week. Hamstrings loaded long and slow is the best protection there is against what a scramble does to them. The eccentric shortens to two seconds in the competition weeks, because eccentric time is the soreness you can least afford then.",
+          cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment your lower back rounds — the range comes from the hip." }),
+        ex({ name: "Double-Overhand Bar Hold", sets: hingeSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "90 seconds", quality: "Grip",
+          purpose: "Grip for free. You are already holding the bar at the end of the set, so this costs the time you were going to spend putting it down. Thumbs around the bar, no straps, no hook grip — the point is the hand.",
+          cues: "Finish the last rep standing and just hold it. Let go deliberately before the hands open on their own. Build from twenty-five seconds to forty before adding weight." }) ]},
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+    ],
+  };
+}
+
+function conjugateTwoDayTwo(tier, dePct) {
+  const deSets = tier === "deload" ? 3 : tier === "peak" ? 4 : 5;
+  const pullSets = tier === "deload" ? 3 : tier === "peak" ? 4 : 5;
+  const rir = tier === "deload" ? 4 : tier === "build" || tier === "peak" ? 2 : 3;
+  const hingeSets = tier === "deload" ? 1 : 2;
+  return {
+    id: uid(), label: "2", name: "Max Effort Upper + Dynamic Effort Lower",
+    intent: tier === "peak"
+      ? "Same again in reverse, and the same rule: heavy on the main lift, short on everything else."
+      : "Max effort on the press first while you are fresh, then explosive work on the lower body. Two qualities a session is what lets two sessions cover a week.",
+    sections: [
+      { id: uid(), type: "strength", name: "Main Strength", exercises: [
+        { ...meUpperBlock(), rest: "90 seconds on the build-up sets, 2 to 3 minutes before the top one" } ] },
+      { id: uid(), type: "power", name: "Dynamic Effort Lower", exercises: [
+        { ...deSquat(dePct), sets: deSets },
+        ex({ name: "Weighted Pull-Up", sets: pullSets, reps: tier === "peak" ? "3" : "4", load: "added weight, or bodyweight if that is already hard", rir, rest: "0 seconds — taken inside the jump squat rest", tempo: "2/1/X", quality: "Strength",
+          purpose: "The highest-transfer upper body lift there is for grappling, paired into the jump squat's rest so it costs no session time. Heavy and low-rep on purpose — this is a strength slot, not a conditioning one.",
+          cues: "Full hang at the bottom of every rep. Chest toward the bar rather than chin over it. Take the weight off before you start kipping." }) ]},
+      { id: uid(), type: "strength", name: "Posterior Chain & Grip", exercises: [
+        ex({ name: "Single Leg Romanian Deadlift", sets: hingeSets, reps: tier === "peak" ? "6 each side" : "8 each side", load: "a kettlebell or dumbbell in the opposite hand", rir, rest: "0 seconds — straight into the carry", tempo: "3/0/1", quality: "Posterior Chain",
+          purpose: "The second hinge of the week and the only single-leg work in this program. Both days own a hinge independently, so missing a session never costs you the pattern.",
+          cues: "Hinge from the standing hip and let the back leg rise in a straight line behind you. Hips stay square to the floor. Touch a wall with your free hand rather than losing the hinge if you wobble." }),
+        ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
+          purpose: "Grip and the whole side of the trunk at once, and the closest thing in the gym to carrying somebody who does not want to be carried. It is also the only anti-side-bend work in this program.",
+          cues: "Stand tall and do not let it pull you over. Walk, do not rush. Set it down before the grip fails rather than after." }) ]},
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+    ],
+  };
+}
+
+function conjugateTwoDayPhase(name, weekStart, weekEnd, tier, dePct, objective, intensityNote) {
+  return { id: uid(), name, weekStart, weekEnd, objective, intensityNote, dePercent: `${dePct}%`,
+    days: [conjugateTwoDayOne(tier, dePct), conjugateTwoDayTwo(tier, dePct)] };
+}
+
+function buildConjugateTwoDay() {
+  return {
+    id: uid(),
+    name: "Condensed Conjugate, Two Days — Twelve-Week Program (Program C)",
+    sport: "Brazilian Jiu-Jitsu / Wrestling",
+    sessionsPerWeek: 2,
+    variant: "C",
+    conjugate: { meLowerPool, meUpperPool, deLowerPool, deUpperPool, wristPool, coreAntiPool, conditioningIntervalPool, matchSpecificPool, hipPool, meRotationWeeks: 2 },
+    objective: "Program A's method on two days instead of three. One true max effort lift and one speed lift per session, a main lift that rotates so you never settle into it, and the four things that keep you training. Built for somebody with competitions on the calendar who cannot give the gym three days.",
+    methodology:
+      "The engine of a conjugate program is not the exercise list, it is pairing a max effort lift with dynamic effort speed work every week, on a main lift that rotates every two weeks so you never accommodate to it. Program A already carries all of that on its first two sessions, which is why this version keeps the structure whole rather than diluting it: the first session is max effort lower plus speed pressing, the second is max effort upper plus speed jumping, exactly as the three-day program runs them.\n\nWhat comes off is volume, not method. The speed work drops from eight sets to six on the press and five on the jump, because the quality of dynamic effort work is per rep rather than per set, which makes it the right thing to shave. The accessory list comes down to what earns its minutes.\n\nWhat is gone is the third day: the sprints, the agility shuttle, the rotational landmine work and the aerobic session. That is a deliberate call rather than an oversight. You train on the mat three to five times a week, and mat work already delivers maximal accelerations, cuts, reactive changes of direction and rotation under an opponent's load, at a volume and a specificity no ten minutes in a gym matches. Unaccustomed sprinting is also the single most reliable way to be sore for the session that actually matters. The rate-of-force stimulus stays, in the dynamic effort slot.\n\nIf you are a wrestler who wants the sprint and shuttle work back, add it to a mat-day warm-up rather than to these two sessions.",
+    philosophy: "The max effort sets are genuinely hard and that is where the strength comes from — push them. Everything else is dosed to leave the mat alone, and the reps-in-reserve number on each exercise is the instruction, not a suggestion. If a session leaves you sore enough to notice two days later it was too much, and the fix is fewer accessory sets, not a skipped week.",
+    coachNote: "This is the two-day program to pick if you are competing. The max effort and dynamic effort pairing survives the cut to two days better than anything else, because its stimulus is per-rep quality rather than accumulated volume — a short session is a quality-dense session by force.",
+    warmup: defaultWarmup(),
+    phases: [
+      conjugateTwoDayPhase("Conjugate Base — Weeks 1 to 4", 1, 4, "base", 50,
+        "Four weeks to learn what a true top set feels like on each rotation and to get the speed work genuinely fast. The main lift changes every two weeks.",
+        "Work up to an honest heavy top single or triple on the main lift and stop there — the weight is whatever it is that day. Speed sets at 50 percent of your one-rep max, moved as fast as you can. Three reps in reserve on everything else. If you are new to barbell work, stop the main lift at a clean heavy triple rather than a single: you lose almost nothing and the risk drops a long way."),
+      conjugateTwoDayPhase("Conjugate Intensification — Weeks 5 to 7", 5, 7, "build", 55,
+        "Same sessions, more intent. The top sets move from triples toward doubles and singles, the speed work gets heavier, and the accessories move one rep closer to the limit.",
+        "Speed sets at 55 percent. Two reps in reserve on the accessories instead of three, by adding load rather than sets — nothing here gets longer. In a conjugate block the progression is beating your own record on a fresh variation, so write the top set down every week or you will lose the thread."),
+      conjugateTwoDayPhase("Deload — Week 8", 8, 8, "deload", 50,
+        "One easy week in the middle of the block. Work up to a smooth triple and stop well short.",
+        "Four reps in reserve on the accessories, nothing near a limit on the main lift. Speed sets back to 50 percent and fewer of them. It should feel too easy — that is the dose. If your mat weeks have been light and you feel good, you can skip this and carry on."),
+      conjugateTwoDayPhase("Conjugate Peak — Weeks 9 to 11", 9, 11, "peak", 60,
+        "The heaviest the main lifts get. Everything behind them comes down so there is something left to express.",
+        "Speed sets at 60 to 65 percent, four sets. Two reps in reserve on the accessories and the Romanian deadlift's eccentric drops to two seconds, because eccentric time is the soreness you can least afford this close in. If you compete this week, do the session no later than forty-eight hours before you step on, and inside twenty-four hours skip it entirely — one missed in-season session costs you nothing."),
+      conjugateTwoDayPhase("Deload — Week 12", 12, 12, "deload", 50,
+        "Close the block out light, then start it again or move across to one of the three-day programs.",
+        "Four reps in reserve throughout. If your season is over and you have three days to give, Program A or B in Settings is where the real building happens."),
+    ],
+  };
+}
+
+/* ================ PROGRAM D — OFFSEASON STRENGTH, TWO DAYS ================ */
+// The method is autoregulated effort instead of percentages: reps in reserve
+// on the main lifts, paired supersets, tempo on the mains, and load climbing
+// inside a block while the sets and reps hold still. All of that survives. What
+// changes is that each pattern gets one exposure a week instead of two or
+// three, so the days split by pattern rather than by variation.
+
+function offseasonTwoDayOne(tier) {
+  // Three sets on the mains, not four. Two main lifts at four sets with real
+  // rest is twenty minutes of a session that has forty, and the lever in this
+  // program is load, not set count.
+  const mainSets = tier === "deload" ? 2 : 3;
+  const pressSets = tier === "deload" ? 2 : 3;
+  const rir = tier === "deload" ? 4 : (tier === "build" || tier === "peak") ? 2 : 3;
+  const squat = tier === "base" ? "Back Squat" : "Front Squat";
+  const press = tier === "peak" ? "Incline Close Grip Bench Press" : "Bench Press";
+  const accSets = tier === "deload" ? 1 : 2;
+  return {
+    id: uid(), label: "1", name: "Squat, Press & Vertical Pull",
+    intent: "Squat, press, pull up, hinge. Four patterns, paired so the session fits, and the load is whatever hits the reps-in-reserve number today.",
+    sections: [
+      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
+        ex({ name: "Medicine Ball Rotational Scoop Throw (each side)", sets: 3, reps: "3 per side", load: "a light ball", rir: 5, rest: "45 seconds", quality: "Rotational Power",
+          purpose: "Rotation is how almost every pass and throw is actually expressed, and this is the only place the program trains it fast. A throw rather than a jump on purpose: the warm-up already has you landing, and this costs nothing to recover from.",
+          cues: "Turn from the hips and let the arms follow. Throw it as hard as you can — speed is the point, not the ball." }) ]},
+      { id: uid(), type: "strength", name: "Working Sets", exercises: [
+        ex({ name: squat, sets: mainSets, reps: tier === "peak" ? "3" : tier === "base" ? "6" : "5", load: "whatever hits the reps in reserve below today", rir, rest: "rest as needed between the paired lifts, 2 minutes after both", tempo: "2/1/X", quality: "Strength",
+          purpose: "The one bilateral squat in the week. Back squat while you are building the base, front squat from week five on — more upright, more trunk, and kinder to a back that is already getting loaded on the mat.",
+          cues: "Brace before you unrack. Knees track over the middle of the foot, hips and chest rise together. If the hips shoot up first, that set is finished." }),
+        ex({ name: press, sets: pressSets, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "whatever hits the reps in reserve below today", rir, rest: "0 seconds — straight into the pull-up", tempo: "2/1/1", quality: "Strength",
+          purpose: "The horizontal press for the week, paired with the pull-up so the session is two patterns deep before you rest twice.",
+          cues: "Shoulder blades back and down into the bench and kept there, feet planted. Same spot on the chest every rep, controlled down." }),
+        ex({ name: "Weighted Pull-Up", sets: mainSets, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "added weight, or bodyweight if that is already hard", rir, rest: "2 minutes, then back to the press", tempo: "2/1/X", quality: "Strength",
+          purpose: "The highest-transfer upper body lift for grappling, and the week's vertical pull. More pulling sets than pressing sets, every week, because that is what the sport is.",
+          cues: "Full hang at the bottom of every rep, chest toward the bar, lower under control. Drop the added weight before you start kipping." }) ]},
+      { id: uid(), type: "strength", name: "Posterior Chain & Grip", exercises: [
+        ex({ name: "Barbell Romanian Deadlift", sets: tier === "deload" ? 2 : 3, reps: tier === "peak" ? "5 each side" : tier === "base" ? "6" : "5", load: "moderate to heavy — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 2 minutes", tempo: tier === "peak" ? "2/0/1" : "3/0/1", quality: "Posterior Chain",
+          purpose: "This day's hinge. Both days own one independently, so a missed session never costs you the pattern.",
+          cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment the lower back rounds." }),
+        ex({ name: "Double-Overhand Bar Hold", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "60 seconds", quality: "Grip",
+          purpose: "Grip for the time you were going to spend putting the bar down. Thumbs around the bar, no straps — the point is the hand.",
+          cues: "Finish the last rep standing and hold. Let go deliberately rather than waiting for the hands to open. Build to forty seconds before adding weight." }) ]},
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+    ],
+  };
+}
+
+function offseasonTwoDayTwo(tier) {
+  // Three sets on the mains, not four. Two main lifts at four sets with real
+  // rest is twenty minutes of a session that has forty, and the lever in this
+  // program is load, not set count.
+  const mainSets = tier === "deload" ? 2 : 3;
+  const pressSets = tier === "deload" ? 2 : 3;
+  const rir = tier === "deload" ? 4 : (tier === "build" || tier === "peak") ? 2 : 3;
+  const row = tier === "base" ? "Chest-Supported Dumbbell Row"
+    : tier === "peak" ? "Incline Chest-Supported Dumbbell Row" : "Bent Over Barbell Row";
+  const hinge = tier === "peak" ? "Split Stance Trap Bar Deadlift" : "Trap Bar Deadlift";
+  const accSets = tier === "deload" ? 1 : 2;
+  return {
+    id: uid(), label: "2", name: "Hinge, Overhead & Horizontal Pull",
+    intent: "The heaviest pull of the week, an overhead press, a row, and single-leg work. Same rule as the first session — the load is whatever hits the number.",
+    sections: [
+      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
+        ex({ name: "Medicine Ball Slam", sets: 3, reps: "4", load: "a light ball", rir: 5, rest: "45 seconds", quality: "Neuromuscular",
+          purpose: "Fast, hard, and over in two minutes. A slam rather than a jump because the warm-up already has you landing and this adds no impact.",
+          cues: "Reach tall and drive the ball into the floor as hard as you can. Do not chase the bounce — pick it up and reset." }) ]},
+      { id: uid(), type: "strength", name: "Working Sets", exercises: [
+        ex({ name: hinge, sets: mainSets, reps: tier === "peak" ? "3" : "5", load: "whatever hits the reps in reserve below today", rir, rest: "rest as needed between the paired lifts, 2 minutes after both", tempo: "1/0/1", quality: "Strength",
+          purpose: "The heaviest thing in the week, and deliberately the one with the lowest technical and recovery cost — neutral grip, shorter lever, nothing to grind. The split stance version in the competition weeks loads one side at a time at a lower total load.",
+          cues: "Chest up, push the floor away, bar straight up. Reset your brace on the floor between every rep rather than bouncing them." }),
+        ex({ name: "Standing Barbell Overhead Press", sets: pressSets, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "whatever hits the reps in reserve below today", rir, rest: "0 seconds — straight into the row", tempo: "2/0/1", quality: "Strength",
+          purpose: "The week's vertical press, paired with the row.",
+          cues: "Squeeze the glutes and keep the ribs down so the lower back does not arch to get the bar up. Head back out of the way, then through at the top. Stop the set if you start leaning back." }),
+        ex({ name: row, sets: mainSets, reps: tier === "peak" ? "6" : "8", load: "moderate to heavy", rir, rest: "2 minutes, then back to the press", tempo: "2/1/X", quality: "Strength",
+          purpose: "The week's horizontal pull. Chest-supported while you are building, bent-over from week five when you can afford the back, chest-supported again in the competition weeks when you cannot.",
+          cues: "Pull to the bottom of the ribs, hold a beat, lower all the way. No body English — if you are rocking, go lighter." }) ]},
+      { id: uid(), type: "strength", name: "Single Leg & Adductor", exercises: [
+        ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: accSets, reps: tier === "peak" ? "5 each side" : tier === "base" ? "8 each side" : "6 each side", load: "moderate", rir, rest: "0 seconds — straight into the adduction", tempo: "2/0/1", quality: "Accessory",
+          purpose: "The only single-leg knee-dominant work in the program, which is the pattern a sprawl and a shot actually use. It is also the most soreness-producing thing here, which is why it is capped at two sets — if you feel it on the mat at all, swap it for a dumbbell step-up for the same reps.",
+          cues: "Front shin vertical, back knee travels down rather than forward. Stop two reps short on both sides." }),
+        ex({ name: "Hip Adduction Machine", sets: accSets, reps: "12 each side", load: "moderate", rir, rest: "90 seconds", quality: "Durability",
+          purpose: "The second adductor exposure of the week, loaded rather than isometric. Between this and the Copenhagen the groin gets trained from both ends.",
+          cues: "Squeeze under control and take three seconds letting it open. Do not let the pads fling your legs apart at the end of the set." }) ]},
+      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
+        ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
+          purpose: "Grip and the whole side of the trunk at once, and the only anti-side-bend work in the program.",
+          cues: "Stand tall and do not let it pull you over. Walk, do not rush. Set it down before the grip fails." }),
+        TWO_DAY_NECK(tier) ]},
+    ],
+  };
+}
+
+function offseasonTwoDayPhase(name, weekStart, weekEnd, tier, objective, intensityNote) {
+  return { id: uid(), name, weekStart, weekEnd, objective, intensityNote,
+    days: [offseasonTwoDayOne(tier), offseasonTwoDayTwo(tier)] };
+}
+
+function buildOffseasonTwoDay() {
+  return {
+    id: uid(),
+    name: "Offseason Strength, Two Days — Twelve-Week Program (Program D)",
+    sport: "Brazilian Jiu-Jitsu / Wrestling",
+    sessionsPerWeek: 2,
+    variant: "D",
+    objective: "Program B's method on two days instead of three. No percentages and no maximal singles — every working set is prescribed by how hard it should feel, the lifts are paired, and the load climbs inside a block while the sets and reps hold still.",
+    methodology:
+      "Nothing here is calculated off a one-rep max. Every working set carries a reps-in-reserve number, and the load is whatever hits that number for you on the day. The lifts are paired so two patterns are underway before you have rested twice, tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives, and the progression inside a block is load going up while the sets and the reps stay exactly where they are.\n\nWhat changes going from three days to two is pattern frequency, not method. Each pattern now gets one exposure a week instead of two or three, so the sessions split by pattern rather than by variation: squat, horizontal press and vertical pull on the first day; hinge, overhead press and horizontal pull on the second. Both days own a hinge of their own, so a missed session never costs you the pattern.\n\nWhat comes off is variety. Three squat variations a week became one, six press variations became two, six pulls became two. That is the right thing to lose — variety was the three-day program's luxury and intensity is its engine — but it should be said plainly: weekly volume per pattern is down roughly forty percent against Program B. Expect this to build strength and to hold the muscle you have. If putting on size is the actual goal of your offseason, two days a week will not do what three does, and you should know that in week one rather than week ten.",
+    philosophy: "The number after each exercise is the reps you should still have left when you stop. Three in reserve means three — not two and not failure. The load climbs when that number says it can, which the app works out from what you logged last time.",
+    coachNote: "This is the two-day program for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days — its stimulus is per-rep quality rather than accumulated volume, which is exactly what survives a short week.",
+    warmup: defaultWarmup(),
+    phases: [
+      offseasonTwoDayPhase("Strength Base — Weeks 1 to 4", 1, 4, "base",
+        "Four weeks to find what a real working weight is on each of the six main lifts. The sets and reps do not move; the load does.",
+        "Three reps in reserve on every working set. If the weight you used last time felt like four or five in reserve, add to it — that is the whole progression and the app will suggest the step."),
+      offseasonTwoDayPhase("Strength Build — Weeks 5 to 7", 5, 7, "build",
+        "The same sessions one rep closer to the limit, with the front squat and the bent-over row taking over. Nothing gets longer.",
+        "Two reps in reserve instead of three, and one rep fewer on the main lifts so the load can climb to meet it. Sets never change — adding sets is how a two-day program stops being a two-day program."),
+      offseasonTwoDayPhase("Deload — Week 8", 8, 8, "deload",
+        "One easy week in the middle. Same movements, half the sets, tempo relaxed.",
+        "Four reps in reserve throughout. This should feel too easy. Keep the primer — it is the tissue that needs the week off, not the nervous system."),
+      offseasonTwoDayPhase("Strength Peak — Weeks 9 to 11", 9, 11, "peak",
+        "Reps come down to threes and fours and the load goes up. The split stance variations take over the heavy pulls so one side works at a time.",
+        "Two reps in reserve and never closer. Nothing to failure and nothing new. The Romanian deadlift's eccentric drops to two seconds here — eccentric time is the soreness you can least afford when the load is highest."),
+      offseasonTwoDayPhase("Deload — Week 12", 12, 12, "deload",
+        "Close the block out light, then run it again or move to three days.",
+        "Four reps in reserve. If you can give the gym three days, Program B is the same method with the volume that actually builds size."),
+    ],
+  };
+}
+
 function buildProgramVariant(variant) {
   // Program C — the two-day hybrid — was retired. It turned out to be Program A
   // with the third day deleted and its contents crammed into the other two, so
@@ -3492,10 +3759,12 @@ function buildProgramVariant(variant) {
   // Anyone already running it keeps the copy stored in their own record; only a
   // program rebuild lands them on A, which is the program C was a worse version
   // of anyway.
-  if (variant === "C") variant = "A";
-  // D is its own program rather than a trim of another one, so it is built
-  // whole and skips the conjugate scaffolding below entirely.
-  if (variant === "D") return finishProgram(buildInSeasonProgram());
+  // C and D are the two-day programs. Each is built whole from the method of
+  // the three-day program it comes from, so neither touches the conjugate
+  // scaffolding below. The old two-day in-season program also lived at D and
+  // has been replaced: Program C is the one to run in a season, and it says so.
+  if (variant === "C") return finishProgram(buildConjugateTwoDay());
+  if (variant === "D") return finishProgram(buildOffseasonTwoDay());
   const base = JSON.parse(JSON.stringify(conjugateProgram));
   if (variant === "A") {
     base.name = "Condensed Conjugate — Twelve-Week Program (Program A)";
@@ -3542,7 +3811,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
     profilePicture: profilePicture || null,
     createdAt: todayStr(),
-    program: useTemplate ? buildProgramVariant(["A", "B", "D"].includes(programVariant) ? programVariant : "B") : blankProgram(),
+    program: useTemplate ? buildProgramVariant(["A", "B", "C", "D"].includes(programVariant) ? programVariant : "B") : blankProgram(),
     logs: [], readiness: {}, prLog: [],
     bodyweightLog: weight ? [{ date: todayStr(), weight: Number(weight) }] : [],
     mobilityLogs: [], sessionsCompleted: 0, blockNumber: 1,
@@ -3630,7 +3899,8 @@ const BELT_LEVELS = ["White", "Grey", "Yellow", "Orange", "Green", "Blue", "Purp
 const PROGRAM_VARIANT_LABELS = {
   A: "Program A — Condensed Conjugate",
   B: "Program B — Offseason Strength Build",
-  D: "Program D — In-Season Maintenance",
+  C: "Program C — Conjugate, Two Days",
+  D: "Program D — Offseason Strength, Two Days",
 };
 
 // Replacing the suffering-as-virtue quotes with coaching. These are the lines
@@ -5753,7 +6023,12 @@ function OnboardingScreen({ onSubmit }) {
   // selection rather than leaving a card selected that can no longer be used.
   useEffect(() => {
     if (!allowedVariants.length || allowedVariants.includes(programVariant)) return;
-    setProgramVariant(allowedVariants.includes("B") ? "B" : allowedVariants[0]);
+    // Keep them on the method they already chose where it exists on the other
+    // side: A and C are both conjugate, B and D are both the effort-based one.
+    const SAME_METHOD = { A: "C", C: "A", B: "D", D: "B" };
+    const kin = SAME_METHOD[programVariant];
+    setProgramVariant(allowedVariants.includes(kin) ? kin
+      : allowedVariants.includes("B") ? "B" : allowedVariants[0]);
   }, [allowedKey, programVariant]);
   const canSubmit = firstName.trim() && lastName.trim() && weight
     && hasEnoughStrengthDays && allowedVariants.includes(programVariant);
@@ -6846,7 +7121,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <p className="muted" style={{ marginBottom: 10 }}>
         Currently on <strong>{PROGRAM_VARIANT_LABELS[client?.program?.variant] || PROGRAM_VARIANT_LABELS.B}</strong>. Switching rebuilds your exercises for the new program — your logs, check-ins, and records are untouched.
       </p>
-      {["A", "B", "D"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
+      {["A", "B", "C", "D"].filter((v) => v !== (client?.program?.variant || "B")).map((v) => (
         <button key={v} className="btn-ghost wide" onClick={async () => { const r = await onRefreshProgram(v); if (r && r.ok === false) return; setSwitched(true); }}>
           Switch to {PROGRAM_VARIANT_LABELS[v]}
         </button>

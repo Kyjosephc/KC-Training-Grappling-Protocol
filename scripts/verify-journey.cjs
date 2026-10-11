@@ -210,7 +210,7 @@ check("one lifting day is not enough to start at all", () => {
 check("two lifting days unlock the two-day program and lock the three-day ones", () => {
   fillProfile();
   pickStrengthDays(2);
-  if (locked("In-Season Maintenance")) throw new Error("the two-day program is locked on two days");
+  if (locked("Offseason Strength, Two Days")) throw new Error("the two-day program is locked on two days");
   if (!locked("Condensed Conjugate")) throw new Error("a three-day program is selectable on two days");
   if (!locked("Offseason Strength Build")) throw new Error("a three-day program is selectable on two days");
 });
@@ -222,24 +222,24 @@ check("three lifting days unlock the three-day programs and lock the two-day one
   pickStrengthDays(3);
   if (locked("Condensed Conjugate")) throw new Error("a three-day program is locked on three days");
   if (locked("Offseason Strength Build")) throw new Error("a three-day program is locked on three days");
-  if (!locked("In-Season Maintenance")) throw new Error("the two-day program is selectable on three days");
+  if (!locked("Offseason Strength, Two Days")) throw new Error("the two-day program is selectable on three days");
   if (byText(/get started/i).disabled) throw new Error("three days cannot start");
 });
 check("more than three days still means the three-day programs", () => {
   fillProfile();
   pickStrengthDays(5);
   if (locked("Offseason Strength Build")) throw new Error("five days locked the three-day programs");
-  if (!locked("In-Season Maintenance")) throw new Error("the two-day program is selectable on five days");
+  if (!locked("Offseason Strength, Two Days")) throw new Error("the two-day program is selectable on five days");
 });
 check("changing the schedule moves the selection off a program it no longer fits", () => {
   fillProfile();
   pickStrengthDays(2);
-  const onTwo = cardFor("In-Season Maintenance");
+  const onTwo = cardFor("Offseason Strength, Two Days");
   if (onTwo.getAttribute("aria-checked") !== "true") throw new Error("two days did not select the two-day program");
   // Add a third day: the selection has to move to a three-day program on its own.
   const more = buttons().filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
   hit(more[2]);
-  if (cardFor("In-Season Maintenance").getAttribute("aria-checked") === "true") {
+  if (cardFor("Offseason Strength, Two Days").getAttribute("aria-checked") === "true") {
     throw new Error("still selected on a program that no longer fits the schedule");
   }
   if (byText(/get started/i).disabled) throw new Error("three days cannot start after the switch");
@@ -247,9 +247,9 @@ check("changing the schedule moves the selection off a program it no longer fits
 check("a locked card cannot be chosen by clicking it", () => {
   fillProfile();
   pickStrengthDays(3);
-  const twoDay = cardFor("In-Season Maintenance");
+  const twoDay = cardFor("Offseason Strength, Two Days");
   hit(twoDay);
-  if (cardFor("In-Season Maintenance").getAttribute("aria-checked") === "true") {
+  if (cardFor("Offseason Strength, Two Days").getAttribute("aria-checked") === "true") {
     throw new Error("clicking a locked card selected it");
   }
 });
@@ -392,7 +392,7 @@ check("the dashboard renders while it is still loading", () => {
 
 console.log("\nThe programs themselves");
 // What each program promises, checked against what it actually builds.
-const VARIANTS = ["A", "B", "D"];
+const VARIANTS = ["A", "B", "C", "D"];
 const PAT = {
   press: /bench|floor press|push-?up|dip|overhead press|landmine punch|spoto|dumbbell press/i,
   pull: /row|pull-?up|chin-?up|pulldown|face pull|band pull-apart|renegade|scarecrow/i,
@@ -454,24 +454,42 @@ check("every program's first day has pulling in it", () => {
     if (!pulls.length) throw new Error(`program ${v} day 1 has no pulling`);
   });
 });
-check("the in-season program is genuinely lighter than the others", () => {
+check("both two-day programs are genuinely lighter weeks than the three-day ones", () => {
   const sets = (v) => {
     const p = A.buildProgramVariant(v);
     const ph = p.phases.find((x) => !/deload/i.test(x.name));
     return ph.days.reduce((n, d) => n + (d.sections || []).reduce((m, s) =>
       m + (s.exercises || []).reduce((k, e) => k + (Number(e.sets) || 0), 0), 0), 0);
   };
-  const d = sets("D"), a = sets("A"), b = sets("B");
-  if (d >= a || d >= b) throw new Error(`in-season is ${d} sets a week against ${a} and ${b}`);
+  const a = sets("A"), b = sets("B");
+  ["C", "D"].forEach((v) => {
+    const n = sets(v);
+    if (n >= a || n >= b) throw new Error(`program ${v} is ${n} sets a week against ${a} and ${b}`);
+  });
 });
-check("the four that keep you training are in every block of the in-season program", () => {
-  const p = A.buildProgramVariant("D");
+check("the four that keep you training are in every block of both two-day programs", () => {
   const must = [["neck", /neck/i], ["adductor", /copenhagen|adduction/i],
-    ["grip", /carry/i], ["hinge", /romanian|trap bar deadlift/i]];
-  p.phases.forEach((ph) => {
-    const names = ph.days.flatMap((d) => (d.sections || []).flatMap((s) => (s.exercises || []).map((e) => e.name || "")));
-    const missing = must.filter(([, re]) => !names.some((n) => re.test(n))).map(([k]) => k);
-    if (missing.length) throw new Error(`${ph.name} drops ${missing.join(", ")}`);
+    ["grip", /carry|hang|bar hold/i], ["hinge", /romanian|trap bar deadlift|valslide/i]];
+  ["C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    p.phases.forEach((ph) => {
+      const names = ph.days.flatMap((d) => (d.sections || []).flatMap((s) => (s.exercises || []).map((e) => e.name || "")));
+      const missing = must.filter(([, re]) => !names.some((n) => re.test(n))).map(([k]) => k);
+      if (missing.length) throw new Error(`program ${v}, ${ph.name} drops ${missing.join(", ")}`);
+    });
+  });
+});
+check("both two-day programs own a hinge on each day", () => {
+  ["C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const hard = p.phases.filter((ph) => !/deload/i.test(ph.name));
+    hard.forEach((ph) => ph.days.forEach((d) => {
+      const names = (d.sections || []).flatMap((s) => (s.exercises || []).map((e) => e.name || ""));
+      // A missed session must not cost the pattern.
+      if (!names.some((n) => /romanian|trap bar deadlift/i.test(n))) {
+        throw new Error(`program ${v}, ${ph.name} day ${d.label} has no hinge`);
+      }
+    }));
   });
 });
 check("the warm-up does not repeat the jump the session already prescribes", () => {
@@ -487,33 +505,44 @@ check("the warm-up does not repeat the jump the session already prescribes", () 
     if (clash.length) throw new Error(`program ${v}: ${clash.join(", ")} is in the warm-up and prescribed again as a primer`);
   });
 });
-check("no in-season session runs longer than the three-day programs' sessions", () => {
-  const p = A.buildProgramVariant("D");
-  let worst = 0, where = "";
-  p.phases.forEach((ph) => ph.days.forEach((d) => {
-    const shape = A.sessionShape((d.sections || []).map((sec) => ({ ...sec, exercises: sec.exercises || [] })));
-    if (shape.minutes > worst) { worst = shape.minutes; where = `${ph.name} day ${d.label}`; }
-  }));
-  // It is the short-session program. If one of its sessions reaches 50 minutes
-  // it is no longer the thing it says it is on the signup card.
-  if (worst > 45) throw new Error(`${where} estimates ${worst} minutes`);
+check("no two-day session runs longer than forty-five minutes", () => {
+  ["C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    let worst = 0, where = "";
+    p.phases.forEach((ph) => ph.days.forEach((d) => {
+      const shape = A.sessionShape((d.sections || []).map((sec) => ({ ...sec, exercises: sec.exercises || [] })));
+      if (shape.minutes > worst) { worst = shape.minutes; where = `${ph.name} day ${d.label}`; }
+    }));
+    // These are the short-session programs. If one reaches 50 minutes it is no
+    // longer the thing the signup card says it is.
+    if (worst > 45) throw new Error(`program ${v}: ${where} estimates ${worst} minutes`);
+  });
 });
-check("the in-season block does not deload more than twice", () => {
+check("neither two-day block deloads more than twice", () => {
   const p = A.buildProgramVariant("D");
-  const n = p.phases.filter((ph) => /deload/i.test(ph.name)).length;
+  const n = Math.max(...["C", "D"].map((v) =>
+    A.buildProgramVariant(v).phases.filter((ph) => /deload/i.test(ph.name)).length));
   // The fatigue is coming from the mat, which does not deload on this
   // calendar. Three scheduled easy weeks in twelve cost ground.
   if (n > 2) throw new Error(`${n} deloads in twelve weeks`);
 });
-check("the in-season program never progresses by adding sets", () => {
-  const p = A.buildProgramVariant("D");
-  const mainSetsIn = (ph) => {
-    const d = ph.days.find((x) => x.label === "1");
-    const work = (d.sections || []).find((sec) => /working sets/i.test(sec.name || ""));
-    return Math.max(...(work.exercises || []).map((e) => Number(e.sets) || 0));
-  };
-  const hard = p.phases.filter((ph) => !/deload/i.test(ph.name)).map(mainSetsIn);
-  if (Math.max(...hard) > 3) throw new Error(`a block carries ${Math.max(...hard)} sets on a main lift`);
+check("neither two-day program progresses by adding sets", () => {
+  ["C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const hardest = (label) => {
+      const counts = p.phases.filter((ph) => !/deload/i.test(ph.name)).map((ph) => {
+        const d = ph.days.find((x) => x.label === label);
+        return Math.max(...(d.sections || []).flatMap((sec) =>
+          (sec.exercises || []).map((e) => Number(e.sets) || 0)));
+      });
+      return { lo: Math.min(...counts), hi: Math.max(...counts) };
+    };
+    ["1", "2"].forEach((label) => {
+      const { lo, hi } = hardest(label);
+      // Effort and load are the levers between blocks, never set count.
+      if (hi > lo) throw new Error(`program ${v} day ${label} goes from ${lo} sets to ${hi} between blocks`);
+    });
+  });
 });
 
 check("a deload is never the hardest week in a block", () => {
