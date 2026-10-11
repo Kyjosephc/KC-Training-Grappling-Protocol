@@ -3027,7 +3027,7 @@ const PROGRAM_CHOICES = [
   { id: "B", days: 3, title: "Program B — Offseason Strength Build",
     blurb: "3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal." },
   { id: "D", days: 2, title: "Program D — In-Season Maintenance",
-    blurb: "2 days a week, about 35 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends." },
+    blurb: "2 days a week, around 40 to 45 minutes each. Holds the strength you have rather than building more, and keeps the neck, adductors, grip and hamstrings covered. Best when you are competing, or any stretch where you are on the mat four or five times a week and the gym cannot be the priority. Switch back to A or B when the season ends." },
 ];
 // At signup the schedule picks the program rather than the other way round.
 // Two lifting days on the calendar means the two-day program; three or more
@@ -3358,12 +3358,14 @@ function inSeasonDayOne(tier) {
   // A deload has to be the lightest week in the block, including lighter than
   // the competition weeks, so the accessory pairs come down to one set too.
   const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
-  const rir = tier === "deload" ? 5 : 3;
+  // Two in reserve in the competition weeks: the sets come down, so what is
+  // left has to be genuinely heavy or it holds nothing.
+  const rir = tier === "deload" ? 5 : tier === "peak" ? 2 : 3;
   return {
     id: uid(), label: "1", name: "Lower Emphasis — Full Body",
     intent: tier === "peak"
       ? "Competition weeks. The weight stays heavy and the number of sets comes down — that is what keeps strength without leaving anything in your legs for the weekend."
-      : "One heavy pull, one heavy pull-up, and the durability work that keeps you training. In and out in about thirty-five minutes.",
+      : "One heavy pull, one heavy pull-up, and the durability work that keeps you training. In and out in around forty-five minutes, warm-up included.",
     sections: [
       { id: uid(), type: "power", name: "Explosive Primer", exercises: [
         ex({ name: "Broad Jump", sets: 3, reps: "3", load: "bodyweight", rir: 5, rest: "60 seconds", quality: "Neuromuscular",
@@ -3376,10 +3378,10 @@ function inSeasonDayOne(tier) {
         ex({ name: "Weighted Pull-Up", sets: mainSets, reps: tier === "peak" ? "3" : "5", load: "added weight, or bodyweight if that is already hard", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
           purpose: "Paired with the pull so the session is two movements deep before you have rested twice. Pulling strength is the one quality that transfers to grappling almost one for one, and it is the first thing to go when training time gets cut.",
           cues: "Full hang at the bottom every rep. Chest to the bar, not chin over it." }),
-        ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: accSets, reps: "6 each side", load: "moderate", rir: rir + 1, rest: "straight into the next pair", quality: "Accessory",
+        ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: accSets, reps: "6 each side", load: "moderate", rir, rest: "straight into the next pair", quality: "Accessory",
           purpose: "Single-leg loading, which is what a sprawl and a shot actually use. Kept light in season — this is maintenance, not a leg day.",
           cues: "Front shin vertical, back knee travels down rather than forward. Stop two reps short on both sides." }),
-        ex({ name: "Half-Kneeling Single Arm Dumbbell Press", sets: accSets, reps: "6 each side", load: "moderate", rir: rir + 1, rest: "90 seconds, then back to the split squat", quality: "Accessory",
+        ex({ name: "Half-Kneeling Single Arm Dumbbell Press", sets: accSets, reps: "6 each side", load: "moderate", rir, rest: "90 seconds, then back to the split squat", quality: "Accessory",
           purpose: "Overhead strength with the trunk doing the work to stop you leaning. Half-kneeling because it takes the low back out of it in a week where the mat is already loading it.",
           cues: "Ribs down, glute of the back leg switched on. If you have to lean back to finish the rep, the weight is too heavy." }) ]},
       { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
@@ -3398,7 +3400,7 @@ function inSeasonDayTwo(tier) {
   // A deload has to be the lightest week in the block, including lighter than
   // the competition weeks, so the accessory pairs come down to one set too.
   const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
-  const rir = tier === "deload" ? 5 : 3;
+  const rir = tier === "deload" ? 5 : tier === "peak" ? 2 : 3;
   return {
     id: uid(), label: "2", name: "Upper Emphasis — Full Body",
     intent: tier === "peak"
@@ -3416,12 +3418,9 @@ function inSeasonDayTwo(tier) {
         ex({ name: "Seal Row", sets: mainSets, reps: tier === "peak" ? "5" : "8", load: "moderate to heavy", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
           purpose: "A row with the chest supported, so the low back contributes nothing. In a week where you are already getting stacked and scrambled, that matters more than the extra few pounds a bent-over row would allow.",
           cues: "Pull to the bottom of the ribs, hold for a beat, lower under control. No body English — if you are rocking the bench, go lighter." }),
-        ex({ name: "Barbell Romanian Deadlift", sets: accSets, reps: "6", load: "moderate — leave the last two reps", rir: rir + 1, rest: "straight into the next pair", tempo: "3/0/1", quality: "Posterior Chain",
-          purpose: "The hinge that stays in all season. Hamstrings loaded long and slow is the best protection there is against the strain that a scramble produces, and it is the first thing people cut when the session gets short.",
-          cues: "Hips back, bar close, three full seconds down. Stop the rep the moment the lower back rounds." }),
-        ex({ name: "Inverted Row", sets: accSets, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty", rir: rir + 1, rest: "90 seconds, then back to the Romanian deadlift", tempo: "2/1/1", quality: "Accessory",
-          purpose: "More pulling, no load on the spine, and it costs nothing to recover from. Grappling pulls far more than it presses and the week should look like that.",
-          cues: "Chest to the bar, shoulder blades together and down at the top, two seconds to lower. Raise the bar if your hips sag." }) ]},
+        ex({ name: "Valslide Hamstring Curls", sets: accSets, reps: tier === "peak" ? "5" : "6 to 8", load: "bodyweight — slide further out to make it harder", rir, rest: "90 seconds", tempo: "3/0/1", quality: "Posterior Chain",
+          purpose: "The only knee-flexion work in the program, and the pattern with the strongest injury-prevention evidence behind it. It replaced a second Romanian deadlift: the trap bar on the first session already covers the hinge, and a heavy eccentric hinge forty-eight hours later was the surest way to be sore the day before a hard round. Here the slow half is the point rather than a side effect, and there is no load on the spine.",
+          cues: "Heels on sliders, hips lifted and held there, drag the heels in and take three seconds letting them slide back out. The hips do not drop. Shorten the slide rather than stopping if they cramp. Leave this one out inside seventy-two hours of competing — it is the one exercise here that can make you sore." }) ]},
       { id: uid(), type: "durability", name: "The Four That Stay", exercises: [
         ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
           purpose: "Grip and the whole side of the trunk at once, which is the carry that looks most like holding somebody who does not want to be held. Grip is the quality a gi season builds and a no-gi season quietly loses.",
@@ -3448,7 +3447,7 @@ function buildInSeasonProgram() {
     sport: "Brazilian Jiu-Jitsu / Wrestling",
     sessionsPerWeek: 2,
     variant: "D",
-    objective: "Hold the strength you built, keep the neck, adductors, grip and hamstrings covered, and take nothing away from the mat. Two sessions a week, about thirty-five minutes each, written for the stretch of the year when you are competing or training hard and the gym is not the priority.",
+    objective: "Hold the strength you built, keep the neck, adductors, grip and hamstrings covered, and take nothing away from the mat. Two sessions a week, around forty to forty-five minutes each including the warm-up, written for the stretch of the year when you are competing or training hard and the gym is not the priority.",
     methodology:
       "Strength is kept with intensity, not volume. That is the whole idea here and it is why this is not simply a shorter version of the other programs. The loads stay respectable — heavy fives, and heavy triples in the competition weeks — while almost everything else comes off, because the mat is already the hard part of your week.\n\nBoth sessions are full body rather than split. If you miss one, you have missed some of everything rather than all of your lower body, which is what actually happens in a season.\n\nFour things never come out, in any block: the neck, the adductors, grip, and one hinge. Those are the four that keep you training, and they are the four everybody drops first when they get busy.\n\nThere is no conditioning programmed here. In season your mat work is the conditioning, and adding intervals on top of hard rounds is how people arrive at a competition flat. If you have a genuinely light training week, one easy twenty to thirty minute aerobic session on a non-lifting day is plenty.",
     philosophy: "Nothing in this program should ever cost you a round. Every set is prescribed to stop short — the reps-in-reserve number on each exercise is the point, not a suggestion. If a session leaves you sore enough to notice it on the mat two days later, it was too much, and the answer is less volume rather than skipping the week.",
