@@ -426,44 +426,67 @@ export function pickQuestions(bank, { ruleset, count = 10, difficulty, minDiffic
 // in your head. Built from the same scoring tables, so it can never disagree
 // with the rest of the app.
 // ---------------------------------------------------------------------------
+// Each event needs two tellings: one where control was held long enough to
+// score, and one where it was not. Without that the game only ever tests
+// whether you remember a number, when the thing that actually decides a call
+// is whether the position was held — and an event that does not say either way
+// is a question nobody can answer correctly.
 const REF_EVENTS = {
-  takedown: "lands a takedown and holds it three seconds",
-  cleanTakedown: "lands a takedown straight past the legs and holds it",
-  guardPass: "passes the guard and settles in side control",
-  kneeOnBelly: "steps up into knee on belly and holds it",
-  mount: "climbs into mount and holds it",
-  backMount: "takes back mount and holds it",
-  backControl: "takes the back with both hooks in",
-  sideControl: "settles into side control",
-  sweep: "sweeps from guard and comes up on top",
-  cleanSweep: "sweeps straight past the legs and comes up on top",
-  submissionAttempt: "catches a deep submission but it is stopped out of bounds",
+  takedown:    { noun: "a takedown", held: "puts {o} on the ground from standing and settles on top", lost: "puts {o} on the ground from standing, but {o} scrambles straight back up" },
+  cleanTakedown: { noun: "a clean takedown past the guard", held: "takes {o} down and lands already past the legs", lost: "takes {o} down but lands inside {o}'s guard" },
+  guardPass:   { noun: "a guard pass", held: "clears {o}'s legs into side control", lost: "clears {o}'s legs, but {o} recovers half guard almost immediately" },
+  kneeOnBelly: { noun: "knee on belly", held: "steps up into knee on belly with {o} flat on their back", lost: "steps up into knee on belly but {o} turns in and dislodges it at once" },
+  mount:       { noun: "mount", held: "climbs into mount, sitting on the torso with both knees down", lost: "climbs into mount but {o} bridges out immediately" },
+  backMount:   { noun: "back mount", held: "takes back mount and settles", lost: "takes back mount but slips straight off to the side" },
+  backControl: { noun: "back control", held: "takes the back with both hooks in and heels on the thighs", lost: "takes the back but {o} peels a hook and turns in right away" },
+  sideControl: { noun: "side control", held: "settles chest to chest in side control", lost: "reaches side control but {o} frames and recovers guard at once" },
+  sweep:       { noun: "a sweep", held: "sweeps from guard and comes up on top", lost: "sweeps from guard but {o} keeps coming and ends up on top instead" },
+  cleanSweep:  { noun: "a clean sweep past the guard", held: "sweeps and comes up already past the legs", lost: "sweeps but comes up stuck inside {o}'s guard" },
+  submissionAttempt: { noun: "a near submission", held: "locks in a tight submission that is stopped out of bounds", lost: "goes for a submission but never finishes it" },
 };
+
+// Roughly a third of exchanges are the one where nothing is awarded, because
+// knowing when NOT to give points is most of refereeing.
+const HELD_RATE = 0.66;
 
 export function buildMatch(rsId, seed = Date.now()) {
   const rs = RULESETS[rsId];
   if (!rs) return null;
   const rnd = mulberry(seed);
   const scorable = Object.keys(rs.scoring).filter((k) => REF_EVENTS[k]);
-  const n = 5 + Math.floor(rnd() * 2); // five or six exchanges
+  const n = 5 + Math.floor(rnd() * 2);
   const events = [];
   let blue = 0, white = 0;
   for (let i = 0; i < n; i++) {
     const key = scorable[Math.floor(rnd() * scorable.length)];
     const who = rnd() < 0.5 ? "Blue" : "White";
-    const pts = rs.scoring[key] && rs.scoring[key].points != null ? rs.scoring[key].points : 0;
+    const other = who === "Blue" ? "White" : "Blue";
+    const def = REF_EVENTS[key];
+    const scores = rs.scoring[key];
+    const full = scores && scores.points != null ? scores.points : 0;
+    // A position that is worth nothing anyway is always shown as held, so the
+    // athlete is judging the rule rather than guessing at the story.
+    const held = full === 0 ? true : rnd() < HELD_RATE;
+    const pts = held ? full : 0;
     if (who === "Blue") blue += pts; else white += pts;
+    const control = scores && scores.control ? scores.control : "";
     events.push({
-      i, key, who, points: pts,
-      text: `${who} ${REF_EVENTS[key]}.`,
+      i, key, who, other, points: pts, held,
+      text: `${who} ${(held ? def.held : def.lost).replace(/\{o\}/g, other)}.`,
+      question: `How many points does ${who} score?`,
       why: pts > 0
-        ? `${pts} to ${who}. ${rs.scoring[key].control}`
-        : `No points. ${rs.scoring[key].control}`,
-      cite: `${rs.name} ${rs.version}${rs.scoring[key].cite ? ` — ${rs.scoring[key].cite}` : ""}`,
+        ? `${pts} ${pts === 1 ? "point" : "points"} to ${who}. Under ${rs.name}, ${def.noun} is worth ${full} once the requirement is met: ${control}`
+        : full === 0
+          ? `No points to anybody. Under ${rs.name}, ${def.noun} does not score: ${control}`
+          : `No points. ${def.noun.charAt(0).toUpperCase() + def.noun.slice(1)} is worth ${full} under ${rs.name}, but only once the requirement is met: ${control} ${other} got out before that, so nothing goes on the board.`,
+      cite: `${rs.name} ${rs.version}${scores && scores.cite ? ` — ${scores.cite}` : ""}`,
       runningBlue: blue, runningWhite: white,
     });
   }
-  return { ruleset: rsId, rulesetName: rs.name, events, finalBlue: blue, finalWhite: white };
+  return {
+    ruleset: rsId, rulesetName: rs.name, controlRule: rs.control,
+    events, finalBlue: blue, finalWhite: white,
+  };
 }
 export const REF_POINT_CHOICES = [0, 2, 3, 4];
 

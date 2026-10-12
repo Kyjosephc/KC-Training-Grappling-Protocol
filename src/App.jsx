@@ -10763,6 +10763,12 @@ function GlobalStyle() {
       .rg-prompt { font-size: 16.5px; line-height: 1.45; font-weight: 600; margin: 0 0 16px; }
       .rg-options { display: flex; flex-direction: column; gap: 9px; }
       .rg-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+        background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 14px 15px;
+        min-height: 52px; font-size: 15px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
+      .rg-option:disabled { cursor: default; }
+      .rg-option.right { border-color: var(--green); color: var(--green); }
+      .rg-option.wrong { border-color: var(--red); color: var(--red); }
+      .rg-option.dim { opacity: .45; }
       /* The end-of-round review, the referee's scorecard and the day streak. */
       .rg-review-head { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); margin: 18px 0 10px; }
       .rg-review { border-left: 2px solid var(--red); padding: 2px 0 2px 12px; margin-bottom: 16px; }
@@ -10775,7 +10781,10 @@ function GlobalStyle() {
       .rg-review-why.dim { opacity: 0.75; }
       .rg-review-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
       .rg-streak-nudge { display: flex; align-items: center; gap: 8px; border: 1px solid var(--amber); border-radius: 4px; padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--amber); }
-      .rg-scorecard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin-bottom: 16px; }
+      .rg-scorecard-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
+      .rg-control-rule { font-size: 12px; line-height: 1.5; color: var(--text-dim); border-left: 2px solid var(--border); padding-left: 10px; margin: 0 0 16px; }
+      .rg-ref-ask { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; font-weight: 600; color: var(--text-dim); margin: 0 0 10px; }
+      .rg-scorecard { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin-bottom: 16px; }
       .rg-scorecard > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .rg-scorecard span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); }
       .rg-scorecard strong { font-family: 'Oswald', sans-serif; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -10787,12 +10796,7 @@ function GlobalStyle() {
       .rg-card-compare > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
       .rg-card-compare span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); }
       .rg-card-compare strong { font-family: 'Oswald', sans-serif; font-size: 17px; font-variant-numeric: tabular-nums; }
-        background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 14px 15px;
-        min-height: 52px; font-size: 15px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
-      .rg-option:disabled { cursor: default; }
-      .rg-option.right { border-color: var(--green); color: var(--green); }
-      .rg-option.wrong { border-color: var(--red); color: var(--red); }
-      .rg-option.dim { opacity: .45; }
+      .rg-quiz-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
       .rg-explain { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 14px; line-height: 1.5; }
       .rg-explain strong { color: var(--red); }
       .rg-explain.ok strong { color: var(--green); }

@@ -238,7 +238,7 @@ export default function RulesGame({ progress, onProgress }) {
               <strong>Blue {match.finalBlue} — {match.finalWhite} White</strong>
             </div>
           </div>
-          <div className="rg-review-head">Every exchange</div>
+          <div className="rg-review-head">Every exchange, and why</div>
           {match.events.map((e, i) => {
             const call = match.calls[i];
             return (
@@ -246,7 +246,8 @@ export default function RulesGame({ progress, onProgress }) {
                 <div className="rg-review-q">{e.text}</div>
                 <div className={`rg-review-line ${call && call.ok ? "good" : "bad"}`}>
                   {call && call.ok ? <Check size={13} /> : <X size={13} />}
-                  You called {call ? call.said : 0} · it is {e.points}
+                  You gave {call ? call.said : 0} — the correct call is {e.points}
+                  {e.points > 0 ? ` to ${e.who}` : ", no points"}
                 </div>
                 <p className="rg-review-why">{e.why}</p>
                 <span className="rg-cite">{e.cite}</span>
@@ -263,16 +264,17 @@ export default function RulesGame({ progress, onProgress }) {
     return (
       <div className="pad">
         <div className="rg-quiz-top">
-          <span className="rg-progress">Exchange {match.i + 1} of {match.events.length} · {match.rulesetName}</span>
+          <span className="rg-progress">Exchange {match.i + 1} of {match.events.length} · {match.rulesetName} rules</span>
           <button className="link-btn" onClick={() => { setMatch(null); setView("home"); }}>Quit</button>
         </div>
+        <div className="rg-scorecard-label">The card you are keeping</div>
         <div className="rg-scorecard">
           <div><span>Blue</span><strong>{match.calls.reduce((n, c) => n + (c.who === "Blue" ? c.said : 0), 0)}</strong></div>
-          <div className="rg-scorecard-sep">your card</div>
           <div><span>White</span><strong>{match.calls.reduce((n, c) => n + (c.who === "White" ? c.said : 0), 0)}</strong></div>
         </div>
+        <p className="rg-control-rule">{match.controlRule}</p>
         <div className="rg-ref-event">{ev.text}</div>
-        <p className="muted" style={{ marginBottom: 10 }}>How many points?</p>
+        <p className="rg-ref-ask">{ev.question}</p>
         {REF_POINT_CHOICES.map((n) => {
           const chosen = picked === n;
           const isRight = n === ev.points;
@@ -287,7 +289,11 @@ export default function RulesGame({ progress, onProgress }) {
         {picked != null && (
           <>
             <div className={`adjust-box ${picked === ev.points ? "" : ""}`} style={{ marginTop: 12, borderColor: picked === ev.points ? "var(--green)" : "var(--amber)" }}>
-              <strong>{picked === ev.points ? "Correct." : `It is ${ev.points}.`}</strong> {ev.why}
+              <strong>{picked === ev.points
+                ? "Correct."
+                : ev.points === 0
+                  ? "Nothing is awarded here."
+                  : `It is ${ev.points} to ${ev.who}.`}</strong> {ev.why}
               <div className="rg-cite" style={{ marginTop: 6 }}>{ev.cite}</div>
             </div>
             <button className="btn-primary wide" onClick={() => {

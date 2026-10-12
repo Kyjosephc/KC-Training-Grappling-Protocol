@@ -18,7 +18,7 @@ const { createRoot } = require("react-dom/client");
 const { act } = require("react");
 const RG = require("../.rg.cjs");
 const Game = RG.default || RG.RulesGame;
-const { buildQuestionBank, rankFor } = require("../.eng.cjs");
+const { buildQuestionBank, rankFor, buildMatch } = require("../.eng.cjs");
 const bank = buildQuestionBank();
 
 let bad = 0;
@@ -203,14 +203,17 @@ check("the referee round plays and scores a card", () => {
   goHome();
   click(/You are the referee/);
   if (!/Exchange 1 of/.test(txt())) throw new Error("referee round did not start");
-  if (!/your card/i.test(txt())) throw new Error("no running scorecard shown");
+  if (!/The card you are keeping/i.test(txt())) throw new Error("no running scorecard shown");
+  if (!/seconds|control/i.test(txt())) throw new Error("the control requirement is not on screen while calling");
   let exchanges = 0;
   for (let n = 0; n < 20; n++) {
     const opts = [...host.querySelectorAll("button.rg-option")];
     if (!opts.length) break;
     hit(opts[0]);
     exchanges++;
-    if (!/It is \d|Correct\./.test(txt())) throw new Error("no ruling shown after a call");
+    const t0 = txt();
+    if (!/It is \d|Correct\.|Nothing is awarded/.test(t0)) throw new Error("no ruling shown after a call");
+    if (!/How many points does (Blue|White) score\?/.test(t0)) throw new Error("the question does not name who is being scored");
     const next = byText(/Next exchange|See the card/);
     if (!next) throw new Error("no way forward after a call");
     hit(next);
@@ -222,6 +225,53 @@ check("the referee round plays and scores a card", () => {
   if (!/Every exchange/.test(t)) throw new Error("no exchange-by-exchange breakdown");
   if (/\[object Object\]/.test(t)) throw new Error("an object leaked into the referee result");
   console.log(`       ${exchanges} exchanges called, card compared against the real score`);
+});
+
+check("matches contain exchanges that score and exchanges that do not", () => {
+  let scored = 0, nil = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const m = buildMatch("ibjjf", seed);
+    m.events.forEach((e) => { if (e.points > 0) scored++; else nil++; });
+  }
+  if (!scored) throw new Error("no exchange in 40 matches ever scores");
+  // Knowing when not to award is most of refereeing; if every exchange scores
+  // the game is only testing recall of point values.
+  if (!nil) throw new Error("no exchange in 40 matches is ever worth nothing");
+  console.log(`       across 40 matches: ${scored} scoring exchanges, ${nil} worth nothing`);
+});
+
+check("an exchange always says whether the position was held", () => {
+  // The call turns on whether control was established, so the two tellings of
+  // the same position have to read differently and lead to different scores.
+  const seen = new Map();
+  for (let seed = 1; seed <= 60; seed++) {
+    buildMatch("ibjjf", seed).events.forEach((e) => {
+      const m = seen.get(e.key) || { held: new Set(), lost: new Set() };
+      m[e.held ? "held" : "lost"].add(e.text.replace(/^(Blue|White) /, "").replace(/Blue|White/g, "X"));
+      seen.set(e.key, m);
+    });
+  }
+  let checked = 0;
+  seen.forEach((m, key) => {
+    if (!m.held.size || !m.lost.size) return; // a position only ever shown one way
+    const overlap = [...m.held].filter((t) => m.lost.has(t));
+    if (overlap.length) throw new Error(`${key}: the same wording is used whether or not it was held — "${overlap[0]}"`);
+    checked++;
+  });
+  if (checked < 4) throw new Error(`only ${checked} positions were seen told both ways`);
+  console.log(`       ${checked} positions read differently depending on whether control was held`);
+});
+
+check("every exchange explains itself and cites a rule", () => {
+  for (let seed = 1; seed <= 15; seed++) {
+    const m = buildMatch("ibjjf", seed);
+    m.events.forEach((e) => {
+      if (!e.why || e.why.length < 40) throw new Error(`thin explanation: "${e.why}"`);
+      if (!/Rule Book|Art\.|Scoring/i.test(e.cite)) throw new Error(`weak citation: "${e.cite}"`);
+      if (/\{o\}/.test(e.text)) throw new Error(`unreplaced placeholder in: "${e.text}"`);
+      if (!/^(Blue|White) /.test(e.text)) throw new Error(`exchange does not name who acted: "${e.text}"`);
+    });
+  }
 });
 
 console.log(bad ? `\n*** ${bad} FAILURES ***` : "\nALL CHECKS PASSED");
