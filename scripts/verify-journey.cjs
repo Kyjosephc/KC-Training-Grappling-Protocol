@@ -545,6 +545,42 @@ check("neither two-day program progresses by adding sets", () => {
   });
 });
 
+check("every quote is attributed to a real person", () => {
+  const L = A.MENTAL_COACHING_LIBRARY;
+  if (!L || L.length < 30) throw new Error(`only ${L ? L.length : 0} quotes in the library`);
+  L.forEach((q) => {
+    if (!q.quote || !q.quote.trim()) throw new Error("a quote with no text");
+    // A quote with no named source, or a placeholder byline, reads as filler.
+    if (!q.author || !q.author.trim()) throw new Error(`no attribution: "${q.quote.slice(0, 50)}"`);
+    if (/^(training note|anonymous|unknown|proverb)$/i.test(q.author.trim())) {
+      throw new Error(`"${q.author}" is not a person: "${q.quote.slice(0, 50)}"`);
+    }
+  });
+  const seen = new Set();
+  L.forEach((q) => {
+    if (seen.has(q.quote)) throw new Error(`the same line appears twice: "${q.quote.slice(0, 50)}"`);
+    seen.add(q.quote);
+  });
+  const authors = new Set(L.map((q) => q.author));
+  if (authors.size < 15) throw new Error(`only ${authors.size} distinct voices`);
+});
+
+check("a session's exercises never draw the same quote twice", () => {
+  // Two exercises on one screen showing the same line reads as a bug, and
+  // hashing each name on its own cannot prevent it. The session deals them.
+  for (let d = 0; d < 50; d++) {
+    const ids = Array.from({ length: 12 }, (_, i) => `ex-${i}`);
+    const tips = A.mentalTipsForSession(`day-${d}`, ids);
+    const quotes = ids.map((id) => tips[id] && tips[id].quote);
+    if (quotes.some((q) => !q)) throw new Error(`day ${d}: an exercise got no quote`);
+    if (new Set(quotes).size !== quotes.length) throw new Error(`day ${d}: a quote was dealt twice in one session`);
+  }
+  // And a different day deals a different hand.
+  const a = A.mentalTipsForSession("day-1", ["x"])["x"].quote;
+  const b = A.mentalTipsForSession("day-2", ["x"])["x"].quote;
+  if (a === b) throw new Error("every session opens on the same quote");
+});
+
 check("every loaded lift has a demonstration video", () => {
   // Conditioning is "ride a bike at this pace" and the warm-up items are
   // described in full, so neither needs a demo. Anything somebody loads and

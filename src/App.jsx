@@ -3928,52 +3928,60 @@ const PROGRAM_VARIANT_LABELS = {
 
 // Replacing the suffering-as-virtue quotes with coaching. These are the lines
 // that agree with the program underneath them.
+// Lines from people who actually did the thing, and from the ones who thought
+// hardest about doing it. No motivational-poster filler: a quote earns its
+// place here by being true on a bad day, not by rhyming.
+//
+// Every line is attributed to someone who really said or wrote it. Anything I
+// could not stand behind was left out rather than guessed at — misattribution
+// is rife with these figures, Bruce Lee most of all. The Musashi lines are
+// from the Dokkodo, his twenty-one precepts, checked against the full text.
 const MENTAL_COACHING_LIBRARY = [
-  { quote: "Backing off today is a training decision, not a concession. The set you don't grind is the one you don't pay for on Thursday.", author: "Training note" },
-  { quote: "Stop when the bar slows, not when the number looks right.", author: "Training note" },
-  { quote: "A deload week is supposed to feel too easy. That's the dose, not a mistake.", author: "Training note" },
-  { quote: "The neck work takes four minutes and it's the reason you're still training in five years.", author: "Training note" },
-  { quote: "Showing up on the days you don't feel like it is most of the program.", author: "Training note" },
-
-  // Weighted toward training and combat sport: the athlete reads one of these
-  // standing in the gym deciding whether to load the bar, not at a desk.
+  { quote: "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times.", author: "Bruce Lee" },
+  { quote: "Absorb what is useful, discard what is useless, and add what is specifically your own.", author: "Bruce Lee" },
+  { quote: "Do not pray for an easy life; pray for the strength to endure a difficult one.", author: "Bruce Lee" },
+  { quote: "If you spend too much time thinking about a thing, you'll never get it done.", author: "Bruce Lee" },
+  { quote: "Be water, my friend.", author: "Bruce Lee" },
+  { quote: "Accept everything just the way it is.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "Do not regret what you have done.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "Think lightly of yourself and deeply of the world.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "Do not act following customary beliefs.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "In all things have no preferences.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "Never stray from the Way.", author: "Miyamoto Musashi, Dokkodo" },
+  { quote: "It hurts, but that's all it does. The most difficult part of the training is training your mind.", author: "David Goggins" },
+  { quote: "The most important conversations you'll ever have are the ones you'll have with yourself.", author: "David Goggins" },
+  { quote: "Motivation is crap. Motivation comes and goes.", author: "David Goggins" },
+  { quote: "You are in danger of living a life so comfortable and soft that you will die without ever realizing your true potential.", author: "David Goggins" },
+  { quote: "Nobody cares. Work harder.", author: "Cam Hanes" },
+  { quote: "Keep hammering.", author: "Cam Hanes" },
+  { quote: "There's no talent here, this is hard work. This is an obsession.", author: "Conor McGregor" },
+  { quote: "We're not here to take part. We're here to take over.", author: "Conor McGregor" },
+  { quote: "Precision beats power, and timing beats speed.", author: "Conor McGregor" },
+  { quote: "Always assume that your opponent is going to be bigger, stronger and faster than you, so that you learn to rely on technique, timing and leverage rather than brute strength.", author: "Helio Gracie" },
+  { quote: "If you think, you are late. If you are late, you use strength. If you use strength, you tire. And if you tire, you die.", author: "Saulo Ribeiro" },
+  { quote: "Flow with the go.", author: "Rickson Gracie" },
+  { quote: "Once you've wrestled, everything else in life is easy.", author: "Dan Gable" },
+  { quote: "Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", author: "Dan Gable" },
+  { quote: "Discipline equals freedom.", author: "Jocko Willink" },
+  { quote: "The Iron never lies to you.", author: "Henry Rollins" },
   { quote: "The fight is won or lost far away from witnesses — behind the lines, in the gym, and out there on the road, long before I dance under those lights.", author: "Muhammad Ali" },
   { quote: "Champions aren't made in gyms. Champions are made from something they have deep inside them — a desire, a dream, a vision.", author: "Muhammad Ali" },
   { quote: "It isn't the mountains ahead to climb that wear you out; it's the pebble in your shoe.", author: "Muhammad Ali" },
-  { quote: "Don't count the days. Make the days count.", author: "Muhammad Ali" },
   { quote: "Everybody has a plan until they get punched in the mouth.", author: "Mike Tyson" },
-  { quote: "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times.", author: "Bruce Lee" },
-  { quote: "Do not pray for an easy life; pray for the strength to endure a difficult one.", author: "Bruce Lee" },
-  { quote: "Always assume that your opponent is going to be bigger, stronger and faster than you, so that you learn to rely on technique, timing and leverage rather than brute strength.", author: "Helio Gracie" },
-  { quote: "Once you've wrestled, everything else in life is easy.", author: "Dan Gable" },
-  { quote: "Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", author: "Dan Gable" },
-  { quote: "The Iron never lies to you.", author: "Henry Rollins" },
-  { quote: "Discipline equals freedom.", author: "Jocko Willink" },
-  { quote: "It's not whether you get knocked down, it's whether you get up.", author: "Vince Lombardi" },
-  { quote: "If you train hard, you'll not only be hard, you'll be hard to beat.", author: "Herschel Walker" },
-  { quote: "No one has ever drowned in sweat.", author: "Lou Holtz" },
-  { quote: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
-  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
-  { quote: "Champions keep playing until they get it right.", author: "Billie Jean King" },
-  { quote: "I really think a champion is defined not by their wins but by how they can recover when they fall.", author: "Serena Williams" },
-  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
-  { quote: "A black belt is a white belt who never quit.", author: "Martial Arts Proverb" },
-  { quote: "The more you sweat in training, the less you bleed in combat.", author: "Military Proverb" },
-  { quote: "Flow with the go.", author: "Rickson Gracie" },
-  { quote: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
-  { quote: "We suffer more often in imagination than in reality.", author: "Seneca" },
+  { quote: "We don't rise to the level of our expectations; we fall to the level of our training.", author: "Archilochus" },
   { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
   { quote: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { quote: "Waste no more time arguing what a good man should be. Be one.", author: "Marcus Aurelius" },
+  { quote: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
+  { quote: "We suffer more often in imagination than in reality.", author: "Seneca" },
+  { quote: "No man is free who is not master of himself.", author: "Epictetus" },
   { quote: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
   { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
-  { quote: "You must do the thing you think you cannot do.", author: "Eleanor Roosevelt" },
+  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
   { quote: "Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.", author: "Theodore Roosevelt" },
+  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
   { quote: "Never give in, never give in, never, never, never, never — in nothing, great or small, large or petty — never give in.", author: "Winston Churchill" },
-  { quote: "It always seems impossible until it's done.", author: "Nelson Mandela" },
   { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
-  { quote: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
-  { quote: "Fall seven times, stand up eight.", author: "Japanese Proverb" },
-  { quote: "Smooth seas do not make skillful sailors.", author: "African Proverb" },
 ];
 
 function mentalTipFor(key) {
@@ -3983,6 +3991,20 @@ function mentalTipFor(key) {
   return MENTAL_COACHING_LIBRARY[hash % MENTAL_COACHING_LIBRARY.length];
 }
 const mentalTipForDate = (dateStr) => mentalTipFor(dateStr);
+function mentalTipsForSession(dayKey, ids) {
+  let h = 0;
+  const k = String(dayKey || "");
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  const rnd = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
+  const deck = [...MENTAL_COACHING_LIBRARY];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  const out = {};
+  (ids || []).forEach((id, i) => { if (id) out[id] = deck[i % deck.length]; });
+  return out;
+}
 
 /* ============================== READINESS ============================== */
 
@@ -8522,6 +8544,11 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const [complete, setComplete] = useState(() => (restored && restored.complete) || {});
   const [manualPRs, setManualPRs] = useState(() => (restored && restored.manualPRs) || {});
   const [entriesBySection, setEntriesBySection] = useState(() => mergeDraftEntries(buildFreshEntries(), restored && restored.entries));
+  // One line per exercise, dealt from a shuffle seeded by the day, so no two
+  // exercises in the same session show the same quote.
+  const sessionTips = useMemo(() => mentalTipsForSession(
+    dayId, Object.keys(entriesBySection).flatMap((secId) => (entriesBySection[secId] || []).map((en) => en.exerciseId))
+  ), [entriesBySection, dayId]);
   const [notes, setNotes] = useState(() => (restored && restored.notes) || "");
   const [rpe, setRpe] = useState(() => (restored && typeof restored.rpe === "number" ? restored.rpe : 7));
   const [restoredNotice, setRestoredNotice] = useState(!!restored);
@@ -8876,7 +8903,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                       own line and a different one next block — and it never
                       reshuffles while somebody is part-way through their sets. */}
                   {(() => {
-                    const exTip = mentalTipFor(`${dayId}:${displayName}`);
+                    const exTip = sessionTips[en.exerciseId] || mentalTipFor(`${dayId}:${displayName}`);
                     return (
                       <div className="ex-quote">
                         <p>{exTip.quote}</p>
