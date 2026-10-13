@@ -8068,31 +8068,26 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
         )}
 
-        {isCurrent && (
+        {isCurrent && !awaitingPayment && (
           readinessToday ? (
+            <>
             <div className="hero-readiness-badge">
               <span className="hero-dot" style={{ background: readinessCopyFor({ color: effectiveReadinessColor }).color }} />
               {readinessPattern ? "Below par all week — session eased right back" : effectiveReadinessColor === "GREEN" ? "Good to go — full session today" : effectiveReadinessColor === "YELLOW" ? "Rough night — session a notch back" : "Rough day — session eased right back"}
             </div>
-          ) : (
-            <>
-              <div className="today-label first">How do you feel today</div>
-              <div className="mood-row">
-                {[{ key: "fresh", label: "Good", entry: { sleep: 5, readiness: 5 } }, { key: "normal", label: "Normal", entry: { sleep: 4, readiness: 4 } }, { key: "beat", label: "Rough", entry: { sleep: 1, readiness: 1 } }].map((m) => (
-                  <button key={m.key} className="mood-pill" onClick={async () => {
-                    const color = classifyReadiness(m.entry);
-                    const saved = await onPersist({ ...client, readiness: { ...client.readiness, [today]: { ...m.entry, bjjHard: false, color, date: today } } });
-                    if (saved && saved.ok === false) return;
-                  }}>{m.label}</button>
-                ))}
-              </div>
+            <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>
+              {`Edit today's check-in — sleep, body${latestBW && latestBW.date === today ? `, bodyweight ${latestBW.weight} lb` : ", bodyweight"}`}
+            </button>
             </>
+          ) : (
+            <div className="checkin-card">
+              <div className="checkin-card-title">Check in before you train</div>
+              <p className="checkin-card-sub">Two sliders — how you slept and how your body feels — plus your bodyweight if you want to track it. About twenty seconds, and it decides whether today runs full or gets eased back.</p>
+              <button className="checkin-card-btn" onClick={() => setShowReadiness(true)}>Start today's check-in</button>
+              <div className="checkin-card-note">Bodyweight is optional. Leave it blank any day you'd rather not log it{latestBW ? ` — last logged ${latestBW.weight} lb` : ""}.</div>
+            </div>
           )
         )}
-        <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>
-          {readinessToday ? "Edit full check-in — bodyweight, sleep, readiness" : "Or do a full check-in instead"}
-          {latestBW ? ` · ${latestBW.weight} lb` : ""}
-        </button>
 
         {!isCurrent && (
           <div className="adjust-box">
@@ -8358,7 +8353,7 @@ function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
       {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
       <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (optional)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
       <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 14 }}>
-        Weekly is plenty. Day to day this tells you more about hydration than about you.
+        Log it as often as you like — every session is fine, and so is leaving it blank. Judge the trend over weeks, not any single day: day to day this says more about hydration than about you.
       </p>
       <label className="bjj-toggle">
         <input type="checkbox" checked={!!v.bjjHard} onChange={(e) => setV({ ...v, bjjHard: e.target.checked })} />
@@ -10527,9 +10522,12 @@ function GlobalStyle() {
       .hero-nav-btn:disabled { opacity: 0.55; }
       .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
       .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
-      .mood-row { display: flex; gap: 8px; margin-bottom: 14px; }
-      .mood-pill { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px; padding: 10px 4px; color: var(--text-dim); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
-      .mood-pill.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .checkin-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px 16px 14px; margin-bottom: 14px; }
+      .checkin-card-title { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+      .checkin-card-sub { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin: 0 0 12px; }
+      .checkin-card-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 4px; padding: 14px 18px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+      .checkin-card-btn:active { opacity: 0.85; }
+      .checkin-card-note { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin-top: 9px; text-align: center; }
       .schedule-row { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
       .schedule-row:last-child { border-bottom: 0; }
       .schedule-day { flex: 0 0 92px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }

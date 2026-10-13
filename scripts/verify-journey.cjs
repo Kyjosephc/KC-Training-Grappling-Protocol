@@ -263,6 +263,90 @@ check("today's session is offered, no payment wall", () => {
 });
 check("there is a way to start the workout", () => { if (!byText(/start/i)) throw new Error("no start button"); });
 
+// =============================================================================
+// THE DAILY CHECK-IN
+// =============================================================================
+// The front page used to take a one-tap Good / Normal / Rough, which wrote a
+// readiness score nobody had actually thought about. It now sends them into the
+// real check-in. Bodyweight rides along with it on every session, and an empty
+// box has to stay empty — plenty of people will never use it.
+console.log("\nThe daily check-in");
+const checkinBase = athlete({ id: "marcus", firstName: "Marcus", sessionsCompleted: 0, logs: [], paid: false,
+  readiness: {}, bodyweightLog: [] });
+let persisted = null;
+const mountToday = (c) => {
+  // React keeps TodayTab's own state across a re-render of the same component,
+  // so without the unmount an open modal leaks its typed-in weight forward.
+  unmount();
+  mount(React.createElement(A.TodayTab, { client: c,
+    onPersist: async (u) => { persisted = u; return { ok: true }; },
+    onStartLog() {}, onStartMobility() {}, onRefreshProgram() {}, onReloadClient: async () => {}, userId: "u" }));
+};
+const bwInput = () => [...host.querySelectorAll("input[type=number]")]
+  .find((i) => /bodyweight/i.test(i.getAttribute("aria-label") || ""));
+
+check("the front page asks for a real check-in, not a one-tap mood", () => {
+  mountToday(checkinBase);
+  has(/check in before you train/i, "the check-in prompt");
+  const pill = byText(/^\s*(good|normal|rough)\s*$/i);
+  if (pill) throw new Error("the one-tap mood pills are still on the front page");
+});
+check("and it says bodyweight is optional before they even open it", () =>
+  has(/bodyweight is optional/i, "the optional note"));
+check("the check-in opens from the front page", () => {
+  click(/start today's check-in/i);
+  has(/sleep quality/i, "the sleep slider");
+  has(/bodyweight/i, "the bodyweight field");
+});
+check("it offers bodyweight every session and never demands it", () => {
+  const bw = bwInput();
+  if (!bw) throw new Error("no bodyweight input in the check-in");
+  if (bw.required || bw.getAttribute("aria-required") === "true") throw new Error("bodyweight is marked required");
+  if (bw.value !== "") throw new Error(`empty log, yet the box came pre-filled with ${bw.value}`);
+});
+check("saving with the weight left empty is accepted, and logs no weight", () => {
+  persisted = null;
+  click(/save check-in/i);
+  if (!persisted) throw new Error("Save check-in did nothing with an empty weight");
+  if (!persisted.readiness[dayStr(0)]) throw new Error("no check-in recorded against today");
+  if ((persisted.bodyweightLog || []).length !== 0) throw new Error("an empty box still wrote a bodyweight entry");
+  // The modal closes in the continuation after onPersist resolves. Nothing in
+  // this harness drains microtasks, so that close is not assertable here.
+});
+check("a weight typed in is recorded against today", () => {
+  persisted = null;
+  mountToday(checkinBase);
+  click(/start today's check-in/i);
+  setVal(bwInput(), "178.5");
+  click(/save check-in/i);
+  const entry = ((persisted && persisted.bodyweightLog) || []).find((e) => e.date === dayStr(0));
+  if (!entry) throw new Error("the weight was not recorded against today");
+  if (Number(entry.weight) !== 178.5) throw new Error(`recorded ${entry.weight} instead of 178.5`);
+});
+check("a weight of nonsense is not recorded", () => {
+  persisted = null;
+  mountToday(checkinBase);
+  click(/start today's check-in/i);
+  setVal(bwInput(), "0");
+  click(/save check-in/i);
+  if (((persisted && persisted.bodyweightLog) || []).length !== 0) throw new Error("a bodyweight of zero was recorded");
+});
+check("today's weight comes back in the box, so editing it is not retyping it", () => {
+  mountToday({ ...checkinBase, readiness: {}, bodyweightLog: [{ date: dayStr(0), weight: 181 }] });
+  click(/start today's check-in/i);
+  if (bwInput().value !== "181") throw new Error(`box showed "${bwInput().value}" with 181 logged today`);
+});
+check("once checked in, the front page shows the verdict and a way to edit it", () => {
+  mountToday({ ...checkinBase, readiness: { [dayStr(0)]: { sleep: 5, readiness: 5, color: "GREEN", date: dayStr(0) } } });
+  hasNot(/check in before you train/i, "the check-in prompt after checking in");
+  if (!byText(/edit today's check-in/i)) throw new Error("no way to go back and edit the check-in");
+});
+check("the wall does not ask for a check-in for a session it will not start", () => {
+  mountToday(athlete({ id: "marcus", sessionsCompleted: 3, paid: false, readiness: {},
+    logs: [sessionLog(9, 135, "Back Squat"), sessionLog(7, 135, "Back Squat"), sessionLog(5, 140, "Back Squat")] }));
+  hasNot(/check in before you train/i, "a check-in prompt behind the payment wall");
+});
+
 console.log("\nThe session screen");
 check("the day's session renders with exercises", () => {
   mount(React.createElement(A.DaySessionScreen, { client: marcusWeek1, isCoach: false,
