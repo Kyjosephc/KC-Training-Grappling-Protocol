@@ -2217,7 +2217,8 @@ function ex(o) {
 }
 function deUpperPull() {
   return ex({
-    name: "Inverted Row", sets: 4, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty",
+    name: "Inverted Row", videoUrl: "https://www.youtube.com/shorts/vZy_Eu_Z0WA",
+    sets: 4, reps: "8 to 10", load: "bodyweight — change the angle to change the difficulty",
     rir: 2, rest: "0 seconds — taken inside the speed bench rest, so it costs no extra time",
     tempo: "2/1/1", quality: "Accessory",
     purpose: "Eight sets of speed bench is a lot of pushing on a day that otherwise has no pulling in it at all. Grappling pulls far more than it presses, and this evens the week up. It sits in the rest periods you are already taking, and because it is bodyweight and horizontal it puts nothing back on a spine that just worked up to a heavy squat.",
@@ -2285,10 +2286,12 @@ const deLowerPool = [
     cues: "This is a jump, so it stays light. Sit the hips back, explode, land soft through the whole foot and reset fully between reps. If you are not clearing the floor, or you are landing flat and loud, take weight off." },
   { name: "Speed Box Squat — Dynamic Effort", deMaxLabel: "back squat One-Rep Max",
     notes: "Sit to the box, stay tight, explode off it. Trains the sprawl and stand-up hip from a dead stop with no stretch reflex to borrow from.",
-    cues: "Sit back to the box rather than down onto it, pause just long enough to lose the bounce, then drive. Every rep starts from stillness — that is the whole point of the box." },
+    cues: "Sit back to the box rather than down onto it, pause just long enough to lose the bounce, then drive. Every rep starts from stillness — that is the whole point of the box.",
+    videoUrl: "https://www.youtube.com/watch?v=JEoWFeMFX44" },
   { name: "Speed Trap Bar Deadlift — Dynamic Effort", deMaxLabel: "trap bar deadlift One-Rep Max",
     notes: "The same hip drive as the jump squat but concentric-only, so it costs almost nothing to recover from. Good in a block where mat volume is high.",
-    cues: "Reset your brace on the floor every rep. Pull as fast as you can and stand tall — no bouncing the plates, no touch-and-go." },
+    cues: "Reset your brace on the floor every rep. Pull as fast as you can and stand tall — no bouncing the plates, no touch-and-go.",
+    videoUrl: "https://www.youtube.com/shorts/YBsVqUqzKCw" },
   { name: "Dumbbell Jump Squat — Dynamic Effort", deJump: true, deMaxLabel: "trap bar deadlift One-Rep Max",
     notes: "Lightest option in the rotation. The load hangs at your sides rather than sitting on the spine, which makes it the one to use when the lower back has had a week of it.",
     cues: "Light dumbbells, hands relaxed. Jump for height, land quietly, and stop the set the moment height drops." },
@@ -2339,7 +2342,7 @@ const meUpperPool = [
 // weaker wrists. Pinch grip is the one hand quality grappling does not already
 // hammer, and it needs nothing but two plates.
 const wristPool = [
-  { name: "Plate Pinch Hold (each hand)", notes: "Pinch two smooth plates together between thumb and fingers and hold. Thumb-side grip is what fails first on a gi lapel and it is the one grip the bar work above does not train", reps: "20 to 30 seconds each hand", load: "two light smooth plates", videoUrl: "" },
+  { name: "Plate Pinch Hold (each hand)", notes: "Pinch two smooth plates together between thumb and fingers and hold. Thumb-side grip is what fails first on a gi lapel and it is the one grip the bar work above does not train", reps: "20 to 30 seconds each hand", load: "two light smooth plates", videoUrl: "https://www.youtube.com/watch?v=rEJx6pLbTwE" },
 ];
 const coreAntiPool = [
   { name: "Heavy Pallof Press Hold (each side)", reps: "15 to 20 seconds per side", notes: "Anti-rotation under real load — resisting a cable trying to rotate your trunk is a far closer match to what grapplers actually get exposed to live than a bicep curl ever was", cues: "Stand side-on to the cable, press the handle straight out from your chest and hold. Do not let your ribs or hips turn toward the machine. If your torso rotates, the weight is too heavy." },
@@ -3561,7 +3564,7 @@ function conjugateTwoDayOne(tier, dePct) {
         ex({ name: "Barbell Romanian Deadlift", sets: hingeSets, reps: tier === "peak" ? "4" : "6", load: "moderate — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 90 seconds", tempo: tier === "peak" ? "2/0/1" : "3/0/1", quality: "Posterior Chain",
           purpose: "The hinge that stays in every week. Hamstrings loaded long and slow is the best protection there is against what a scramble does to them. The eccentric shortens to two seconds in the competition weeks, because eccentric time is the soreness you can least afford then.",
           cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment your lower back rounds — the range comes from the hip." }),
-        ex({ name: "Double-Overhand Bar Hold", sets: hingeSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "90 seconds", quality: "Grip",
+        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: hingeSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "90 seconds", quality: "Grip",
           purpose: "Grip for free. You are already holding the bar at the end of the set, so this costs the time you were going to spend putting it down. Thumbs around the bar, no straps, no hook grip — the point is the hand.",
           cues: "Finish the last rep standing and just hold it. Let go deliberately before the hands open on their own. Build from twenty-five seconds to forty before adding weight." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
@@ -3680,7 +3683,7 @@ function offseasonTwoDayOne(tier) {
         ex({ name: "Barbell Romanian Deadlift", sets: tier === "deload" ? 2 : 3, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "moderate to heavy — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 2 minutes", tempo: "3/0/1", quality: "Posterior Chain",
           purpose: "This day's hinge. Both days own one independently, so a missed session never costs you the pattern.",
           cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment the lower back rounds." }),
-        ex({ name: "Double-Overhand Bar Hold", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "60 seconds", quality: "Grip",
+        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "60 seconds", quality: "Grip",
           purpose: "Grip for the time you were going to spend putting the bar down. Thumbs around the bar, no straps — the point is the hand.",
           cues: "Finish the last rep standing and hold. Let go deliberately rather than waiting for the hands to open. Build to forty seconds before adding weight." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [

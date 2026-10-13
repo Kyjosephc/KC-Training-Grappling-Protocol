@@ -545,6 +545,32 @@ check("neither two-day program progresses by adding sets", () => {
   });
 });
 
+check("every loaded lift has a demonstration video", () => {
+  // Conditioning is "ride a bike at this pace" and the warm-up items are
+  // described in full, so neither needs a demo. Anything somebody loads and
+  // could do wrong does.
+  const NO_DEMO_NEEDED = /assault bike|treadmill|rower|aerobic|zone 2|match-duration|multi-match|repeated-effort|repeat effort|aerobic power|interval/i;
+  const bare = new Map();
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const look = (e, where) => {
+      if (!e || !e.name || NO_DEMO_NEEDED.test(e.name)) return;
+      if (e.videoUrl && String(e.videoUrl).trim()) return;
+      const k = `${e.name} (${where})`;
+      bare.set(k, (bare.get(k) || new Set()).add(v));
+    };
+    (p.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
+      (sec.exercises || []).forEach((e) => look(e, "session")))));
+    Object.entries(p.conjugate || {}).forEach(([pool, list]) => {
+      if (Array.isArray(list)) list.forEach((i) => look(i, `swap pool ${pool}`));
+    });
+  });
+  if (bare.size) {
+    const lines = [...bare.entries()].map(([k, vs]) => `${k} — in ${[...vs].sort().join(", ")}`);
+    throw new Error(`${bare.size} prescribed exercise(s) with no video:\n         ` + lines.join("\n         "));
+  }
+});
+
 check("no deload week asks for a maximal single", () => {
   VARIANTS.forEach((v) => {
     const p = A.buildProgramVariant(v);
