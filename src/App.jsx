@@ -6173,34 +6173,34 @@ function OnboardingScreen({ onSubmit }) {
         <BrandLockup />
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
-      <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
-      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Four short steps — the paperwork, then you, then your week, then anything to work around. It takes a minute and it only happens once.</p>
+      {!waiver && <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>}
+      {!waiver && <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Four short steps — the paperwork, then you, then your week, then anything to work around. It takes a minute and it only happens once.</p>}
 
+      {!waiver ? (<>
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Step 1 of 4 — Sign the liability waiver</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
         This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
         assumption of risk and release of liability before anything else — no profile is created and no program
         is written until this is signed.
       </p>
-      {waiver ? (
-        <div className="intent-box" style={{ marginBottom: 10 }}>
-          Signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
-          <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
-        </div>
-      ) : (
-        <button type="button" className="btn-primary wide" style={{ marginBottom: 10 }} onClick={() => setShowWaiver(true)}>
-          Read and sign the liability waiver
-        </button>
-      )}
+      <button type="button" className="btn-primary wide" style={{ marginBottom: 10 }} onClick={() => setShowWaiver(true)}>
+        Read and sign the liability waiver
+      </button>
       <button type="button" className="btn-ghost wide" style={{ marginBottom: 10 }} onClick={() => setShowTerms(true)}>
         Read our Terms &amp; Privacy
       </button>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
         Creating a profile means you agree to them. You can read both again any time in Settings.
       </p>
-      {!waiver && (
-        <p className="muted" style={{ fontSize: 12.5, marginTop: 18, fontStyle: "italic" }}>
-          Your profile setup appears here once the waiver is signed.
+      <p className="muted" style={{ fontSize: 12.5, marginTop: 18, fontStyle: "italic" }}>
+        Your profile setup appears here once the waiver is signed.
+      </p>
+      </>) : (
+        <p className="signup-waiver-done">
+          Waiver signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
+          <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
+          {" · "}
+          <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>
         </p>
       )}
 
@@ -10583,6 +10583,7 @@ function GlobalStyle() {
       .settings-section-body { padding: 0 2px 18px; }
       .settings-section-body > h3:first-child { margin-top: 0 !important; }
       @media (prefers-reduced-motion: reduce) { .settings-section-chevron { transition: none; } }
+      .signup-waiver-done { font-size: 12px; color: var(--text-dim); margin: 0 0 4px; line-height: 1.5; }
       .signup-step-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin: 24px 0 18px; }
       .signup-step-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; font-weight: 600; color: var(--text); }
       .signup-step-dots { display: flex; gap: 5px; flex-shrink: 0; }
