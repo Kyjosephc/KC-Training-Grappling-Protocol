@@ -6212,7 +6212,7 @@ function OnboardingScreen({ onSubmit }) {
       </div>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it: it is a note to yourself, and you can update it anytime in Settings.</p>
-      <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
+      <textarea className="notes-box" aria-label="Anything we should work around?" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
       <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
@@ -7036,14 +7036,14 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           <div className="muted" style={{ fontSize: 12 }}>Shown on your profile picture throughout the app.</div>
         </div>
       </div>
-      <select className="select-input" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
+      <select className="select-input" aria-label="Brazilian Jiu-Jitsu belt level" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
         {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
       <button className="btn-primary wide" onClick={saveBelt}>{savedBelt ? "Saved" : "Save Belt Level"}</button>
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Optional note to yourself — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it.</p>
-      <textarea className="notes-box" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
+      <textarea className="notes-box" aria-label="Anything to work around" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <button className="btn-primary wide" onClick={saveInjuryNotes}>{savedInjuryNotes ? "Saved" : "Save Note"}</button>
 
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Sore Areas — Adjust My Program</h3>
@@ -9101,7 +9101,7 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
       </div>
 
       <div className="log-exercise"><div className="log-exercise-head"><h3 className="log-exercise-name">Session Rate of Perceived Exertion</h3></div><SliderRow label="Overall difficulty" value={rpe} max={10} onChange={setRpe} /></div>
-      <div className="log-exercise"><div className="log-exercise-head"><h3 className="log-exercise-name">Notes</h3></div><textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it felt, anything to flag…" /></div>
+      <div className="log-exercise"><div className="log-exercise-head"><h3 className="log-exercise-name">Notes</h3></div><textarea className="notes-box" aria-label="Session notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How it felt, anything to flag…" /></div>
       <button className="btn-primary wide" style={{ margin: "16px 0 40px" }} onClick={finishWorkout} disabled={savingSession}>{savingSession ? "Saving…" : "Finish & save day"}</button>
     </ModalShell>
   );
@@ -9302,7 +9302,7 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
           <div className="finish-stat"><div className="finish-stat-value">{Math.round(totalSeconds / 60)} minutes</div><div className="finish-stat-label">Total mobility time</div></div>
           <div className="log-exercise">
             <div className="log-exercise-head"><h3 className="log-exercise-name">Session Notes</h3></div>
-            <textarea className="notes-box" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did mobility feel? Anything tight, anything to flag…" />
+            <textarea className="notes-box" aria-label="Recovery session notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did mobility feel? Anything tight, anything to flag…" />
           </div>
           <button className="btn-primary wide" onClick={async () => { const r = await onSave({ id: uid(), date: todayStr(), totalSeconds, notes }); if (r && r.ok === false) return; onClose(); }}>Save & finish</button>
         </div>
@@ -10404,7 +10404,7 @@ function GlobalStyle() {
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
       .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#888e97; --text:#0a0b0d; --text-dim:#6b6f76; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#b9840f; --red:#a93226; --info:#1565c0; --neon-gold:#7d6f00; }
+      .app-shell[data-theme="light"] { --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#666a70; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -10482,11 +10482,8 @@ function GlobalStyle() {
       .today-hero-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 20px; line-height: 1.25; color: var(--text); margin: 0 0 8px; text-wrap: balance; }
       .today-hero-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); }
       .ex-quote { border-left: 2px solid var(--accent); padding: 3px 0 3px 10px; margin: 0 0 12px; }
-      .ex-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 13.5px; line-height: 1.35; color: var(--text); margin: 0 0 3px; }
-      .ex-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.18em; font-size: 9px; font-weight: 600; color: var(--text-dim); }
-      .today-quote { display: block; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid var(--border); margin-top: 18px; padding: 14px 0 0; cursor: pointer; }
-      .today-quote p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-dim); line-height: 1.55; }
-      .today-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; color: var(--text-dim); font-weight: 600; }
+      .ex-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.35; color: var(--text); margin: 0 0 3px; }
+      .ex-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
       /* ---- Title block: emblem + wordmark + ruled subtitle ---- */
       .brand-block { display: flex; align-items: center; gap: 11px; min-width: 0; }
       .brand-stack { min-width: 0; }
@@ -10494,9 +10491,6 @@ function GlobalStyle() {
       .brand-rule { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
       .brand-rule-line { height: 1px; background: var(--accent); opacity: 0.45; flex: 1; min-width: 8px; }
       .brand-sub { font-family: 'Oswald', sans-serif; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.34em; color: var(--accent); white-space: nowrap; }
-      .topbar-brand { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 15px; letter-spacing: 0.05em; color: var(--text); line-height: 1.1; max-width: 220px; }
-      .topbar-name-sub { font-size: 13px; color: var(--text-dim); margin-top: 3px; }
-      .topbar-name-btn { background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); display: block; max-width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
       .dash-stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
       .dash-stat.wide { grid-column: 1 / -1; }
@@ -10508,7 +10502,7 @@ function GlobalStyle() {
       .milestone-row.achieved { opacity: 1; border-color: var(--green); }
       .milestone-emoji { font-size: 26px; flex-shrink: 0; }
       .milestone-name { font-weight: 600; font-size: 13.5px; }
-      .icon-btn { background: var(--card); border: 1px solid var(--border); border-radius: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
+      .icon-btn { background: var(--card); border: 1px solid var(--field-border); border-radius: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; }
       .icon-btn.small { width: 34px; height: 34px; }
       .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .nav-btn { flex: 1; min-width: 0; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 10px; font-size: 11.5px; line-height: 1.1; white-space: nowrap; cursor: pointer; position: relative; }
@@ -10517,11 +10511,8 @@ function GlobalStyle() {
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
-      .hero-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-      .hero-nav-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
+      .hero-nav-btn { background: var(--bg); border: 1px solid var(--field-border); border-radius: 9px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
       .hero-nav-btn:disabled { opacity: 0.55; }
-      .hero-title { font-family: 'Inter', -apple-system, sans-serif; font-weight: 800; font-style: normal; font-size: 26px; line-height: 1.15; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4px; }
-      .hero-duration { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
       .checkin-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px 16px 14px; margin-bottom: 14px; }
       .checkin-card-title { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
       .checkin-card-sub { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin: 0 0 12px; }
@@ -10816,7 +10807,6 @@ function GlobalStyle() {
       .rg-scorecard > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .rg-scorecard span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); }
       .rg-scorecard strong { font-family: 'Oswald', sans-serif; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
-      .rg-scorecard-sep { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.18em; font-size: 9px; color: var(--text-dim); text-align: center; }
       .rg-ref-event { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 21px; line-height: 1.25; margin-bottom: 14px; text-wrap: balance; }
       .rg-card-compare { display: grid; gap: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 14px; margin-bottom: 8px; }
       .rg-card-compare.ok { border-color: var(--green); }
@@ -10974,7 +10964,7 @@ function GlobalStyle() {
       .pct-1rm-row { font-size: 13px; color: var(--accent); margin: 4px 0 5px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
       .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
-      .link-x-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
+      .link-x-btn { background: var(--bg); border: 1px solid var(--field-border); border-radius: 999px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .link-edit-btn { background: none; border: none; color: var(--text-dim); font-size: 12px; text-decoration: underline; cursor: pointer; }
       .add-link-btn { background: none; border: 1px dashed var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; padding: 3px 10px; cursor: pointer; margin-top: 8px; }
       .video-edit-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
@@ -11053,34 +11043,20 @@ function GlobalStyle() {
       .history-ex-name { font-weight: 600; font-size: 13.5px; }
       .history-notes { font-style: italic; font-size: 13px; color: var(--text-dim); margin-top: 8px; }
       .pr-card-wrap { margin-bottom: 10px; }
-      .pr-card { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; color: var(--text); font-family: inherit; }
       .pr-card-v2 { width: 100%; text-align: left; cursor: pointer; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; color: var(--text); font-family: inherit; display: block; }
       .pr-card-v2-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
       .pr-card-v2-name { font-weight: 700; font-size: 16px; }
-      .pr-card-v2-stats { display: flex; align-items: center; gap: 16px; }
-      .pr-big-stat { flex-shrink: 0; }
-      .pr-big-number { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 34px; color: var(--accent); line-height: 1; }
-      .pr-big-unit { font-size: 15px; margin-left: 3px; color: var(--text-dim); font-family: inherit; }
-      .pr-big-label { font-size: 12px; color: var(--text-dim); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
-      .pr-side-stats { display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--border); padding-left: 14px; flex: 1; }
       .pr-side-row { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
       .pr-history-row-v2 { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); }
       .pr-history-row-v2:last-child { border-bottom: none; }
       .pr-history-weight { font-weight: 700; font-size: 14px; }
       .pr-history-x { color: var(--text-dim); font-weight: 400; }
       .pr-history-date { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-dim); }
-      .pr-chart-wrap { background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; padding: 10px 14px 14px; margin-top: -1px; }
-      .pr-card-name { font-weight: 700; font-size: 14.5px; }
       .pr-history { background: var(--bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; padding: 8px 14px; margin-top: -1px; }
       .pr-history-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
       .pr-history-row:last-child { border-bottom: none; }
-      .empty-state { text-align: center; color: var(--text-dim); padding: 60px 20px; font-size: 14px; }
       .empty-state-v2 { text-align: center; color: var(--text-dim); padding: 48px 24px; font-size: 14px; }
       .empty-state-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; color: var(--accent); }
-      .client-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-      .client-select { flex: 1; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-size: 14.5px; cursor: pointer; }
-      .client-select.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
-      .add-client-form { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
       .radio-group { display: flex; gap: 8px; }
       .radio-pill { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; font-size: 12.5px; cursor: pointer; color: var(--text-dim); display: flex; align-items: center; justify-content: center; }
       .radio-pill.active { border-color: var(--accent); color: var(--accent); }
@@ -11121,7 +11097,7 @@ function GlobalStyle() {
       .heatmap { overflow-x: auto; padding-bottom: 2px; }
       .heatmap-grid { display: flex; gap: 3px; align-items: flex-start; }
       .heatmap-days { display: flex; flex-direction: column; gap: 3px; margin-right: 2px; }
-      .heatmap-dayname { font-size: 9px; color: var(--text-dim); height: 12px; line-height: 12px; width: 10px; }
+      .heatmap-dayname { font-size: 10px; color: var(--text-dim); height: 12px; line-height: 12px; width: 10px; }
       .heatmap-col { display: flex; flex-direction: column; gap: 3px; }
       .heatmap-cell { width: 12px; height: 12px; border-radius: 3px; display: block; flex-shrink: 0; background: color-mix(in srgb, var(--text) 9%, var(--bg)); }
       .heatmap-cell.is-rest { box-shadow: inset 0 0 0 1px var(--border); }

@@ -10,6 +10,13 @@ dist
 !.env.example
 .vercel
 
-# rules-game verification bundles
+# Verification bundles and the temporary copies of the source they are built
+# from. Every scripts/verify-*.sh traps its own cleanup, but a hard kill can
+# still leave one of these behind, and none of them belong in a commit.
 .rg.cjs
 .eng.cjs
+.journey.cjs
+.pay.cjs
+.balance.cjs
+.a11y.cjs
+src/_*.jsx
