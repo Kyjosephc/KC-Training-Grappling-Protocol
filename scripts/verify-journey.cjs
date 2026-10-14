@@ -1080,6 +1080,30 @@ check("search and tag filters narrow the list once there are a few", () => {
   setVal(search, "zzzz");
   has(/nothing matches/i, "an answer when nothing matches");
 });
+check("an entry does not reprint what is already on the list", () => {
+  const one = { ...diarist,
+    bjjNotes: [{ id: "n1", date: dayStr(1), learned: "Knee cut pressure",
+                 workOn: "Push the knee away from the centre line\nKeep my head off the mat", tags: ["Passing"] }],
+    bjjFocus: [{ id: "f1", text: "Push the knee away from the centre line", done: false, date: dayStr(1) },
+               { id: "f2", text: "Keep my head off the mat", done: true, doneDate: dayStr(0), date: dayStr(1) }] };
+  mountNotes(one);
+  // Each line appears once, on the list at the top — not again in the entry.
+  const body = host.querySelector(".history-card").textContent;
+  if (/Push the knee away/.test(body)) throw new Error("the entry reprinted a line that is already on the list");
+  if (/Keep my head off the mat/.test(body)) throw new Error("the entry reprinted a line that has been ticked off");
+  if (!/1 thing from this class still on your list/.test(body)) throw new Error(`no count of what is still open: ${body}`);
+  if (!/1 ticked off/.test(body)) throw new Error("no count of what has been ticked off");
+});
+check("but a line taken off the list keeps its text, since nothing else holds it", () => {
+  const one = { ...diarist,
+    bjjNotes: [{ id: "n1", date: dayStr(1), learned: "Knee cut pressure",
+                 workOn: "Push the knee away\nSomething I removed", tags: [] }],
+    bjjFocus: [{ id: "f1", text: "Push the knee away", done: false, date: dayStr(1) }] };
+  mountNotes(one);
+  const body = host.querySelector(".history-card").textContent;
+  if (!/Something I removed/.test(body)) throw new Error("a line no longer on the list vanished from its entry too");
+  if (/Push the knee away/.test(body)) throw new Error("the tracked line was still reprinted");
+});
 check("deleting an entry asks first, and leaves the working-on list alone", () => {
   const one = { ...diarist,
     bjjNotes: [{ id: "n1", date: dayStr(1), learned: "Berimbolo entry", workOn: "", tags: [] }],

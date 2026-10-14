@@ -10243,6 +10243,7 @@ function BJJNotesTab({ client, onPersist }) {
     return `${n.learned || ""} ${n.workOn || ""} ${(n.tags || []).join(" ")}`.toLowerCase().includes(q);
   });
   const usedTags = BJJ_TAGS.filter((t) => notes.some((n) => (n.tags || []).includes(t)));
+  const byFocusText = new Map(focus.map((f) => [(f.text || "").toLowerCase(), f]));
 
   return (
     <div className="pad">
@@ -10369,12 +10370,30 @@ function BJJNotesTab({ client, onPersist }) {
                   <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{note.learned}</p>
                 </div>
               )}
-              {note.workOn && (
-                <div>
-                  <div className="section-subheading">What I Need to Work On</div>
-                  <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{note.workOn}</p>
-                </div>
-              )}
+              {note.workOn && (() => {
+                const lines = note.workOn.split("\n").map((l) => l.trim()).filter(Boolean);
+                const tracked = lines.map((l) => byFocusText.get(l.toLowerCase())).filter(Boolean);
+                const loose = lines.filter((l) => !byFocusText.has(l.toLowerCase()));
+                const stillOpen = tracked.filter((f) => !f.done).length;
+                const ticked = tracked.length - stillOpen;
+                return (
+                  <div>
+                    {loose.length > 0 && (
+                      <>
+                        <div className="section-subheading">What I Need to Work On</div>
+                        <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{loose.join("\n")}</p>
+                      </>
+                    )}
+                    {tracked.length > 0 && (
+                      <div className="bjj-note-focus">
+                        {stillOpen > 0 && `${stillOpen} ${stillOpen === 1 ? "thing" : "things"} from this class still on your list`}
+                        {stillOpen > 0 && ticked > 0 && " · "}
+                        {ticked > 0 && `${ticked} ticked off`}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {confirmDelete === note.id ? (
                 <div className="adjust-box" style={{ marginTop: 10 }}>
                   Delete this entry for good? Anything it put on your Working On list stays there.
@@ -10846,6 +10865,7 @@ function GlobalStyle() {
       .bjj-tag { background: var(--bg); border: 1px solid var(--field-border); border-radius: 999px; padding: 8px 12px; min-height: 36px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
       .bjj-tag.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
       .bjj-tag.static { cursor: default; padding: 4px 10px; min-height: 0; font-size: 11.5px; }
+      .bjj-note-focus { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 11px; border-radius: 999px; background: var(--bg); border: 1px solid var(--field-border); font-size: 11.5px; color: var(--text-dim); }
       .bjj-note-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
       .bjj-search { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--field-border); border-radius: 10px; padding: 0 12px; margin: 14px 0 0; }
       .bjj-search input { flex: 1; min-width: 0; min-height: 44px; background: none; border: none; color: var(--text); font-size: 16px; font-family: inherit; outline: none; }
