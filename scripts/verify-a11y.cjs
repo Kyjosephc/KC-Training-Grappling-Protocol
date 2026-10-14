@@ -120,7 +120,12 @@ const c = athlete({ paid: true, sessionsCompleted: 4,
     exercises: [{ name: "Back Squat", sets: [{ weight: 185, reps: 5, done: true }, { weight: 185, reps: 5, done: true }] }] }],
   prLog: [{ date: "2026-01-02", lift: "Back Squat", weight: 225, reps: 3 }],
   bodyweightLog: [{ date: "2026-01-01", weight: 170 }, { date: "2026-01-08", weight: 172 }],
-  readiness: { "2026-01-08": { sleep: 4, readiness: 4, color: "GREEN", date: "2026-01-08" } } });
+  readiness: { "2026-01-08": { sleep: 4, readiness: 4, color: "GREEN", date: "2026-01-08" } },
+  bjjNotes: [{ id: "n1", date: "2026-01-07", learned: "Knee shield details", workOn: "Keep the grip", tags: ["Guard"] },
+             { id: "n2", date: "2026-01-05", learned: "Knee cut pressure", workOn: "", tags: ["Passing"] },
+             { id: "n3", date: "2026-01-03", learned: "Back escapes", workOn: "", tags: ["Escapes"] }],
+  bjjFocus: [{ id: "f1", text: "Keep the grip", done: false, date: "2026-01-07" },
+             { id: "f2", text: "Finish triangles", done: true, doneDate: "2026-01-08", date: "2026-01-02" }] });
 
 const screens = [
   ["Sign-up", () => React.createElement(A.OnboardingScreen, { onSubmit: noop })],
@@ -179,6 +184,12 @@ try {
   };
   walkTo(3); audit("Sign-up page 3 — your week");
   walkTo(4); audit("Sign-up page 4 — injuries");
+
+  unmount();
+  mount(React.createElement(A.BJJNotesTab, { client: c, onPersist: ok }));
+  click(/add an entry/i);
+  click(/show 1 you have got/i);
+  audit("Jiu-jitsu notes, editor and done list open");
 } catch (e) {
   findings.push({ screen: "Sign-up, walked through", buttons: 0, controls: 0, crashed: e.message });
   unmount();

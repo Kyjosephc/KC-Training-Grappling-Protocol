@@ -670,6 +670,10 @@ const HISTORY_ARRAYS = {
   logs: (x) => x.id || x.date,
   mobilityLogs: (x) => x.id || x.date,
   bjjNotes: (x) => x.id || x.date,
+  // Not append-only — items get ticked off — but the merge keeps the local
+  // version of anything both sides have and folds in what only the server has,
+  // which is exactly right for a checklist edited on two devices.
+  bjjFocus: (x) => x.id,
   bodyweightLog: (x) => x.date,
   prLog: (x) => x.id || `${x.exerciseName}|${x.date}`,
 };
@@ -3078,6 +3082,34 @@ function programsForStrengthDays(n) {
   if (n >= MIN_STRENGTH_DAYS) return ["C", "D"];
   return [];
 }
+// The schedule already records mat days and the program choice never looked at
+// them, so an athlete rolling five times a week could pick three lifting days
+// and be handed three hours of lifting on top with nothing said about it. This
+// does not change which programs are offered — it tells them what they are
+// taking on and leaves the decision where it belongs.
+const MAT_ACTIVITIES = ["Low Intensity BJJ", "High Intensity BJJ"];
+function matDayCount(schedule) {
+  return SCHEDULE_DAYS.filter(([key]) =>
+    (schedule?.[key] || []).some((a) => MAT_ACTIVITIES.includes(a))).length;
+}
+// Three lifting days is 155 to 185 minutes of lifting a week on the three-day
+// programs. Beside five mat sessions that is eight sessions in seven days.
+const HEAVY_MAT_DAYS = 5;
+function CombinedLoadNote({ schedule }) {
+  const mat = matDayCount(schedule);
+  const lifts = strengthDayCount(schedule);
+  if (mat < HEAVY_MAT_DAYS || lifts < REQUIRED_STRENGTH_DAYS) return null;
+  return (
+    <div className="load-note" role="status">
+      <strong>That is {mat + lifts} sessions in a week.</strong> The three-day programs ask for
+      roughly three hours of lifting on top of your mat time, which is a lot next to {mat} days
+      of jiu-jitsu — most people find the mat work suffers first. The two-day programs cover the
+      same patterns in about ninety minutes a week and are the usual answer during a hard
+      training block or a competition camp. You can pick whichever you want; this is worth
+      knowing before you do.
+    </div>
+  );
+}
 function strengthDayCount(schedule) {
   return SCHEDULE_DAYS.filter(([key]) => (schedule?.[key] || []).includes(STRENGTH_ACTIVITY)).length;
 }
@@ -3908,6 +3940,7 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     weeklySchedule: weeklySchedule || defaultWeeklySchedule(),
     beltLevel: beltLevel || "White",
     bjjNotes: [],
+    bjjFocus: [],
     rulesProgress: emptyRulesProgress(),
     paid: false,
     promoDiscount: promoDiscount || 0,
@@ -5753,6 +5786,7 @@ function MainApp({ userId, onSignOut }) {
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
         if (!c.bjjNotes) c.bjjNotes = [];
+        if (!c.bjjFocus) c.bjjFocus = [];
         if (!c.rulesProgress) c.rulesProgress = emptyRulesProgress();
         if (!c.program) {
           // Nothing sensible to render without a program, and silently throwing
@@ -6260,6 +6294,7 @@ function OnboardingScreen({ onSubmit }) {
             ? `${strengthDays} strength days selected — that unlocks the three-day programs below.`
             : `${strengthDays} strength days selected — that unlocks the two-day in-season program below.`}
       </div>
+      <CombinedLoadNote schedule={schedule} />
       {programVariant === "A" && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>One thing before you start</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
@@ -7203,6 +7238,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           {strengthDayCount(schedule)} of {requiredStrengthDaysFor(client?.program?.variant)} Strength/Conditioning days selected. {requiredStrengthDaysFor(client?.program?.variant) === 2 ? "Your program is written for two a week" : "Your program is written for three a week"} — you can save fewer, but the plan assumes that many.
         </div>
       )}
+      <CombinedLoadNote schedule={schedule} />
       <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
 
       {isCoach && (
@@ -10128,66 +10164,205 @@ function HistoryTab({ client, onPersist }) {
 
 /* ============================== BJJ NOTES TAB ============================== */
 
+// The mat diary was two boxes and a list that nobody scrolls back through. The
+// part worth keeping is "what I need to work on" — so that stops being buried
+// prose and becomes a live list you tick off. Tags and search are what keep the
+// diary usable once there are fifty entries in it.
+const BJJ_TAGS = ["Guard", "Passing", "Side control", "Mount", "Back",
+  "Standing", "Leg locks", "Submissions", "Escapes", "Strategy"];
+
 function BJJNotesTab({ client, onPersist }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [learned, setLearned] = useState("");
   const [workOn, setWorkOn] = useState("");
-  const notes = [...(client.bjjNotes || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const [tags, setTags] = useState([]);
+  const [date, setDate] = useState(todayStr());
+  const [query, setQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [showDone, setShowDone] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const startAdd = () => { setLearned(""); setWorkOn(""); setEditingId(null); setAdding(true); };
-  const startEdit = (note) => { setLearned(note.learned || ""); setWorkOn(note.workOn || ""); setEditingId(note.id); setAdding(true); };
+  const notes = [...(client.bjjNotes || [])].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const focus = client.bjjFocus || [];
+  const openFocus = focus.filter((f) => !f.done);
+  const doneFocus = focus.filter((f) => f.done).sort((a, b) => ((a.doneDate || "") < (b.doneDate || "") ? 1 : -1));
+
+  const startAdd = () => {
+    setLearned(""); setWorkOn(""); setTags([]); setDate(todayStr());
+    setEditingId(null); setAdding(true);
+  };
+  const startEdit = (note) => {
+    setLearned(note.learned || ""); setWorkOn(note.workOn || "");
+    setTags(note.tags || []); setDate(note.date || todayStr());
+    setEditingId(note.id); setAdding(true);
+  };
   const cancel = () => { setAdding(false); setEditingId(null); };
+  const toggleTag = (t) => setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+
   const save = async () => {
     if (!learned.trim() && !workOn.trim()) return;
-    let updatedNotes;
-    if (editingId) {
-      updatedNotes = client.bjjNotes.map((n) => (n.id === editingId ? { ...n, learned: learned.trim(), workOn: workOn.trim() } : n));
-    } else {
-      updatedNotes = [...(client.bjjNotes || []), { id: uid(), date: todayStr(), learned: learned.trim(), workOn: workOn.trim() }];
-    }
-    const saved = await onPersist({ ...client, bjjNotes: updatedNotes });
+    const stamp = date || todayStr();
+    const existing = client.bjjNotes || [];
+    const noteId = editingId || uid();
+    const updatedNotes = editingId
+      ? existing.map((n) => (n.id === editingId
+          ? { ...n, date: stamp, learned: learned.trim(), workOn: workOn.trim(), tags }
+          : n))
+      : [...existing, { id: noteId, date: stamp, learned: learned.trim(), workOn: workOn.trim(), tags }];
+    // One line, one thing to drill. Anything already on the list is left alone
+    // rather than added twice, so editing an entry does not duplicate it.
+    const nextFocus = [...(client.bjjFocus || [])];
+    workOn.split("\n").map((l) => l.trim()).filter(Boolean).forEach((text) => {
+      if (nextFocus.some((f) => (f.text || "").toLowerCase() === text.toLowerCase())) return;
+      nextFocus.push({ id: uid(), text, done: false, date: stamp, noteId });
+    });
+    const saved = await onPersist({ ...client, bjjNotes: updatedNotes, bjjFocus: nextFocus });
     // Keep the editor open on a failed write rather than closing over the text.
     if (saved && saved.ok === false) return;
-    setAdding(false);
-    setEditingId(null);
+    setAdding(false); setEditingId(null);
   };
+
+  const toggleFocus = async (id) => {
+    await onPersist({ ...client, bjjFocus: focus.map((f) => (f.id === id
+      ? { ...f, done: !f.done, doneDate: f.done ? null : todayStr() } : f)) });
+  };
+  const dropFocus = async (id) => {
+    await onPersist({ ...client, bjjFocus: focus.filter((f) => f.id !== id) });
+  };
+  const deleteNote = async (id) => {
+    const saved = await onPersist({ ...client, bjjNotes: (client.bjjNotes || []).filter((n) => n.id !== id) });
+    if (saved && saved.ok === false) return;
+    setConfirmDelete(null);
+  };
+
+  const q = query.trim().toLowerCase();
+  const visible = notes.filter((n) => {
+    if (tagFilter && !(n.tags || []).includes(tagFilter)) return false;
+    if (!q) return true;
+    return `${n.learned || ""} ${n.workOn || ""} ${(n.tags || []).join(" ")}`.toLowerCase().includes(q);
+  });
+  const usedTags = BJJ_TAGS.filter((t) => notes.some((n) => (n.tags || []).includes(t)));
 
   return (
     <div className="pad">
       <h2 className="program-title" style={{ margin: "0 0 4px" }}>BJJ Notes</h2>
-      <p className="muted" style={{ marginBottom: 14, fontSize: 12.5 }}>A running diary of your mat time — what you learned in class and what to drill next time. These notes are for you — nothing else in the app displays them.</p>
+      <p className="muted" style={{ marginBottom: 16, fontSize: 12.5 }}>
+        What you picked up on the mat, and what you still owe yourself. Anything you write under
+        "work on" becomes a line on the list below until you tick it off.
+      </p>
 
-      {!adding && <button className="btn-primary wide" onClick={startAdd}>+ Add Today's Notes</button>}
+      <section className="bjj-focus" aria-label="What you are working on">
+        <div className="bjj-focus-head">
+          <h3 className="checkin-title">Working On</h3>
+          <span className="checkin-status">{openFocus.length === 0 ? "Nothing open" : `${openFocus.length} open`}</span>
+        </div>
+        {openFocus.length === 0 ? (
+          <p className="bjj-focus-empty">
+            Nothing on the list. Add an entry below and whatever you write under "work on"
+            lands here.
+          </p>
+        ) : openFocus.map((f) => (
+          <div key={f.id} className="bjj-focus-row">
+            <button type="button" role="checkbox" aria-checked="false" className="bjj-focus-box"
+              aria-label={`Mark "${f.text}" as got it`} onClick={() => toggleFocus(f.id)} />
+            <span className="bjj-focus-text">{f.text}</span>
+            <button type="button" className="bjj-focus-x" aria-label={`Remove "${f.text}" from the list`}
+              onClick={() => dropFocus(f.id)}><X size={14} /></button>
+          </div>
+        ))}
+        {doneFocus.length > 0 && (
+          <>
+            <button type="button" className="link-btn bjj-focus-toggle" onClick={() => setShowDone((v) => !v)}>
+              {showDone ? "Hide" : "Show"} {doneFocus.length} you have got
+            </button>
+            {showDone && doneFocus.map((f) => (
+              <div key={f.id} className="bjj-focus-row done">
+                <button type="button" role="checkbox" aria-checked="true" className="bjj-focus-box on"
+                  aria-label={`Put "${f.text}" back on the list`} onClick={() => toggleFocus(f.id)}>
+                  <Check size={12} strokeWidth={3} />
+                </button>
+                <span className="bjj-focus-text">{f.text}</span>
+                <button type="button" className="bjj-focus-x" aria-label={`Remove "${f.text}" from the list`}
+                  onClick={() => dropFocus(f.id)}><X size={14} /></button>
+              </div>
+            ))}
+          </>
+        )}
+      </section>
+
+      {!adding && <button className="btn-primary wide" onClick={startAdd}><Plus size={15} /> Add an entry</button>}
 
       {adding && (
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>{editingId ? "Edit Entry" : "New Entry"}</h3>
           <label className="labeled-input">
-            <span>What I learned in class today</span>
-            <textarea className="notes-box" rows={4} value={learned} onChange={(e) => setLearned(e.target.value)} placeholder="New sweep from De La Riva, a detail on my armbar setup, a rolling tip from a training partner..." />
+            <span>Date</span>
+            <input type="date" className="edit-input" value={date} max={todayStr()}
+              onChange={(e) => setDate(e.target.value)} aria-label="Date of this class" />
           </label>
           <label className="labeled-input">
-            <span>What I need to work on</span>
-            <textarea className="notes-box" rows={4} value={workOn} onChange={(e) => setWorkOn(e.target.value)} placeholder="Staying heavy in side control, finishing triangles from mount, better guard retention against passers..." />
+            <span>What I learned in class</span>
+            <textarea className="notes-box" rows={4} value={learned} onChange={(e) => setLearned(e.target.value)}
+              placeholder="New sweep from De La Riva, a detail on my armbar setup, a rolling tip from a training partner..." />
           </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }} onClick={save}>Save Entry</button>
+          <label className="labeled-input">
+            <span>What I need to work on — one per line</span>
+            <textarea className="notes-box" rows={4} value={workOn} onChange={(e) => setWorkOn(e.target.value)}
+              placeholder={"Staying heavy in side control\nFinishing triangles from mount\nGuard retention against a pressure passer"} />
+          </label>
+          <p className="muted" style={{ fontSize: 11.5, marginTop: -6, marginBottom: 12 }}>
+            Each line becomes something to drill, on the list at the top of this page.
+          </p>
+          <div className="bjj-tagrow" role="group" aria-label="Tag this entry">
+            {BJJ_TAGS.map((t) => (
+              <button key={t} type="button" aria-pressed={tags.includes(t)}
+                className={`bjj-tag ${tags.includes(t) ? "on" : ""}`} onClick={() => toggleTag(t)}>{t}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }} onClick={save}>Save entry</button>
             <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }} onClick={cancel}>Cancel</button>
           </div>
         </div>
       )}
 
+      {notes.length > 2 && (
+        <>
+          <div className="bjj-search">
+            <Search size={15} color="var(--text-dim)" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your notes" aria-label="Search your notes" />
+          </div>
+          {usedTags.length > 0 && (
+            <div className="bjj-tagrow" role="group" aria-label="Filter by position">
+              {usedTags.map((t) => (
+                <button key={t} type="button" aria-pressed={tagFilter === t}
+                  className={`bjj-tag ${tagFilter === t ? "on" : ""}`}
+                  onClick={() => setTagFilter(tagFilter === t ? "" : t)}>{t}</button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {notes.length === 0 && !adding ? (
         <EmptyState text="No notes yet. Add your first entry after your next class." />
+      ) : visible.length === 0 ? (
+        <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
+          Nothing matches{tagFilter ? ` "${tagFilter}"` : ""}{q ? ` "${query}"` : ""}.
+        </p>
       ) : (
-        notes.map((note) => (
+        visible.map((note) => (
           <div key={note.id} className="history-card">
             <div className="history-body" style={{ borderTop: "none", padding: 14 }}>
               <div className="history-date" style={{ marginBottom: 8 }}>
                 {fmtDate(note.date)}
                 {note.competitionDate && <span className="pill" style={{ marginLeft: 8, background: "var(--accent)", color: "var(--accent-text)" }}>Competition</span>}
               </div>
+              {(note.tags || []).length > 0 && (
+                <div className="bjj-note-tags">{note.tags.map((t) => <span key={t} className="bjj-tag static">{t}</span>)}</div>
+              )}
               {note.learned && (
                 <div style={{ marginBottom: 10 }}>
                   <div className="section-subheading">What I Learned</div>
@@ -10200,7 +10375,23 @@ function BJJNotesTab({ client, onPersist }) {
                   <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>{note.workOn}</p>
                 </div>
               )}
-              <button className="btn-ghost" style={{ marginTop: 10 }} onClick={() => startEdit(note)}><Pencil size={14} /> Edit this entry</button>
+              {confirmDelete === note.id ? (
+                <div className="adjust-box" style={{ marginTop: 10 }}>
+                  Delete this entry for good? Anything it put on your Working On list stays there.
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+                      onClick={() => deleteNote(note.id)}>Delete it</button>
+                    <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+                      onClick={() => setConfirmDelete(null)}>Keep it</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn-ghost" style={{ marginTop: 0 }} onClick={() => startEdit(note)}><Pencil size={14} /> Edit</button>
+                  <button className="btn-ghost bjj-danger" style={{ marginTop: 0 }}
+                    onClick={() => setConfirmDelete(note.id)}><Trash2 size={14} /> Delete</button>
+                </div>
+              )}
             </div>
           </div>
         ))
@@ -10640,6 +10831,25 @@ function GlobalStyle() {
       .slider-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 6px; }
       .slider-value { color: var(--accent); font-weight: 700; }
       .slider-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
+      .bjj-focus { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 14px 10px; margin-bottom: 16px; }
+      .bjj-focus-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .bjj-focus-empty { font-size: 12.5px; line-height: 1.5; color: var(--text-dim); margin: 0 0 4px; }
+      .bjj-focus-row { display: flex; align-items: center; gap: 10px; min-height: 44px; border-top: 1px solid var(--border); }
+      .bjj-focus-row:first-of-type { border-top: none; }
+      .bjj-focus-row.done .bjj-focus-text { color: var(--text-dim); text-decoration: line-through; }
+      .bjj-focus-box { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--field-border); background: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--accent-text); }
+      .bjj-focus-box.on { background: var(--accent); border-color: var(--accent); }
+      .bjj-focus-text { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.4; color: var(--text); }
+      .bjj-focus-x { flex-shrink: 0; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-dim); cursor: pointer; }
+      .bjj-focus-toggle { margin-top: 8px; font-size: 12px; }
+      .bjj-tagrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+      .bjj-tag { background: var(--bg); border: 1px solid var(--field-border); border-radius: 999px; padding: 8px 12px; min-height: 36px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+      .bjj-tag.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+      .bjj-tag.static { cursor: default; padding: 4px 10px; min-height: 0; font-size: 11.5px; }
+      .bjj-note-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+      .bjj-search { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--field-border); border-radius: 10px; padding: 0 12px; margin: 14px 0 0; }
+      .bjj-search input { flex: 1; min-width: 0; min-height: 44px; background: none; border: none; color: var(--text); font-size: 16px; font-family: inherit; outline: none; }
+      .bjj-danger { color: var(--red); border-color: var(--red); }
       .checkin { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px; margin-bottom: 18px; }
       .checkin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
       .checkin-title { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
@@ -10767,6 +10977,7 @@ function GlobalStyle() {
       .schedule-edit-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; }
       .schedule-edit-day { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px; }
       .schedule-edit-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+      .load-note { margin-top: 10px; padding: 11px 13px; border-radius: 8px; border: 1px solid var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); font-size: 12.5px; line-height: 1.5; color: var(--text); }
       .schedule-requirement { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
         background: var(--card); border: 1px solid var(--amber); color: var(--amber); }
       .schedule-requirement.met { border-color: var(--green); color: var(--green); }

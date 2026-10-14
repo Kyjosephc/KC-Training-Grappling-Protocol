@@ -49,8 +49,12 @@ const click = (re) => {
 };
 const has = (re, label) => { if (!re.test(txt())) throw new Error(`expected ${label || re} on screen`); };
 const setVal = (el, v) => act(() => {
-  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set;
-  setter.call(el, v);
+  // React installs its own value setter, so the native one has to be called
+  // directly — and a textarea's lives on a different prototype than an input's.
+  const proto = el.tagName === "TEXTAREA"
+    ? dom.window.HTMLTextAreaElement.prototype
+    : dom.window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v);
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 });
 const unmount = () => act(() => root.render(null));
@@ -271,6 +275,39 @@ check("walking back through the pages does not lose what was typed", () => {
   if (t[0].value !== "Dani") throw new Error(`first name came back as "${t[0].value}"`);
   const n = [...host.querySelectorAll("input[type=number]")];
   if (n[0].value !== "148") throw new Error(`bodyweight came back as "${n[0].value}"`);
+});
+// The schedule records mat days and the program choice never looked at them.
+// It still does not — this only says out loud what the week adds up to.
+const pickMatDays = (howMany) => {
+  const picks = buttons().filter((b) => /^High Intensity BJJ$/.test(b.textContent.trim()));
+  for (let i = 0; i < howMany; i++) hit(picks[i]);
+};
+check("three lifting days on their own say nothing about load", () => {
+  fillProfile();
+  pickStrengthDays(3);
+  hasNot(/sessions in a week/i, "a load note before any mat days are picked");
+});
+check("five mat days beside three lifting days is flagged", () => {
+  pickMatDays(5);
+  has(/sessions in a week/i, "a note about the combined load");
+  has(/two-day programs/i, "what the lighter option is");
+  has(/8 sessions/i, "the actual session count");
+});
+check("but it does not block them — the choice stays theirs", () => {
+  if (cont().disabled) throw new Error("the note stopped them continuing");
+  if (locked("Offseason Strength Build")) throw new Error("the note locked a three-day program");
+});
+check("the same mat volume on two lifting days says nothing", () => {
+  fillProfile();
+  pickStrengthDays(2);
+  pickMatDays(5);
+  hasNot(/sessions in a week/i, "a load note on the two-day program");
+});
+check("an ordinary week says nothing either", () => {
+  fillProfile();
+  pickStrengthDays(3);
+  pickMatDays(3);
+  hasNot(/sessions in a week/i, "a load note at three mat days");
 });
 check("a locked card cannot be chosen by clicking it", () => {
   fillProfile();
@@ -929,6 +966,133 @@ check("settings renders for the coach", () => {
 });
 check("and the coach's settings no longer offers the broken Mark as Paid", () => {
   if (byText(/^mark as (paid|unpaid)$/i)) throw new Error("the dead Mark as Paid button is still there");
+});
+
+// =============================================================================
+// THE MAT DIARY
+// =============================================================================
+// The page used to be two boxes and a list nobody scrolled back through. What
+// somebody writes under "work on" is the part with a job to do, so it leaves
+// the entry and becomes a list they tick off.
+console.log("\nThe jiu-jitsu notes");
+const diarist = athlete({ id: "marcus", firstName: "Marcus", paid: true, bjjNotes: [], bjjFocus: [] });
+let noted = null;
+const mountNotes = (c) => {
+  unmount();
+  mount(React.createElement(A.BJJNotesTab, { client: c,
+    onPersist: async (u) => { noted = u; return { ok: true }; } }));
+};
+const boxes = () => [...host.querySelectorAll("textarea")];
+const focusRows = () => [...host.querySelectorAll(".bjj-focus-row")];
+
+check("an empty diary says what the list is for rather than nothing", () => {
+  mountNotes(diarist);
+  has(/working on/i, "the working-on panel");
+  has(/nothing on the list/i, "an explanation of the empty list");
+});
+check("each line under work on becomes its own thing to drill", () => {
+  click(/add an entry/i);
+  const [learned, workOn] = boxes();
+  setVal(learned, "Tight armbar detail from mount");
+  setVal(workOn, "Staying heavy in side control\nFinishing triangles\n");
+  noted = null;
+  click(/save entry/i);
+  if (!noted) throw new Error("saving did nothing");
+  if ((noted.bjjNotes || []).length !== 1) throw new Error(`${(noted.bjjNotes || []).length} notes saved`);
+  const texts = (noted.bjjFocus || []).map((f) => f.text);
+  if (texts.length !== 2) throw new Error(`${texts.length} item(s) on the list, expected 2`);
+  if (!texts.includes("Staying heavy in side control")) throw new Error("the first line did not become an item");
+  if ((noted.bjjFocus || []).some((f) => f.done)) throw new Error("a new item arrived already ticked");
+});
+check("writing the same thing again does not put it on the list twice", () => {
+  mountNotes(noted);
+  click(/add an entry/i);
+  const [, workOn] = boxes();
+  setVal(workOn, "staying HEAVY in side control");
+  const before = (noted.bjjFocus || []).length;
+  click(/save entry/i);
+  if ((noted.bjjFocus || []).length !== before) {
+    throw new Error(`the list grew to ${(noted.bjjFocus || []).length} on a repeat`);
+  }
+});
+check("ticking something off takes it out of the open list", () => {
+  mountNotes(noted);
+  const open = focusRows();
+  if (open.length !== 2) throw new Error(`${open.length} open item(s) before ticking`);
+  noted = null;
+  hit(open[0].querySelector(".bjj-focus-box"));
+  const done = (noted.bjjFocus || []).filter((f) => f.done);
+  if (done.length !== 1) throw new Error(`${done.length} ticked`);
+  if (!done[0].doneDate) throw new Error("no date recorded against a ticked item");
+  mountNotes(noted);
+  if (focusRows().length !== 1) throw new Error("the ticked item is still in the open list");
+  has(/you have got/i, "a way back to what has been ticked");
+});
+check("and it can be put back", () => {
+  click(/show 1 you have got/i);
+  const row = [...host.querySelectorAll(".bjj-focus-row.done")][0];
+  if (!row) throw new Error("the ticked item is not shown");
+  noted = null;
+  hit(row.querySelector(".bjj-focus-box"));
+  if ((noted.bjjFocus || []).some((f) => f.done)) throw new Error("it did not come back off the done list");
+});
+check("an item can be dropped from the list entirely", () => {
+  mountNotes(noted);
+  const before = (noted.bjjFocus || []).length;
+  noted = null;
+  hit(focusRows()[0].querySelector(".bjj-focus-x"));
+  if ((noted.bjjFocus || []).length !== before - 1) throw new Error("dropping an item did not remove it");
+});
+check("an entry can be logged against an earlier day", () => {
+  mountNotes(diarist);
+  click(/add an entry/i);
+  const d = host.querySelector("input[type=date]");
+  if (!d) throw new Error("no date field on the editor");
+  if (d.value !== dayStr(0)) throw new Error(`date defaulted to ${d.value}`);
+  if (d.max !== dayStr(0)) throw new Error("the date field accepts the future");
+  setVal(d, dayStr(3));
+  setVal(boxes()[0], "Drilled takedowns");
+  noted = null;
+  click(/save entry/i);
+  if (noted.bjjNotes[0].date !== dayStr(3)) throw new Error(`saved against ${noted.bjjNotes[0].date}`);
+});
+check("entries can be tagged, and the tags are kept", () => {
+  mountNotes(diarist);
+  click(/add an entry/i);
+  setVal(boxes()[0], "Knee shield details");
+  click(/^Guard$/);
+  noted = null;
+  click(/save entry/i);
+  if (!(noted.bjjNotes[0].tags || []).includes("Guard")) throw new Error("the tag was not saved");
+});
+check("search and tag filters narrow the list once there are a few", () => {
+  const many = { ...diarist, bjjNotes: [
+    { id: "n1", date: dayStr(1), learned: "Berimbolo entry", workOn: "", tags: ["Guard"] },
+    { id: "n2", date: dayStr(2), learned: "Knee cut pressure", workOn: "", tags: ["Passing"] },
+    { id: "n3", date: dayStr(3), learned: "Back escapes", workOn: "", tags: ["Escapes"] },
+  ] };
+  mountNotes(many);
+  const search = host.querySelector(".bjj-search input");
+  if (!search) throw new Error("no search box with three entries logged");
+  setVal(search, "knee cut");
+  if (!/Knee cut pressure/.test(txt())) throw new Error("search hid the matching entry");
+  if (/Berimbolo/.test(txt())) throw new Error("search kept an entry that does not match");
+  setVal(search, "zzzz");
+  has(/nothing matches/i, "an answer when nothing matches");
+});
+check("deleting an entry asks first, and leaves the working-on list alone", () => {
+  const one = { ...diarist,
+    bjjNotes: [{ id: "n1", date: dayStr(1), learned: "Berimbolo entry", workOn: "", tags: [] }],
+    bjjFocus: [{ id: "f1", text: "Keep the grip", done: false, date: dayStr(1), noteId: "n1" }] };
+  mountNotes(one);
+  noted = null;
+  click(/delete/i);
+  if (noted) throw new Error("one tap deleted it with no confirmation");
+  has(/for good/i, "a confirmation");
+  click(/delete it/i);
+  if (!noted) throw new Error("confirming did not delete");
+  if ((noted.bjjNotes || []).length !== 0) throw new Error("the entry survived");
+  if ((noted.bjjFocus || []).length !== 1) throw new Error("deleting the entry took its drill item with it");
 });
 
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
