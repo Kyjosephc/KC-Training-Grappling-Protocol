@@ -691,6 +691,62 @@ check("every loaded lift has a demonstration video", () => {
   }
 });
 
+check("every program trains the trunk against rotation or extension", () => {
+  // Both two-day programs shipped with none of this at all, while the
+  // three-day ones carried three to five sets a week. Bracing against a pass
+  // is too central to the sport for that to be an acceptable difference.
+  const TRUNK = /pallof|anti-rotation|dead ?bug|hollow|plank|abdominal|hanging leg raise|anti-extension/i;
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const hard = p.phases.filter((ph) => !/deload/i.test(ph.name));
+    hard.forEach((ph) => {
+      let sets = 0;
+      ph.days.forEach((d) => (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+        // The Copenhagen is adductor work that happens to be called a plank.
+        if (/copenhagen/i.test(e.name || "")) return;
+        if (TRUNK.test(e.name || "")) sets += Number(e.sets) || 0;
+      })));
+      if (sets < 2) throw new Error(`program ${v}, ${ph.name}: ${sets} trunk set(s) in the week`);
+    });
+  });
+});
+
+check("a deload keeps the shape of the week instead of emptying it", () => {
+  // Program A's week four used to be one press and a dead hang on day two and
+  // nothing countable at all on day three. A deload should read as the same
+  // week done easily, not as a week the app forgot to write.
+  const PULL = /row|pull-?up|chin-?up|pulldown|face pull|pull-apart|dead hang|scarecrow/i;
+  VARIANTS.forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    p.phases.filter((ph) => /deload/i.test(ph.name)).forEach((ph) => {
+      let pulls = 0;
+      ph.days.forEach((d) => {
+        const shape = A.sessionShape((d.sections || []).map((sec) => ({ ...sec, exercises: sec.exercises || [] })));
+        if (shape.working < 2) {
+          throw new Error(`program ${v}, ${ph.name} day ${d.label}: ${shape.working} working set(s)`);
+        }
+        (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
+          if (PULL.test(e.name || "")) pulls += Number(e.sets) || 0;
+        }));
+      });
+      if (pulls < 2) throw new Error(`program ${v}, ${ph.name}: ${pulls} pulling set(s) in the whole week`);
+    });
+  });
+});
+
+check("the time estimate counts easy conditioning apart from lifting", () => {
+  // Program B's third day read as eighty minutes when fifty-five of it was
+  // lifting and twenty-five was a Zone 2 ride that need not even be the same
+  // day. One number for both misrepresents the session.
+  const p = A.buildProgramVariant("B");
+  const pos = A.positionAtIndex(p, 2);
+  const secs = pos.day.sections.map((sec) => ({ ...sec, exercises: sec.exercises || [] }));
+  const sh = A.sessionShape(secs);
+  if (!(sh.conditioningMinutes > 0)) throw new Error("B day 3 reports no conditioning time");
+  if (sh.liftMinutes >= sh.minutes) throw new Error("lifting minutes were not separated from the total");
+  if (sh.liftMinutes + sh.conditioningMinutes !== sh.minutes) throw new Error("the two parts do not add up to the total");
+});
+
 check("no deload week asks for a maximal single", () => {
   VARIANTS.forEach((v) => {
     const p = A.buildProgramVariant(v);

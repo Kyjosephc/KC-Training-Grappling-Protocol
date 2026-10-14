@@ -2388,31 +2388,53 @@ function deloadWeekPhase(weekNum, afterPhaseName) {
   return {
     id: uid(), name: `Deload Week (Week ${weekNum})`, weekStart: weekNum, weekEnd: weekNum,
     objective: `This week is deliberately light. The goal is simple: dissipate the fatigue built up over the last three weeks of ${afterPhaseName} so you walk into the next phase fresh, not to test anything or push a top set. Every 4th week in this program works this way.`,
-    intensityNote: "No Dynamic Effort work this week at all. Max Effort days cap out at a moderate double or triple, at least 2 reps in reserve — never a true top single. Durability, arm and core, and agility work are trimmed or dropped entirely.",
+    intensityNote: "No Dynamic Effort work this week at all, and Max Effort days cap out at a moderate double or triple with at least 2 reps in reserve — never a true top single. Everything else keeps one light exposure rather than disappearing: the week should feel like the same three sessions done easily, not like three sessions you were not given. Four reps in reserve on all of it.",
     days: [
       { id: uid(), label: "1", name: "Max Effort Lower — Deload",
-        intent: "Stay light on purpose. This is recovery, not a second max-effort day — leave real reps in the tank on every set. A short session this week is the point rather than a mistake.",
+        intent: "The same session as a hard week, done easily. Four reps in reserve on everything, no grinding, and no top single. It should feel like you have left the gym with something in the tank, because you have.",
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meLowerDeloadBlock() ]},
+          { id: uid(), type: "strength", name: "Light Pull & Hinge", exercises: [
+            ex({ name: "Inverted Row", videoUrl: "https://www.youtube.com/shorts/vZy_Eu_Z0WA", sets: 3, reps: "8", load: "bodyweight — set the bar high enough that eight is easy this week", rir: 4, rest: "60 seconds", tempo: "2/1/1", quality: "Accessory",
+              purpose: "The pull this day always has. Dropping it entirely for a week costs you nothing in fatigue and gains you nothing either, and a week with no pulling in it is the week a grappler's shoulders notice.",
+              cues: "Chest to the bar, shoulder blades together for a beat, lower under control. Nowhere near failure." }),
+            ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "6", load: "light — about two thirds of what you used last week", rir: 4, rest: "90 seconds", tempo: "3/0/1", quality: "Posterior Chain",
+              purpose: "Hamstrings loaded long is the protection a scramble needs, and it is worth keeping the exposure even in a week built to shed fatigue. Light, slow, and well short.",
+              cues: "Hips back, bar close, take the full count lowering. Stop the moment the lower back rounds." }) ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
             ex({ name: "Moderate Farmer Carry", sets: 2, reps: "20 meters", load: "moderate", rir: 3, rest: "90 seconds", purpose: "Light grip and trunk maintenance, low fatigue cost", quality: "Grip/Trunk" }),
           ]},
         ]},
       { id: uid(), label: "2", name: "Max Effort Upper — Deload",
-        intent: "Same idea upstairs — moderate weight, clean technique, plenty of reps left in reserve.",
+        intent: "Same idea upstairs. Moderate weight, clean technique, plenty left in reserve, and the pulling kept in rather than dropped.",
         sections: [
           { id: uid(), type: "strength", name: "Main Strength", exercises: [ meUpperDeloadBlock() ]},
+          { id: uid(), type: "strength", name: "Light Pulling", exercises: [
+            ex({ name: "Weighted Pull-Up", sets: 3, reps: "4", load: "bodyweight only this week — no added weight", rir: 4, rest: "2 minutes", tempo: "2/1/X", quality: "Strength",
+              purpose: "The highest-transfer upper body lift in the program, kept at a maintenance dose. Three easy sets of four cost nothing to recover from and hold the pattern.",
+              cues: "Full hang at the bottom, chest toward the bar, lower under control. Stop while they are still clean." }),
+            ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light", rir: 3, rest: "60 seconds", quality: "Durability",
+              purpose: "Shoulder health work that belongs in every week, this one included.",
+              cues: "Pull to the forehead with the elbows high, hold a beat, let it back out slowly." }) ]},
           { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
             ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 3, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip" , videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }),
+            ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "Still rolling this week, so this stays in.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
           ]},
         ]},
-      { id: uid(), label: "3", name: "Full Body Recovery + Light Conditioning",
-        intent: "No explosive lifting this week — just movement quality and an easy aerobic session. Let your body catch up.",
+      { id: uid(), label: "3", name: "Movement Quality + Rotational Work + Light Conditioning",
+        intent: "No sprinting and no shuttle this week — those are the two things that leave you sore for the mat. The shape of the day stays: something light and springy, movement quality, the rotational slot, and an easy aerobic session.",
         sections: [
           { id: uid(), type: "agility", name: "Movement Quality", exercises: [
-            ex({ name: "Multi-Planar Lunge Matrix", sets: 1, reps: "6 per direction", load: "bodyweight", rir: 3, rest: "45 seconds", purpose: "Easy full-body movement quality work, no explosive intent this week", quality: "Movement Quality" , videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" }),
+            ex({ name: "Pogo Hops", sets: 2, reps: "8", load: "bodyweight", rir: 4, rest: "45 seconds", quality: "Movement Quality",
+              purpose: "Keeps the ankles springy without the impact of a sprint or a cut. Two easy sets, nothing near a maximum.",
+              cues: "Stay tall, bounce off the front of the foot, quiet landings. Stop the set if they get heavy." }),
+            ex({ name: "Multi-Planar Lunge Matrix", sets: 2, reps: "6 per direction", load: "bodyweight", rir: 4, rest: "45 seconds", purpose: "Easy full-body movement quality work, no explosive intent this week", quality: "Movement Quality" , videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" }),
           ]},
+          { id: uid(), type: "power", name: "Rotational & Anti-Rotation", exercises: [
+            ex({ name: "Heavy Pallof Press Hold (each side)", sets: 2, reps: "20 seconds per side", load: "lighter than usual — hold it still rather than fight it", rir: 4, rest: "60 seconds", quality: "Trunk / Anti-Rotation",
+              purpose: "This day owns the rotational work, and an isometric hold keeps that quality alive at almost no fatigue cost — far better than dropping the slot and coming back to it cold next week.",
+              cues: "Press out, hold dead still, ribs down and square to the front. Breathe normally throughout." }) ]},
           { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
             ex({ name: "Assault Bike or Treadmill — Easy Aerobic", sets: 1, reps: "10 to 12 minutes", load: "easy, conversational pace", rir: 7, rest: "none", purpose: "Active recovery — keep the aerobic system ticking over without adding fatigue", quality: "Conditioning" }),
           ]},
@@ -2622,6 +2644,12 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meLowerBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max — this is deliberately light, not a build-up to anything heavy." }),
             ]},
+            { id: uid(), type: "strength", name: "Light Pull", exercises: [
+              ex({ name: "Inverted Row", videoUrl: "https://www.youtube.com/shorts/vZy_Eu_Z0WA", sets: 2, reps: "8", load: "bodyweight — set the bar high enough that eight is easy", rir: 4, rest: "60 seconds", tempo: "2/1/1", quality: "Accessory",
+                purpose: "Two easy sets so the week is not the one week in twelve with no pulling in it. It costs nothing to recover from.",
+                cues: "Chest to the bar, shoulder blades together for a beat, lower under control. Nowhere near failure." }) ]},
+            { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "Still rolling this week, so this stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }) ]},
           ]},
         { id: uid(), label: "2", name: "Max Effort Upper — Deload",
           intent: "Same approach — stay light on purpose, no ego reps.",
@@ -2632,10 +2660,17 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meUpperBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max. No max attempts this week." }),
             ]},
+            { id: uid(), type: "strength", name: "Light Pulling", exercises: [
+              ex({ name: "Weighted Pull-Up", sets: 2, reps: "4", load: "bodyweight only this week — no added weight", rir: 4, rest: "2 minutes", tempo: "2/1/X", quality: "Strength",
+                purpose: "The highest-transfer upper body lift in the program, kept at a maintenance dose through the handover week.",
+                cues: "Full hang at the bottom, chest toward the bar, lower under control. Stop while they are still clean." }),
+              ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 4, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }) ]},
           ]},
         { id: uid(), label: "3", name: "Recovery & Easy Conditioning",
-          intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered. Yes, this is the whole session — it is meant to look this short.",
+          intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered. Movement quality and an easy ride, and that genuinely is the session.",
           sections: [
+            { id: uid(), type: "agility", name: "Movement Quality", exercises: [
+              ex({ name: "Multi-Planar Lunge Matrix", sets: 2, reps: "6 per direction", load: "bodyweight", rir: 4, rest: "45 seconds", purpose: "Easy full-body movement quality, no explosive intent at all this week", quality: "Movement Quality", videoUrl: "https://www.youtube.com/shorts/6hiVTg5rD7Y" }) ]},
             { id: uid(), type: "conditioning", name: "Aerobic Base — Deload", exercises: [
               ex({ name: "Assault Bike or Incline Treadmill Walk — Aerobic Base (Zone 2)", sets: 1, reps: "12 to 15 minutes", load: "heart rate held at 130 to 150 beats per minute — easy, conversational pace", rir: 7, rest: "none", purpose: "Easy aerobic movement to stay loose without adding any real fatigue heading into next week's fresh start", quality: "Conditioning" }),
             ]},
@@ -3522,6 +3557,30 @@ const TWO_DAY_COPENHAGEN = (tier) => ex({
   purpose: "Adductor strain is the injury that takes grapplers out for six weeks and this is the best-supported thing you can do about it. Progress it by sliding the support point from the knee toward the ankle, never by adding sets.",
 });
 
+// Neither two-day program had a single set of anti-rotation or anti-extension
+// work, while the three-day ones carry three to five a week. Bracing against a
+// pass is too central to the sport to leave out. Each day gets one isometric
+// item, taken in the same round as the plank so it costs about a minute:
+// anti-rotation on the first day, anti-extension on the second.
+const TWO_DAY_ANTI_ROTATION = (tier) => ex({
+  name: "Heavy Pallof Press Hold (each side)", sets: 2,
+  reps: tier === "deload" ? "15 seconds per side" : "20 to 25 seconds per side",
+  load: "a cable or band, heavy enough that holding still is the hard part",
+  rir: tier === "deload" ? 4 : 3, rest: "0 seconds — done in the same round as the plank above",
+  quality: "Trunk / Anti-Rotation",
+  purpose: "Refusing to rotate is what the trunk actually does while somebody is passing your guard, and nothing else in this program asks for it. Isometric on purpose: it buys the strength without the soreness a two-day week cannot afford.",
+  cues: "Press the handle straight out and hold it dead still. The cable is trying to turn you and the whole job is to refuse. Ribs down, square to the front, and do not lean away from it.",
+});
+const TWO_DAY_ANTI_EXTENSION = (tier) => ex({
+  name: "Dead Bug — Slow and Braced", sets: 2,
+  reps: tier === "deload" ? "5 per side" : "6 to 8 per side",
+  load: "bodyweight", rir: tier === "deload" ? 4 : 3,
+  rest: "0 seconds — done in the same round as the exercise above",
+  quality: "Trunk / Anti-Extension",
+  purpose: "Keeping the ribs down while a limb moves is the brace that stops your guard being stretched open and your shoulders being driven to the mat. The slow count is the entire exercise.",
+  cues: "Lower back flat to the floor and kept there. If it arches off, you went too far and that rep is over. Three seconds out, three seconds back, breathe out as the limbs extend.",
+});
+
 /* ===================== PROGRAM C — CONJUGATE, TWO DAYS ===================== */
 // The method is the weekly pairing of a max effort lift with dynamic effort
 // speed work, plus a rotating main lift so you never accommodate to one.
@@ -3564,11 +3623,14 @@ function conjugateTwoDayOne(tier, dePct) {
         ex({ name: "Barbell Romanian Deadlift", sets: hingeSets, reps: tier === "peak" ? "4" : "6", load: "moderate — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 90 seconds", tempo: tier === "peak" ? "2/0/1" : "3/0/1", quality: "Posterior Chain",
           purpose: "The hinge that stays in every week. Hamstrings loaded long and slow is the best protection there is against what a scramble does to them. The eccentric shortens to two seconds in the competition weeks, because eccentric time is the soreness you can least afford then.",
           cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment your lower back rounds — the range comes from the hip." }),
-        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: hingeSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "90 seconds", quality: "Grip",
+        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: hingeSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: tier === "deload" ? 3 : 1, rest: "90 seconds", quality: "Grip",
           purpose: "Grip for free. You are already holding the bar at the end of the set, so this costs the time you were going to spend putting it down. Thumbs around the bar, no straps, no hook grip — the point is the hand.",
-          cues: "Finish the last rep standing and just hold it. Let go deliberately before the hands open on their own. Build from twenty-five seconds to forty before adding weight." }) ]},
+          cues: "Finish the last rep standing and just hold it. Let go deliberately before the hands open on their own. Build from twenty-five seconds to forty before adding weight." }),
+        ex({ name: "Standing Barbell Overhead Press", sets: hingeSets, reps: tier === "peak" ? "5" : "6 to 8", load: "moderate — leave the reps below in the tank", rir, rest: "0 seconds — the third lift in the same round, then 90 seconds", tempo: "2/0/1", quality: "Strength",
+          purpose: "The week's vertical press, and it needs to be here rather than left to chance: the max effort rotation only lands on an overhead variation a couple of times in twelve weeks, which left this program with almost no overhead strength at all. Posting, framing and stiff-arming all live here. It sits in the same round as the hinge and the grip hold, so it costs about a minute.",
+          cues: "Squeeze the glutes and keep the ribs down so the lower back does not arch to get the bar up. Head back out of the way, then through at the top. Stop the set the moment you start leaning back to finish a rep." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_ANTI_ROTATION(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
     ],
   };
 }
@@ -3599,8 +3661,12 @@ function conjugateTwoDayTwo(tier, dePct) {
         ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
           purpose: "Grip and the whole side of the trunk at once, and the closest thing in the gym to carrying somebody who does not want to be carried. It is also the only anti-side-bend work in this program.",
           cues: "Stand tall and do not let it pull you over. Walk, do not rush. Set it down before the grip fails rather than after." }) ]},
+      { id: uid(), type: "strength", name: "Single Leg", exercises: [
+        ex({ name: "Front-Foot-Elevated Split Squat (each side)", sets: hingeSets, reps: tier === "peak" ? "5 each side" : "6 to 8 each side", load: "dumbbells, moderate", rir, rest: "90 seconds", tempo: "2/0/1", quality: "Accessory",
+          purpose: "The only knee-dominant single-leg work in the program, which is the pattern a sprawl and a shot actually use — the single leg Romanian deadlift above covers the hinge side and nothing covered this one. Front foot elevated rather than rear, because it loads the same range with far less of the soreness a rear-foot-elevated split squat leaves behind.",
+          cues: "Front shin stays vertical, weight through the whole foot, back knee travels down rather than forward. Stop two reps short on both sides — the second side decides the load, not the first." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_ANTI_EXTENSION(tier), TWO_DAY_NECK(tier), TWO_DAY_FACE_PULL() ]},
     ],
   };
 }
@@ -3683,11 +3749,11 @@ function offseasonTwoDayOne(tier) {
         ex({ name: "Barbell Romanian Deadlift", sets: tier === "deload" ? 2 : 3, reps: tier === "peak" ? "4" : tier === "base" ? "6" : "5", load: "moderate to heavy — leave the reps below in the tank", rir, rest: "0 seconds between the two, then 2 minutes", tempo: "3/0/1", quality: "Posterior Chain",
           purpose: "This day's hinge. Both days own one independently, so a missed session never costs you the pattern.",
           cues: "Hips back, bar close, take the full count lowering. Stop the rep the moment the lower back rounds." }),
-        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: 1, rest: "60 seconds", quality: "Grip",
+        ex({ name: "Double-Overhand Bar Hold", videoUrl: "https://www.youtube.com/shorts/2KafFz8hsVM", sets: accSets, reps: tier === "deload" ? "20 seconds" : "25 to 40 seconds", load: "hold the bar at the top of your last Romanian deadlift rep rather than setting it down", rir: tier === "deload" ? 3 : 1, rest: "60 seconds", quality: "Grip",
           purpose: "Grip for the time you were going to spend putting the bar down. Thumbs around the bar, no straps — the point is the hand.",
           cues: "Finish the last rep standing and hold. Let go deliberately rather than waiting for the hands to open. Build to forty seconds before adding weight." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_NECK(tier) ]},
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_ANTI_ROTATION(tier), TWO_DAY_NECK(tier) ]},
     ],
   };
 }
@@ -3732,7 +3798,7 @@ function offseasonTwoDayTwo(tier) {
         ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
           purpose: "Grip and the whole side of the trunk at once, and the only anti-side-bend work in the program.",
           cues: "Stand tall and do not let it pull you over. Walk, do not rush. Set it down before the grip fails." }),
-        TWO_DAY_NECK(tier) ]},
+        TWO_DAY_ANTI_EXTENSION(tier), TWO_DAY_NECK(tier) ]},
     ],
   };
 }
@@ -7744,12 +7810,14 @@ function suggestFromHistory(client, exerciseName, target, isDeload) {
 // Working sets, build-up sets, and a time estimate built from the actual rest
 // prescriptions rather than a guess per section.
 function sessionShape(sections) {
-  let working = 0, buildUps = 0, seconds = 0;
+  let working = 0, buildUps = 0, seconds = 0, condSeconds = 0;
   (sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
     if (/Conditioning/.test(e.quality || "")) {
-      // Conditioning carries its own duration in the reps field.
+      // Conditioning carries its own duration in the reps field, and is counted
+      // separately: an easy twenty-five minute ride is not twenty-five minutes
+      // of the same thing as the lifting, and does not have to be done with it.
       const m = String(e.reps || "").match(/(\d+)\s*(?:to\s*(\d+)\s*)?minutes?/i);
-      if (m) seconds += (Number(m[2] || m[1]) || 0) * 60;
+      if (m) condSeconds += (Number(m[2] || m[1]) || 0) * 60;
       return;
     }
     const targets = e.perSetTargets || null;
@@ -7761,7 +7829,10 @@ function sessionShape(sections) {
     // Build-ups are moved through briskly, so they cost about a third as much.
     seconds += hard * (rest + 35) + build * Math.round((rest + 35) / 3);
   }));
-  return { working, buildUps, minutes: Math.max(10, Math.round((seconds + 8 * 60) / 60 / 5) * 5) };
+  const to5 = (sec) => Math.round(sec / 60 / 5) * 5;
+  const liftMinutes = Math.max(10, to5(seconds + 8 * 60));
+  const conditioningMinutes = condSeconds ? Math.max(5, to5(condSeconds)) : 0;
+  return { working, buildUps, liftMinutes, conditioningMinutes, minutes: liftMinutes + conditioningMinutes };
 }
 
 function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram, onReloadClient, userId }) {
@@ -7998,6 +8069,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         <p className="today-sub">
           {pos.day.name}
           {shape.buildUps > 0 ? ` · ${shape.buildUps} build-up${shape.buildUps === 1 ? "" : "s"} before the working sets` : ""}
+          {shape.conditioningMinutes > 0 ? ` · plus ${shape.conditioningMinutes} min of easy conditioning, which can be done later or on another day` : ""}
         </p>
 
         <div className="today-metrics">
@@ -8010,8 +8082,8 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             <span>Exercise{exerciseCount === 1 ? "" : "s"}</span>
           </div>
           <div className="today-metric">
-            <b>{shape.minutes}</b>
-            <span>Minutes</span>
+            <b>{shape.liftMinutes}</b>
+            <span>{shape.conditioningMinutes > 0 ? "Minutes lifting" : "Minutes"}</span>
           </div>
         </div>
 

@@ -72,18 +72,21 @@ for (const v of ["A", "B", "C", "D"]) {
   console.log("   wk  " + pad("phase", 26) + weeks[0].days.map((_, i) => pad(`day ${i + 1}`, 12)).join("") + "  week total");
   weeks.forEach((r) => {
     const sets = r.days.reduce((n, d) => n + d.working, 0);
-    const mins = r.days.reduce((n, d) => n + d.minutes, 0);
+    const lift = r.days.reduce((n, d) => n + d.liftMinutes, 0);
+    const cond = r.days.reduce((n, d) => n + d.conditioningMinutes, 0);
     console.log(`   ${pad(r.week, 3)} ` + pad(r.phase.slice(0, 25), 26)
-      + r.days.map((d) => pad(`${d.working}s ${d.minutes}m`, 12)).join("")
-      + `  ${sets} sets, ${mins} min`);
+      // lifting minutes, then conditioning after a plus — an easy Zone 2 ride
+      // is not the same minutes as a set of squats and is not counted as them.
+      + r.days.map((d) => pad(`${d.working}s ${d.liftMinutes}m${d.conditioningMinutes ? `+${d.conditioningMinutes}` : ""}`, 12)).join("")
+      + `  ${sets} sets, ${lift} min lifting${cond ? ` + ${cond} min easy` : ""}`);
   });
   const all = weeks.flatMap((r) => r.days);
-  const mins = all.map((d) => d.minutes).sort((a, b) => a - b);
+  const mins = all.map((d) => d.liftMinutes).sort((a, b) => a - b);
   const sets = all.map((d) => d.working).sort((a, b) => a - b);
   const med = (xs) => xs[Math.floor(xs.length / 2)];
   const hard = weeks.filter((r) => !/deload/i.test(r.phase));
-  const hardMins = hard.map((r) => r.days.reduce((n, d) => n + d.minutes, 0));
-  console.log(`   sessions ${mins[0]}–${mins[mins.length - 1]} min (median ${med(mins)}), `
+  const hardMins = hard.map((r) => r.days.reduce((n, d) => n + d.liftMinutes, 0));
+  console.log(`   lifting ${mins[0]}–${mins[mins.length - 1]} min a session (median ${med(mins)}), `
     + `${sets[0]}–${sets[sets.length - 1]} hard sets (median ${med(sets)})`);
   console.log(`   hard weeks ${Math.min(...hardMins)}–${Math.max(...hardMins)} min of lifting, `
     + `${hard.length} of ${totalWeeks} weeks hard`);
