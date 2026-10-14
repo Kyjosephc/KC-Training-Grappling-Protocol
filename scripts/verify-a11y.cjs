@@ -30,6 +30,13 @@ const mount = (el) => act(() => root.render(el));
 const unmount = () => act(() => root.render(null));
 
 const snip = (el) => el.outerHTML.replace(/\s+/g, " ").slice(0, 110);
+const hit = (el) => act(() => el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+const byText = (re) => [...host.querySelectorAll("button")].find((b) => re.test(b.textContent));
+const click = (re) => { const b = byText(re); if (!b) throw new Error(`no button matching ${re}`); hit(b); };
+const setVal = (el, v) => act(() => {
+  Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(el, v);
+  el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+});
 
 // Placeholder text technically names a field, but it vanishes the moment
 // someone types, so it is reported separately rather than counted as a name.
@@ -143,6 +150,39 @@ console.log("=== every screen, as a screen reader sees it ===\n");
 for (const [name, make] of screens) {
   try { mount(make()); audit(name); }
   catch (e) { findings.push({ screen: name, buttons: 0, controls: 0, crashed: e.message }); unmount(); }
+}
+
+// Sign-up pages two to four, reached the way somebody signing up reaches them.
+try {
+  unmount();
+  mount(React.createElement(A.OnboardingScreen, { onSubmit: noop }));
+  click(/read and sign/i);
+  act(() => { host.querySelector("input[type=checkbox]").click(); });
+  setVal(host.querySelector("input[placeholder='Your full name']"), "Test One");
+  click(/sign and continue/i);
+  audit("Sign-up page 2 — you");
+  // audit() unmounts, so re-walk for each page rather than keeping state.
+  const walkTo = (page) => {
+    mount(React.createElement(A.OnboardingScreen, { onSubmit: noop }));
+    click(/read and sign/i);
+    act(() => { host.querySelector("input[type=checkbox]").click(); });
+    setVal(host.querySelector("input[placeholder='Your full name']"), "Test One");
+    click(/sign and continue/i);
+    const t = [...host.querySelectorAll("input[type=text]")];
+    setVal(t[0], "Test"); setVal(t[1], "One");
+    const n = [...host.querySelectorAll("input[type=number]")];
+    setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10");
+    click(/^continue$/i);
+    if (page === 3) return;
+    const picks = [...host.querySelectorAll("button")].filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
+    for (let i = 0; i < 3; i++) hit(picks[i]);
+    click(/^continue$/i);
+  };
+  walkTo(3); audit("Sign-up page 3 — your week");
+  walkTo(4); audit("Sign-up page 4 — injuries");
+} catch (e) {
+  findings.push({ screen: "Sign-up, walked through", buttons: 0, controls: 0, crashed: e.message });
+  unmount();
 }
 
 let total = 0;

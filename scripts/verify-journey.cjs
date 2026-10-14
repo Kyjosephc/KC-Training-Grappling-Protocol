@@ -120,31 +120,42 @@ check("a real signature gets through to the profile form", () => {
   hasNot(/sign and continue/i, "the waiver");
   if (host.querySelectorAll("input[type=text]").length < 2) throw new Error("no name fields on the profile form");
 });
-check("Get started is disabled until the form is filled, not silently dead", () => {
-  const go = byText(/get started/i);
-  if (!go) throw new Error("no Get started button");
-  if (!go.disabled) throw new Error("Get started is clickable with an empty form");
+// Sign-up is paged now — who you are, then your week, then injuries — so the
+// gate that used to be one disabled Get started is three smaller ones.
+const cont = () => byText(/^continue$/i);
+check("Continue is disabled until the first page is filled, not silently dead", () => {
+  if (!cont()) throw new Error("no Continue button on the first page");
+  if (!cont().disabled) throw new Error("Continue is live with an empty page");
+  has(/step 2 of 4/i, "which page you are on");
 });
-check("name alone is not enough — it still wants bodyweight and height", () => {
+check("name alone is not enough — it still wants bodyweight", () => {
   const t = [...host.querySelectorAll("input[type=text]")];
   setVal(t[0], "Marcus"); setVal(t[1], "Hale");
-  if (!byText(/get started/i).disabled) throw new Error("accepted a profile with no bodyweight or height");
+  if (!cont().disabled) throw new Error("accepted a profile with no bodyweight");
 });
-check("it says why it is still disabled rather than just sitting there", () => {
+check("a filled first page moves on to the week", () => {
   const n = [...host.querySelectorAll("input[type=number]")];
   setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10");
-  // The program needs lifting days on the calendar, and the form says so.
+  if (cont().disabled) throw new Error("still disabled with name, weight and height in");
+  click(/^continue$/i);
+  has(/step 3 of 4/i, "the week page");
   has(/strength\/conditioning (day|days)/i, "guidance about picking strength days");
+});
+check("the week will not let you past it without enough lifting days", () => {
+  if (!cont().disabled) throw new Error("Continue is live with no strength days picked");
 });
 check("a complete profile submits, and carries the signed waiver with it", () => {
   // Pick the strength days it is asking for, one per calendar day.
   const picks = buttons().filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
   for (let i = 0; i < picks.length; i++) {
-    if (!byText(/get started/i).disabled) break;
+    if (!cont().disabled) break;
     hit(picks[i]);
   }
+  if (cont().disabled) throw new Error("still disabled after filling the schedule");
+  click(/^continue$/i);
   const go = byText(/get started/i);
-  if (go.disabled) throw new Error("still disabled after filling the form and the schedule");
+  if (!go) throw new Error("no Get started on the last page");
+  if (go.disabled) throw new Error("Get started disabled on a complete form");
   hit(go);
   // onSubmit hands back the form's answers; the app builds the client from them.
   if (!signedUp) throw new Error("Get started did nothing on a complete form");
@@ -181,6 +192,8 @@ const pickProgram = (title) => {
   if (!card) throw new Error(`no program card matching ${title}`);
   hit(card);
 };
+// Fills the first page and steps through to the week, which is where the
+// schedule and the program cards live.
 const fillProfile = () => {
   openOnboarding();
   signWaiver();
@@ -188,6 +201,7 @@ const fillProfile = () => {
   setVal(t[0], "Dani"); setVal(t[1], "Reyes");
   const n = [...host.querySelectorAll("input[type=number]")];
   setVal(n[0], "148"); setVal(n[1], "5"); setVal(n[2], "6");
+  click(/^continue$/i);
 };
 const pickStrengthDays = (howMany) => {
   const picks = buttons().filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));
@@ -205,7 +219,7 @@ const locked = (title) => {
 check("one lifting day is not enough to start at all", () => {
   fillProfile();
   pickStrengthDays(1);
-  if (!byText(/get started/i).disabled) throw new Error("accepted a single lifting day");
+  if (!cont().disabled) throw new Error("accepted a single lifting day");
 });
 check("two lifting days unlock the two-day program and lock the three-day ones", () => {
   fillProfile();
@@ -215,7 +229,7 @@ check("two lifting days unlock the two-day program and lock the three-day ones",
   if (!locked("Offseason Strength Build")) throw new Error("a three-day program is selectable on two days");
 });
 check("two lifting days can start, on the two-day program", () => {
-  if (byText(/get started/i).disabled) throw new Error("two days cannot start");
+  if (cont().disabled) throw new Error("two days cannot start");
 });
 check("three lifting days unlock the three-day programs and lock the two-day one", () => {
   fillProfile();
@@ -223,7 +237,7 @@ check("three lifting days unlock the three-day programs and lock the two-day one
   if (locked("Condensed Conjugate")) throw new Error("a three-day program is locked on three days");
   if (locked("Offseason Strength Build")) throw new Error("a three-day program is locked on three days");
   if (!locked("Offseason Strength, Two Days")) throw new Error("the two-day program is selectable on three days");
-  if (byText(/get started/i).disabled) throw new Error("three days cannot start");
+  if (cont().disabled) throw new Error("three days cannot start");
 });
 check("more than three days still means the three-day programs", () => {
   fillProfile();
@@ -242,7 +256,21 @@ check("changing the schedule moves the selection off a program it no longer fits
   if (cardFor("Offseason Strength, Two Days").getAttribute("aria-checked") === "true") {
     throw new Error("still selected on a program that no longer fits the schedule");
   }
-  if (byText(/get started/i).disabled) throw new Error("three days cannot start after the switch");
+  if (cont().disabled) throw new Error("three days cannot start after the switch");
+});
+check("walking back through the pages does not lose what was typed", () => {
+  fillProfile();
+  pickStrengthDays(3);
+  click(/^continue$/i);
+  has(/step 4 of 4/i, "the last page");
+  click(/^back$/i);
+  has(/step 3 of 4/i, "the week page again");
+  click(/^back$/i);
+  has(/step 2 of 4/i, "the first page again");
+  const t = [...host.querySelectorAll("input[type=text]")];
+  if (t[0].value !== "Dani") throw new Error(`first name came back as "${t[0].value}"`);
+  const n = [...host.querySelectorAll("input[type=number]")];
+  if (n[0].value !== "148") throw new Error(`bodyweight came back as "${n[0].value}"`);
 });
 check("a locked card cannot be chosen by clicking it", () => {
   fillProfile();
@@ -818,6 +846,35 @@ check("settings renders for an athlete and offers no payment button", () => {
     onPersist: async () => ({ ok: true }), theme: "dark", onChangeTheme() {}, onClose() {},
     onResetApp() {}, onRefreshProgram() {}, onOpenCoachDashboard() {}, onOpenTerms() {}, onSignOut() {} }));
   if (byText(/^mark as (paid|unpaid)$/i)) throw new Error("an athlete can see a Mark as Paid button");
+});
+check("settings opens as a short list of groups, not a wall", () => {
+  // Twenty headings in one scroll was the densest screen in the app. They are
+  // grouped and collapsed now, so what somebody sees on opening Settings is a
+  // handful of choices with one group already open.
+  const groups = [...host.querySelectorAll("details.settings-section")];
+  if (groups.length < 6) throw new Error(`only ${groups.length} group(s) — Settings is still one long scroll`);
+  if (groups.length > 12) throw new Error(`${groups.length} groups is another wall`);
+  const open = groups.filter((g) => g.open);
+  if (open.length !== 1) throw new Error(`${open.length} groups open on arrival, expected exactly 1`);
+  if (groups[0] !== open[0]) throw new Error("the open group is not the first one");
+  groups.forEach((g) => {
+    const head = g.querySelector("summary");
+    if (!head || !head.textContent.trim()) throw new Error("a group has no readable heading");
+  });
+});
+check("every settings group can be opened", () => {
+  const groups = [...host.querySelectorAll("details.settings-section")];
+  groups.forEach((g) => {
+    const head = g.querySelector("summary");
+    // jsdom does not implement the details toggle, so drive it the way the
+    // browser would and check the body is really in there to be revealed.
+    act(() => { g.open = true; });
+    if (!g.open) throw new Error(`${head.textContent.trim()} would not open`);
+    if (!g.querySelector(".settings-section-body")) throw new Error(`${head.textContent.trim()} has no body`);
+    if (!g.querySelector(".settings-section-body").textContent.trim()) {
+      throw new Error(`${head.textContent.trim()} is an empty group`);
+    }
+  });
 });
 check("settings renders for the coach", () => {
   mount(React.createElement(A.SettingsModal, { client: marcusPaid, isCoach: true,

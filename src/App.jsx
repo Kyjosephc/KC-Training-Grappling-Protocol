@@ -6126,6 +6126,10 @@ function OnboardingScreen({ onSubmit }) {
   const [uploadingPic, setUploadingPic] = useState(false);
   const [picError, setPicError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Sign-up used to be one scroll with eleven decisions in it, all of them in
+  // front of somebody who had not yet seen a single thing the app does. It is
+  // paged now: who you are, then your week, then what to work around.
+  const [step, setStep] = useState(1);
   const strengthDays = strengthDayCount(schedule);
   const allowedVariants = programsForStrengthDays(strengthDays);
   const hasEnoughStrengthDays = allowedVariants.length > 0;
@@ -6143,6 +6147,14 @@ function OnboardingScreen({ onSubmit }) {
   }, [allowedKey, programVariant]);
   const canSubmit = firstName.trim() && lastName.trim() && weight
     && hasEnoughStrengthDays && allowedVariants.includes(programVariant);
+  // What each page needs before Continue does anything. The schedule rule lives
+  // on page two so nobody reaches the end and finds the start button dead for a
+  // reason that is three screens behind them.
+  const stepComplete = step === 1
+    ? !!(firstName.trim() && lastName.trim() && weight)
+    : step === 2
+      ? !!(hasEnoughStrengthDays && allowedVariants.includes(programVariant))
+      : true;
   const handlePictureUpload = (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -6162,9 +6174,9 @@ function OnboardingScreen({ onSubmit }) {
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
       <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>
-      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>The paperwork first, then your profile. It takes a minute and it only happens once.</p>
+      <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Four short steps — the paperwork, then you, then your week, then anything to work around. It takes a minute and it only happens once.</p>
 
-      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Step 1 — Sign the liability waiver</h3>
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Step 1 of 4 — Sign the liability waiver</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
         This program includes heavy, near-maximal lifting done on your own. You have to read and accept the
         assumption of risk and release of liability before anything else — no profile is created and no program
@@ -6193,7 +6205,14 @@ function OnboardingScreen({ onSubmit }) {
       )}
 
       {waiver && (<>
-      <h3 className="log-exercise-name" style={{ marginTop: 26, marginBottom: 6 }}>Step 2 — Your profile</h3>
+      <div className="signup-step-bar" role="status" aria-live="polite">
+        <div className="signup-step-label">Step {step + 1} of 4 — {step === 1 ? "You" : step === 2 ? "Your week" : "Anything to work around"}</div>
+        <div className="signup-step-dots" aria-hidden="true">
+          {[1, 2, 3].map((n) => <span key={n} className={`signup-step-dot ${n <= step ? "done" : ""}`} />)}
+        </div>
+      </div>
+
+      {step === 1 && (<>
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
         <div className="settings-avatar-preview">
@@ -6228,7 +6247,10 @@ function OnboardingScreen({ onSubmit }) {
           {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
       </label>
-      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Your Weekly Training Schedule</h3>
+      </>)}
+
+      {step === 2 && (<>
+      <h3 className="log-exercise-name" style={{ marginBottom: 4 }}>Your Weekly Training Schedule</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Pick <b>at least two Strength/Conditioning days</b>. How many you pick decides which programs you can choose below: two days gives you the two-day in-season program, three or more gives you the two three-day programs. Then tap whatever else you do each day: Low Intensity BJJ, High Intensity BJJ, any combination, or leave a day blank. You can change this any time in Settings.</p>
       <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
       <div className={`schedule-requirement ${hasEnoughStrengthDays ? "met" : ""}`} role="status">
@@ -6276,21 +6298,35 @@ function OnboardingScreen({ onSubmit }) {
         );
       })}
       </div>
-      <h3 className="log-exercise-name" style={{ marginTop: 18, marginBottom: 4 }}>Anything We Should Work Around?</h3>
+      </>)}
+
+      {step === 3 && (<>
+      <h3 className="log-exercise-name" style={{ marginBottom: 4 }}>Anything We Should Work Around?</h3>
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Optional — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it: it is a note to yourself, and you can update it anytime in Settings.</p>
       <textarea className="notes-box" aria-label="Anything we should work around?" rows={2} style={{ fontSize: 13, marginBottom: 14 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
       <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>If any of these are sore right now, tap them — the program will swap the exercises that aggravate them. You can change this any time in Settings.</p>
       <InjuryAreaPicker value={injuryAreas} onChange={setInjuryAreas} />
       <p className="muted" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 14, fontStyle: "italic" }}>Substitutions are a way to keep training around a sore area, not treatment. Anything sharp, swollen, or not improving belongs with a clinician first.</p>
-      {!hasEnoughStrengthDays && (firstName.trim() && lastName.trim() && weight) && (
+      {!hasEnoughStrengthDays && (
         <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0, color: "var(--amber)" }}>
-          Go back up to your weekly schedule and pick {MIN_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {MIN_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start. Two is the minimum, and it decides which programs you can choose.
+          Go back to your week and pick {MIN_STRENGTH_DAYS - strengthDays} more Strength/Conditioning {MIN_STRENGTH_DAYS - strengthDays === 1 ? "day" : "days"} before you start. Two is the minimum, and it decides which programs you can choose.
         </p>
       )}
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver || submitting}
         onClick={async () => { setSubmitting(true); try { await onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver }); } finally { setSubmitting(false); } }}>
         {submitting ? "Setting up your program…" : "Get started"}
       </button>
+      </>)}
+
+      <div className="signup-nav">
+        {step > 1 && (
+          <button type="button" className="btn-ghost" onClick={() => setStep(step - 1)}>Back</button>
+        )}
+        {step < 3 && (
+          <button type="button" className="btn-primary" disabled={!stepComplete}
+            onClick={() => setStep(step + 1)}>Continue</button>
+        )}
+      </div>
       </>)}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       {showWaiver && (
@@ -7002,6 +7038,21 @@ function InstallGuide() {
 // has not set this up sees nothing at all, rather than a button that fails.
 
 
+// Settings carried twenty headings in one scroll, which made it the densest
+// screen in the app by a wide margin. Grouped and collapsed, built on native
+// details and summary so the keyboard and screen-reader behaviour comes free
+// and there is no open/closed state to get wrong.
+function SettingsSection({ title, defaultOpen = false, children }) {
+  return (
+    <details className="settings-section" open={defaultOpen || undefined}>
+      <summary className="settings-section-head">
+        <span>{title}</span>
+        <ChevronRight size={16} className="settings-section-chevron" />
+      </summary>
+      <div className="settings-section-body">{children}</div>
+    </details>
+  );
+}
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
@@ -7080,6 +7131,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
   return (
     <ModalShell onClose={onClose} title="Settings">
+      <SettingsSection title="Profile and belt" defaultOpen>
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
         <div className="settings-avatar-preview">
@@ -7107,6 +7159,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </select>
       <button className="btn-primary wide" onClick={saveBelt}>{savedBelt ? "Saved" : "Save Belt Level"}</button>
 
+      </SettingsSection>
+
+      <SettingsSection title="Injuries and substitutions">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Optional note to yourself — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it.</p>
       <textarea className="notes-box" aria-label="Anything to work around" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
@@ -7132,6 +7187,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </>
       )}
 
+      </SettingsSection>
+
+      <SettingsSection title="Sync, schedule and coach tools">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Data &amp; Sync</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         {lastSynced ? `Everything is saved to your account. Last synced ${lastSynced.toLocaleString()}.` : "Everything you log saves to your account automatically. If a save ever fails, you'll see a banner at the bottom of the screen with a Retry button — nothing is lost silently."}
@@ -7164,7 +7222,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </>
       )}
 
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Competing?</h3>
+      </SettingsSection>
+
+      <SettingsSection title="Competing?">
       <p className="muted" style={{ marginBottom: 10 }}>
         Set a date and the last ten days before it taper automatically — volume comes down gradually as the date approaches, intensity stays, no maximal lifting, and competition day itself is left clear. Leave it blank and the program runs as normal.
       </p>
@@ -7188,6 +7248,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </>
       )}
 
+      </SettingsSection>
+
+      <SettingsSection title="Terms, privacy and your waiver">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
       <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
@@ -7210,6 +7273,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       )}
       {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
 
+      </SettingsSection>
+
+      <SettingsSection title="Your program">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         Your program was saved when you set up your profile, so later improvements to the program don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
@@ -7266,7 +7332,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       <InstallGuide />
 
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Export Your Data</h3>
+      </SettingsSection>
+
+      <SettingsSection title="Export your data">
       <p className="muted" style={{ marginBottom: 10 }}>Download every workout, bodyweight entry, readiness check-in, and Personal Record you've ever logged as a single file — a personal backup that's yours to keep, independent of this app.</p>
       <button className="btn-ghost wide" onClick={() => {
         const exportData = {
@@ -7293,7 +7361,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         <Download size={14} /> Download My Training Data
       </button>
 
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 10 }}>Appearance</h3>
+      </SettingsSection>
+
+      <SettingsSection title="Appearance">
       <div className="radio-group">
         <label className={`radio-pill ${theme === "dark" ? "active" : ""}`} onClick={() => onChangeTheme("dark")}>
           <input type="radio" checked={theme === "dark"} onChange={() => onChangeTheme("dark")} />
@@ -7305,6 +7375,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         </label>
       </div>
 
+      </SettingsSection>
+
+      <SettingsSection title="Starting over and your account">
       {isCoach && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Start Over From the Welcome Screen</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -7329,6 +7402,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           <button className="btn-ghost wide" onClick={onSignOut}><LogOut size={15} style={{ marginRight: 6, verticalAlign: -2 }} />Sign Out</button>
         </>
       )}
+      </SettingsSection>
+
     </ModalShell>
   );
 }
@@ -10499,6 +10574,22 @@ function GlobalStyle() {
       .program-choice-card.locked { opacity: 0.45; cursor: default; }
       .program-switch-row { justify-content: space-between; width: 100%; text-align: left; gap: 10px; }
       .program-switch-row:disabled { opacity: 1; border-color: var(--accent); }
+      .settings-section { border-bottom: 1px solid var(--border); }
+      .settings-section:first-of-type { border-top: 1px solid var(--border); }
+      .settings-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 2px; cursor: pointer; list-style: none; min-height: 44px; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12.5px; font-weight: 600; color: var(--text); }
+      .settings-section-head::-webkit-details-marker { display: none; }
+      .settings-section-chevron { flex-shrink: 0; color: var(--text-dim); transition: transform 0.15s ease; }
+      .settings-section[open] .settings-section-chevron { transform: rotate(90deg); }
+      .settings-section-body { padding: 0 2px 18px; }
+      .settings-section-body > h3:first-child { margin-top: 0 !important; }
+      @media (prefers-reduced-motion: reduce) { .settings-section-chevron { transition: none; } }
+      .signup-step-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin: 24px 0 18px; }
+      .signup-step-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; font-weight: 600; color: var(--text); }
+      .signup-step-dots { display: flex; gap: 5px; flex-shrink: 0; }
+      .signup-step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--field-border); }
+      .signup-step-dot.done { background: var(--accent); }
+      .signup-nav { display: flex; gap: 10px; margin-top: 18px; }
+      .signup-nav .btn-ghost, .signup-nav .btn-primary { flex: 1; justify-content: center; }
       .program-switch-tag { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 9.5px; font-weight: 600; color: var(--text-dim); flex-shrink: 0; }
       .program-switch-row:disabled .program-switch-tag { color: var(--accent); }
       .program-choice-card.locked .program-choice-title { color: var(--text-dim); }
