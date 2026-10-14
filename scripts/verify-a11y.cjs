@@ -128,7 +128,6 @@ const screens = [
   ["Waiver", () => React.createElement(A.WaiverModal, { onClose: noop, onAccept: noop, accepted: false, defaultName: "Test One" })],
   ["Tutorial", () => React.createElement(A.TutorialModal, { onClose: noop, variant: "today" })],
   ["Today", () => React.createElement(A.TodayTab, { client: c, onPersist: ok, onStartLog: noop, onStartMobility: noop, onRefreshProgram: noop, onReloadClient: ok, userId: "u" })],
-  ["Daily check-in", () => React.createElement(A.ReadinessModal, { existing: null, existingWeight: "", onClose: noop, onSave: noop })],
   ["Session", () => React.createElement(A.DaySessionScreen, { client: c, isCoach: false, phaseId: c.program.phases[0].id, dayId: c.program.phases[0].days[0].id, onClose: noop, onSave: ok, onStartMobility: noop, onUpdateProgram: noop, onRestartProgram: ok, onRecordPR: noop, onRemovePR: noop })],
   ["Recovery session", () => React.createElement(A.MobilitySession, { client: c, isCoach: false, onClose: noop, onSave: ok, onUpdateProgram: noop })],
   ["Progress", () => React.createElement(A.ProgressTab, { client: c })],

@@ -7910,6 +7910,96 @@ function sessionShape(sections) {
   return { working, buildUps, liftMinutes, conditioningMinutes, minutes: liftMinutes + conditioningMinutes };
 }
 
+// The four things an athlete logs each day used to live behind a modal: tap a
+// button, wait for it to open, move two thin sliders, press Save, dismiss. It
+// is an area on the front page now. Every value is set in place, each change
+// saves itself, and there is nothing to open or close.
+function DailyCheckInCard({ entry, weightToday, lastWeight, color, pattern, onSave }) {
+  const [weight, setWeight] = useState(weightToday == null ? "" : String(weightToday));
+  // Another device, or the coach, can change today's weight under us.
+  useEffect(() => { setWeight(weightToday == null ? "" : String(weightToday)); }, [weightToday]);
+  const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : null);
+  const sleep = entry ? num(entry.sleep) : null;
+  const body = entry ? num(entry.readiness != null ? entry.readiness : entry.energy) : null;
+  const logged = !!entry;
+  const commitWeight = () => {
+    const n = Number(weight);
+    if (weight.trim() === "") { if (weightToday != null) onSave({ weight: "" }); return; }
+    if (!Number.isFinite(n) || n <= 0 || n > 600) { setWeight(weightToday == null ? "" : String(weightToday)); return; }
+    if (n !== weightToday) onSave({ weight: n });
+  };
+  const verdict = pattern
+    ? "Below par all week — today's session is eased right back"
+    : color === "GREEN" ? "Good to go — today's session runs as written"
+    : color === "YELLOW" ? "Rough night — today runs a notch back"
+    : "Rough day — today's session is eased right back";
+  return (
+    <section className="checkin" aria-label="Today's check-in">
+      <div className="checkin-head">
+        <h3 className="checkin-title">Today's Check-In</h3>
+        <span className={`checkin-status ${logged ? "done" : ""}`}>
+          {logged ? <><Check size={12} strokeWidth={3} /> Logged</> : "Not logged yet"}
+        </span>
+      </div>
+      {logged && (
+        <p className="checkin-verdict">
+          <span className="hero-dot" style={{ background: readinessCopyFor({ color }).color }} />
+          {verdict}
+        </p>
+      )}
+      <CheckInScale label="Sleep quality" low="Terrible" high="Great" value={sleep}
+        onPick={(n) => onSave({ sleep: n })} />
+      <CheckInScale label="How your body feels" low="Wrecked" high="Good" value={body}
+        onPick={(n) => onSave({ readiness: n })} />
+      <p className="checkin-hint-line">
+        That second one is your body, not your mood — not feeling like training on a normal body is still a training day.
+      </p>
+      <div className="checkin-weight-row">
+        <label className="checkin-label" htmlFor="checkin-bodyweight">
+          Bodyweight <span className="checkin-optional">optional</span>
+        </label>
+        <div className="checkin-weight">
+          <input id="checkin-bodyweight" className="bw-input" type="number" step="0.1" inputMode="decimal"
+            min="1" max="600" value={weight} placeholder="—" aria-label="Bodyweight in pounds"
+            onChange={(e) => setWeight(e.target.value)} onBlur={commitWeight}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+          <span className="checkin-unit">lb</span>
+        </div>
+      </div>
+      <p className="checkin-note">
+        Leave it blank any day you would rather not log it{lastWeight && lastWeight.date !== todayStr() ? ` — last was ${lastWeight.weight} lb` : ""}.
+        {" "}Judge the trend over weeks rather than any single day.
+      </p>
+      <button type="button" role="switch" aria-checked={!!(entry && entry.bjjHard)}
+        className={`checkin-switch ${entry && entry.bjjHard ? "on" : ""}`}
+        onClick={() => onSave({ bjjHard: !(entry && entry.bjjHard) })}>
+        <span className="checkin-switch-box">{entry && entry.bjjHard ? <Check size={12} strokeWidth={3} /> : null}</span>
+        <span>Hard jiu-jitsu training in the last day or two</span>
+      </button>
+      <p className="checkin-caveat">
+        New or worsening pain is not a rough day — that is worth a clinician rather than a lighter session.
+      </p>
+    </section>
+  );
+}
+// Six buttons rather than a slider. A slider is a poor target with chalk on
+// your hands, and it hides the fact that nothing has been chosen yet.
+function CheckInScale({ label, low, high, value, onPick }) {
+  return (
+    <div className="checkin-scale-row">
+      <div className="checkin-label">{label}</div>
+      <div className="checkin-scale" role="radiogroup" aria-label={label}>
+        {[0, 1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" role="radio" aria-checked={value === n}
+            aria-label={`${label}: ${n} out of 5`}
+            className={`checkin-pip ${value === n ? "on" : ""}`}
+            onClick={() => onPick(n)}>{n}</button>
+        ))}
+      </div>
+      <div className="checkin-ends"><span>{low}</span><span>{high}</span></div>
+    </div>
+  );
+}
 function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshProgram, onReloadClient, userId }) {
   const [compLearned, setCompLearned] = useState("");
   const [compWorkOn, setCompWorkOn] = useState("");
@@ -7929,7 +8019,24 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
 
   const today = todayStr();
   const readinessToday = client.readiness[today];
-  const [showReadiness, setShowReadiness] = useState(false);
+  const saveCheckIn = async ({ weight, ...rest }) => {
+    const next = { ...client };
+    if (weight !== undefined) {
+      // An empty box means "I am not logging this today", which has to be able
+      // to undo a weight typed in by mistake rather than only ever adding one.
+      next.bodyweightLog = Number(weight) > 0
+        ? upsertBodyweight(client.bodyweightLog, today, Number(weight))
+        : (client.bodyweightLog || []).filter((e) => e.date !== today);
+    }
+    if (Object.keys(rest).length) {
+      // Logging only a bodyweight does not invent a readiness score; the entry
+      // appears the moment they answer one of the two scales.
+      const base = readinessToday || { sleep: 3, readiness: 3, bjjHard: false };
+      const entry = { ...base, ...rest };
+      next.readiness = { ...client.readiness, [today]: { ...entry, color: classifyReadiness(entry), date: today } };
+    }
+    await onPersist(next);
+  };
   const recentPR = useMemo(() => findRecentPR(client), [client]);
   const { total: totalLifted, achievedDates } = useMemo(() => milestoneProgress(client), [client]);
   const nextMilestoneIdx = LIFT_MILESTONES.findIndex((m, idx) => achievedDates[idx] === undefined);
@@ -8215,26 +8322,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           <div className="muted" style={{ marginTop: 14, fontSize: 12.5, fontStyle: "italic" }}>Preview only. Return to today's session to log a workout.</div>
         )}
 
-        {isCurrent && !awaitingPayment && (
-          readinessToday ? (
-            <>
-            <div className="hero-readiness-badge">
-              <span className="hero-dot" style={{ background: readinessCopyFor({ color: effectiveReadinessColor }).color }} />
-              {readinessPattern ? "Below par all week — session eased right back" : effectiveReadinessColor === "GREEN" ? "Good to go — full session today" : effectiveReadinessColor === "YELLOW" ? "Rough night — session a notch back" : "Rough day — session eased right back"}
-            </div>
-            <button className="hero-full-checkin" onClick={() => setShowReadiness(true)}>
-              {`Edit today's check-in — sleep, body${latestBW && latestBW.date === today ? `, bodyweight ${latestBW.weight} lb` : ", bodyweight"}`}
-            </button>
-            </>
-          ) : (
-            <div className="checkin-card">
-              <div className="checkin-card-title">Check in before you train</div>
-              <p className="checkin-card-sub">Two sliders — how you slept and how your body feels — plus your bodyweight if you want to track it. About twenty seconds, and it decides whether today runs full or gets eased back.</p>
-              <button className="checkin-card-btn" onClick={() => setShowReadiness(true)}>Start today's check-in</button>
-              <div className="checkin-card-note">Bodyweight is optional. Leave it blank any day you'd rather not log it{latestBW ? ` — last logged ${latestBW.weight} lb` : ""}.</div>
-            </div>
-          )
-        )}
 
         {!isCurrent && (
           <div className="adjust-box">
@@ -8313,6 +8400,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         )}
       </div>
 
+      {isCurrent && !awaitingPayment && (
+        <DailyCheckInCard
+          entry={readinessToday}
+          weightToday={latestBW && latestBW.date === today ? Number(latestBW.weight) : null}
+          lastWeight={latestBW}
+          color={effectiveReadinessColor}
+          pattern={readinessPattern}
+          onSave={saveCheckIn} />
+      )}
+
       <div className="today-label">Lifted since you started</div>
       {nextMilestoneIdx >= 0 ? (
         <>
@@ -8353,16 +8450,6 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
       </details>
 
 
-      {showReadiness && (
-        <ReadinessModal existing={readinessToday} existingWeight={latestBW && latestBW.date === today ? latestBW.weight : ""} onClose={() => setShowReadiness(false)}
-          onSave={async ({ weight, ...entry }) => {
-            const color = classifyReadiness(entry);
-            const updated = { ...client, readiness: { ...client.readiness, [today]: { ...entry, color, date: today } }, bodyweightLog: Number.isFinite(Number(weight)) && Number(weight) > 0 ? upsertBodyweight(client.bodyweightLog, today, Number(weight)) : client.bodyweightLog };
-            const saved = await onPersist(updated);
-            if (saved && saved.ok === false) return;
-            setShowReadiness(false);
-          }} />
-      )}
       {showAccomplishments && <AccomplishmentsPage client={client} onClose={() => setShowAccomplishments(false)} />}
       {showMentalLibrary && (
         <ModalShell onClose={() => setShowMentalLibrary(false)} title="Motivational Quotes">
@@ -8477,43 +8564,9 @@ function AccomplishmentsPage({ client, onClose }) {
 
 /* ============================== READINESS MODAL ============================== */
 
-function ReadinessModal({ existing, existingWeight, onClose, onSave }) {
-  // Check-ins saved before Sep 2026 carry energy/soreness and no readiness key at
-  // all, which left the second slider blank and uncontrolled when one was reopened.
-  const [v, setV] = useState(() => {
-    const e = existing || {};
-    const num = (x, fallback) => (Number.isFinite(Number(x)) ? Number(x) : fallback);
-    return { bjjHard: false, ...e, sleep: num(e.sleep, 3), readiness: num(e.readiness, num(e.energy, 3)) };
-  });
-  const [weight, setWeight] = useState(existingWeight || "");
-  const fields = [
-    // Both rows run the same direction — higher is better on each — so a slider
-    // pushed right never means something bad on one row and good on the next.
-    { key: "sleep", label: "Sleep quality", hint: "0 = terrible, 5 = great", max: 5 },
-    { key: "readiness", label: "How does your body feel today?", hint: "0 = wrecked, 5 = good. This is your body, not your mood — not feeling like training on a normal body is still a training day.", max: 5 },
-  ];
-  return (
-    <ModalShell onClose={onClose} title="Daily Check-In">
-      <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        New or worsening pain isn't a rough day — that's worth a clinician rather than a lighter session.
-      </p>
-      {fields.map((f) => <SliderRow key={f.key} label={f.label} hint={f.hint} value={v[f.key]} max={f.max} onChange={(n) => setV({ ...v, [f.key]: n })} />)}
-      <div className="bw-row"><Scale size={16} color="var(--accent)" /><span>Bodyweight (optional)</span><input type="number" step="0.1" inputMode="decimal" min="1" max="600" className="bw-input" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="for example, 178.5" aria-label="Bodyweight in pounds" /></div>
-      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 14 }}>
-        Log it as often as you like — every session is fine, and so is leaving it blank. Judge the trend over weeks, not any single day: day to day this says more about hydration than about you.
-      </p>
-      <label className="bjj-toggle">
-        <input type="checkbox" checked={!!v.bjjHard} onChange={(e) => setV({ ...v, bjjHard: e.target.checked })} />
-        <span>Hard Brazilian Jiu-Jitsu training recently?</span>
-      </label>
-      <button className="btn-primary wide" style={{ marginTop: 16 }} onClick={() => onSave({ ...v, weight })}>Save check-in</button>
-    </ModalShell>
-  );
-}
 function SliderRow({ label, hint, value, max, onChange }) {
   return <div className="slider-row"><div className="slider-label"><span>{label}{hint ? <span className="slider-hint"> {hint}</span> : null}</span><span className="slider-value">{value}</span></div><input type="range" aria-label={label} min={0} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} /></div>;
 }
-
 /* ============================== SHARED SESSION UI ============================== */
 
 function SectionHeader({ title, subtitle, complete, onToggleComplete, expanded, onToggleExpand }) {
@@ -10583,6 +10636,34 @@ function GlobalStyle() {
       .settings-section-body { padding: 0 2px 18px; }
       .settings-section-body > h3:first-child { margin-top: 0 !important; }
       @media (prefers-reduced-motion: reduce) { .settings-section-chevron { transition: none; } }
+      .slider-row { margin-bottom: 14px; }
+      .slider-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 6px; }
+      .slider-value { color: var(--accent); font-weight: 700; }
+      .slider-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
+      .checkin { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px; margin-bottom: 18px; }
+      .checkin-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .checkin-title { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
+      .checkin-status { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10.5px; font-weight: 600; color: var(--text-dim); display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+      .checkin-status.done { color: var(--accent); }
+      .checkin-verdict { display: flex; align-items: center; gap: 7px; font-size: 13px; line-height: 1.4; color: var(--text); margin: 0 0 14px; }
+      .checkin-scale-row { margin-bottom: 14px; }
+      .checkin-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10.5px; font-weight: 600; color: var(--text-dim); margin-bottom: 7px; }
+      .checkin-optional { text-transform: none; letter-spacing: 0; font-family: 'Inter', -apple-system, sans-serif; font-size: 11px; font-weight: 400; font-style: italic; }
+      .checkin-scale { display: flex; gap: 6px; }
+      .checkin-pip { flex: 1; min-width: 0; min-height: 44px; background: var(--bg); border: 1px solid var(--field-border); border-radius: 8px; color: var(--text-dim); font-family: 'Oswald', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; }
+      .checkin-pip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+      .checkin-ends { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); margin-top: 5px; }
+      .checkin-hint-line { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin: -4px 0 14px; }
+      .checkin-weight-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .checkin-weight-row .checkin-label { margin-bottom: 0; }
+      .checkin-weight { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+      .checkin-weight .bw-input { width: 92px; min-height: 44px; text-align: right; font-size: 16px; }
+      .checkin-unit { font-size: 12.5px; color: var(--text-dim); }
+      .checkin-note { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin: 7px 0 14px; }
+      .checkin-switch { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; background: none; border: none; padding: 0; text-align: left; font-size: 13.5px; color: var(--text); cursor: pointer; }
+      .checkin-switch-box { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--field-border); background: var(--bg); display: flex; align-items: center; justify-content: center; color: var(--accent-text); }
+      .checkin-switch.on .checkin-switch-box { background: var(--accent); border-color: var(--accent); }
+      .checkin-caveat { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin: 10px 0 0; }
       .signup-waiver-done { font-size: 12px; color: var(--text-dim); margin: 0 0 4px; line-height: 1.5; }
       .signup-step-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; margin: 24px 0 18px; }
       .signup-step-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; font-weight: 600; color: var(--text); }
@@ -10677,12 +10758,6 @@ function GlobalStyle() {
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
       .hero-nav-btn { background: var(--bg); border: 1px solid var(--field-border); border-radius: 9px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--accent); cursor: pointer; flex-shrink: 0; }
       .hero-nav-btn:disabled { opacity: 0.55; }
-      .checkin-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px 16px 14px; margin-bottom: 14px; }
-      .checkin-card-title { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
-      .checkin-card-sub { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin: 0 0 12px; }
-      .checkin-card-btn { width: 100%; background: var(--cta); color: var(--accent-text); border: none; border-radius: 4px; padding: 14px 18px; font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
-      .checkin-card-btn:active { opacity: 0.85; }
-      .checkin-card-note { font-size: 11.5px; line-height: 1.45; color: var(--text-dim); margin-top: 9px; text-align: center; }
       .schedule-row { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
       .schedule-row:last-child { border-bottom: 0; }
       .schedule-day { flex: 0 0 92px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
@@ -10755,8 +10830,6 @@ function GlobalStyle() {
       .dash-row-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
       .dash-row-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
       .dash-row-body { padding: 0 14px 14px; border-top: 1px solid var(--border); padding-top: 12px; }
-      .hero-full-checkin { display: block; text-align: center; font-size: 13px; color: var(--text-dim); text-decoration: underline; margin: -6px 0 10px; padding: 10px 0; background: none; border: none; cursor: pointer; width: 100%; }
-      .hero-readiness-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
       .hero-dot { width: 8px; height: 8px; border-radius: 50%; }
       .stat-chip { flex: 1 1 45%; min-width: 90px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
       .stat-chip-value { font-family: 'Oswald', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 0.02em; color: var(--accent); }
@@ -10889,12 +10962,7 @@ function GlobalStyle() {
       .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
       .pr-line { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 4px 0; }
-      .slider-row { margin-bottom: 14px; }
-      .slider-label { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 6px; }
-      .slider-value { color: var(--accent); font-weight: 700; }
-      .slider-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
       input[type="range"] { width: 100%; accent-color: var(--accent); }
-      .bw-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; }
       .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 16px; text-align: right; }
       .sig-block { margin-top: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; }
       .sig-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }

@@ -294,86 +294,131 @@ check("there is a way to start the workout", () => { if (!byText(/start/i)) thro
 // =============================================================================
 // THE DAILY CHECK-IN
 // =============================================================================
-// The front page used to take a one-tap Good / Normal / Rough, which wrote a
-// readiness score nobody had actually thought about. It now sends them into the
-// real check-in. Bodyweight rides along with it on every session, and an empty
-// box has to stay empty — plenty of people will never use it.
+// It used to be a modal behind a button: open it, move two thin sliders, press
+// Save, dismiss it. It is an area on the front page now — every value set in
+// place, each change saving itself, nothing to open or close. Bodyweight rides
+// along with it every day and an empty box has to stay empty, because plenty of
+// people will never use it.
 console.log("\nThe daily check-in");
 const checkinBase = athlete({ id: "marcus", firstName: "Marcus", sessionsCompleted: 0, logs: [], paid: false,
   readiness: {}, bodyweightLog: [] });
 let persisted = null;
 const mountToday = (c) => {
-  // React keeps TodayTab's own state across a re-render of the same component,
-  // so without the unmount an open modal leaks its typed-in weight forward.
+  // React keeps TodayTab's own state across a re-render of the same component.
   unmount();
   mount(React.createElement(A.TodayTab, { client: c,
     onPersist: async (u) => { persisted = u; return { ok: true }; },
     onStartLog() {}, onStartMobility() {}, onRefreshProgram() {}, onReloadClient: async () => {}, userId: "u" }));
 };
-const bwInput = () => [...host.querySelectorAll("input[type=number]")]
-  .find((i) => /bodyweight/i.test(i.getAttribute("aria-label") || ""));
+const card = () => host.querySelector("section.checkin");
+const pips = (which) => {
+  const rows = [...host.querySelectorAll(".checkin-scale-row")];
+  const row = rows[which === "sleep" ? 0 : 1];
+  if (!row) throw new Error(`no ${which} scale on the check-in`);
+  return [...row.querySelectorAll(".checkin-pip")];
+};
+const bwInput = () => host.querySelector("#checkin-bodyweight");
+// React listens for focusout rather than blur, which is what commits the weight.
+const commit = (el) => act(() => el.dispatchEvent(new dom.window.FocusEvent("focusout", { bubbles: true })));
 
-check("the front page asks for a real check-in, not a one-tap mood", () => {
+check("the check-in is on the front page, not behind a button", () => {
   mountToday(checkinBase);
-  has(/check in before you train/i, "the check-in prompt");
+  if (!card()) throw new Error("no check-in area on the Today screen");
+  has(/today's check-in/i, "the check-in heading");
+  if (byText(/start today's check-in|do a full check-in/i)) throw new Error("still routing through a button");
   const pill = byText(/^\s*(good|normal|rough)\s*$/i);
-  if (pill) throw new Error("the one-tap mood pills are still on the front page");
+  if (pill) throw new Error("the one-tap mood pills are still there");
 });
-check("and it says bodyweight is optional before they even open it", () =>
-  has(/bodyweight is optional/i, "the optional note"));
-check("the check-in opens from the front page", () => {
-  click(/start today's check-in/i);
-  has(/sleep quality/i, "the sleep slider");
-  has(/bodyweight/i, "the bodyweight field");
+check("a fresh day says so rather than looking answered", () => {
+  has(/not logged yet/i, "the unlogged status");
+  if (pips("sleep").some((b) => b.getAttribute("aria-checked") === "true")) {
+    throw new Error("a sleep score is selected before anybody chose one");
+  }
 });
-check("it offers bodyweight every session and never demands it", () => {
+check("both scales are six real buttons, not a slider", () => {
+  if (pips("sleep").length !== 6) throw new Error(`${pips("sleep").length} sleep buttons`);
+  if (pips("body").length !== 6) throw new Error(`${pips("body").length} body buttons`);
+  if (host.querySelector("section.checkin input[type=range]")) throw new Error("there is still a slider in the check-in");
+});
+check("tapping a sleep score logs the day on the spot", () => {
+  persisted = null;
+  hit(pips("sleep")[4]);
+  if (!persisted) throw new Error("tapping a score saved nothing");
+  const entry = persisted.readiness[dayStr(0)];
+  if (!entry) throw new Error("no check-in recorded against today");
+  if (Number(entry.sleep) !== 4) throw new Error(`recorded sleep ${entry.sleep} instead of 4`);
+  if (!entry.color) throw new Error("the entry carries no readiness colour");
+});
+check("and the screen says what it means for today", () => {
+  mountToday({ ...checkinBase, readiness: { [dayStr(0)]: { sleep: 5, readiness: 5, color: "GREEN", date: dayStr(0) } } });
+  has(/logged/i, "the logged status");
+  has(/runs as written|notch back|eased right back/i, "what the check-in means for the session");
+});
+check("how the body feels is recorded on its own", () => {
+  mountToday(checkinBase);
+  persisted = null;
+  hit(pips("body")[1]);
+  const entry = persisted.readiness[dayStr(0)];
+  if (Number(entry.readiness) !== 1) throw new Error(`recorded ${entry.readiness} instead of 1`);
+});
+check("bodyweight is offered every day and demanded on none of them", () => {
+  mountToday(checkinBase);
   const bw = bwInput();
-  if (!bw) throw new Error("no bodyweight input in the check-in");
+  if (!bw) throw new Error("no bodyweight field on the check-in");
   if (bw.required || bw.getAttribute("aria-required") === "true") throw new Error("bodyweight is marked required");
   if (bw.value !== "") throw new Error(`empty log, yet the box came pre-filled with ${bw.value}`);
-});
-check("saving with the weight left empty is accepted, and logs no weight", () => {
-  persisted = null;
-  click(/save check-in/i);
-  if (!persisted) throw new Error("Save check-in did nothing with an empty weight");
-  if (!persisted.readiness[dayStr(0)]) throw new Error("no check-in recorded against today");
-  if ((persisted.bodyweightLog || []).length !== 0) throw new Error("an empty box still wrote a bodyweight entry");
-  // The modal closes in the continuation after onPersist resolves. Nothing in
-  // this harness drains microtasks, so that close is not assertable here.
+  has(/optional/i, "that it is optional");
 });
 check("a weight typed in is recorded against today", () => {
   persisted = null;
-  mountToday(checkinBase);
-  click(/start today's check-in/i);
   setVal(bwInput(), "178.5");
-  click(/save check-in/i);
+  commit(bwInput());
   const entry = ((persisted && persisted.bodyweightLog) || []).find((e) => e.date === dayStr(0));
   if (!entry) throw new Error("the weight was not recorded against today");
   if (Number(entry.weight) !== 178.5) throw new Error(`recorded ${entry.weight} instead of 178.5`);
 });
+check("logging only a weight does not invent a readiness score", () => {
+  if (persisted.readiness[dayStr(0)]) throw new Error("a bodyweight on its own created a check-in nobody filled in");
+});
 check("a weight of nonsense is not recorded", () => {
-  persisted = null;
   mountToday(checkinBase);
-  click(/start today's check-in/i);
+  persisted = null;
   setVal(bwInput(), "0");
-  click(/save check-in/i);
+  commit(bwInput());
   if (((persisted && persisted.bodyweightLog) || []).length !== 0) throw new Error("a bodyweight of zero was recorded");
 });
 check("today's weight comes back in the box, so editing it is not retyping it", () => {
-  mountToday({ ...checkinBase, readiness: {}, bodyweightLog: [{ date: dayStr(0), weight: 181 }] });
-  click(/start today's check-in/i);
+  mountToday({ ...checkinBase, bodyweightLog: [{ date: dayStr(0), weight: 181 }] });
   if (bwInput().value !== "181") throw new Error(`box showed "${bwInput().value}" with 181 logged today`);
 });
-check("once checked in, the front page shows the verdict and a way to edit it", () => {
-  mountToday({ ...checkinBase, readiness: { [dayStr(0)]: { sleep: 5, readiness: 5, color: "GREEN", date: dayStr(0) } } });
-  hasNot(/check in before you train/i, "the check-in prompt after checking in");
-  if (!byText(/edit today's check-in/i)) throw new Error("no way to go back and edit the check-in");
+check("clearing the box takes today's weight back out", () => {
+  persisted = null;
+  setVal(bwInput(), "");
+  commit(bwInput());
+  if (!persisted) throw new Error("clearing the box saved nothing");
+  if ((persisted.bodyweightLog || []).some((e) => e.date === dayStr(0))) {
+    throw new Error("today's weight survived being cleared");
+  }
+});
+check("the hard mat training switch answers both ways", () => {
+  mountToday(checkinBase);
+  const sw = host.querySelector(".checkin-switch");
+  if (!sw) throw new Error("no hard training switch");
+  if (sw.getAttribute("role") !== "switch") throw new Error("the switch does not say it is a switch");
+  persisted = null;
+  hit(sw);
+  if (persisted.readiness[dayStr(0)].bjjHard !== true) throw new Error("turning it on did not record it");
+  mountToday({ ...checkinBase, readiness: { [dayStr(0)]: { sleep: 3, readiness: 3, bjjHard: true, color: "GREEN", date: dayStr(0) } } });
+  persisted = null;
+  hit(host.querySelector(".checkin-switch"));
+  if (persisted.readiness[dayStr(0)].bjjHard !== false) throw new Error("turning it off did not record it");
 });
 check("the wall does not ask for a check-in for a session it will not start", () => {
   mountToday(athlete({ id: "marcus", sessionsCompleted: 3, paid: false, readiness: {},
     logs: [sessionLog(9, 135, "Back Squat"), sessionLog(7, 135, "Back Squat"), sessionLog(5, 140, "Back Squat")] }));
-  hasNot(/check in before you train/i, "a check-in prompt behind the payment wall");
+  if (card()) throw new Error("a check-in area behind the payment wall");
 });
+
 
 console.log("\nThe session screen");
 check("the day's session renders with exercises", () => {
