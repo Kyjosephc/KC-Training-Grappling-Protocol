@@ -11321,6 +11321,31 @@ function GlobalStyle() {
         border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
       .rg-holdbox strong { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--accent); flex-shrink: 0; }
       .rg-holdbox span { font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+      .rg-lead { font-size: 13.5px; line-height: 1.55; margin: 0 0 8px; color: var(--text); }
+      .rg-tier { display: flex; align-items: flex-start; gap: 13px; padding: 9px 0;
+        border-bottom: 1px solid var(--border); }
+      .rg-tier:last-of-type { border-bottom: none; }
+      .rg-tier-val { font-family: 'Oswald', sans-serif; font-size: 27px; line-height: 1; width: 34px;
+        flex-shrink: 0; text-align: center; color: var(--accent); }
+      .rg-tier-val.zero { color: var(--text-dim); }
+      .rg-tier-names { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 5px; }
+      .rg-tier-names span { font-size: 12.5px; font-weight: 600; border-radius: 999px;
+        padding: 3px 10px; background: var(--bg);
+        border: 1px solid var(--border); color: var(--text); }
+      .rg-step { display: flex; align-items: flex-start; gap: 11px; padding: 10px 0;
+        border-bottom: 1px solid var(--border); }
+      .rg-step-n { font-family: 'Oswald', sans-serif; font-size: 13px; width: 22px; height: 22px;
+        flex-shrink: 0; border-radius: 999px; border: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+      .rg-step-body { flex: 1; min-width: 0; }
+      .rg-step-head { display: flex; justify-content: space-between; gap: 10px; font-size: 14px;
+        font-weight: 600; margin-bottom: 2px; }
+      .rg-step-head strong { color: var(--green); font-family: 'Oswald', sans-serif; }
+      .rg-step-total { font-family: 'Oswald', sans-serif; font-size: 20px; line-height: 1.1;
+        flex-shrink: 0; min-width: 28px; text-align: right; color: var(--accent); }
+      .rg-step-sum { font-size: 13px; color: var(--text-dim); margin: 11px 0 8px; }
+      .rg-step-sum strong { font-family: 'Oswald', sans-serif; font-size: 17px; color: var(--accent); }
+      .rg-not-scene { display: block; color: var(--text); margin: 3px 0 3px; }
       .rg-req { padding: 12px 0; border-bottom: 1px solid var(--border); }
       .rg-req:last-child { border-bottom: none; }
       .rg-req-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; }

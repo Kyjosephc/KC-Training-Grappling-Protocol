@@ -51,6 +51,8 @@ function hashSeed(str) {
   return h >>> 0;
 }
 const label = (n) => (n === 0 ? "No points" : `${n} point${n === 1 ? "" : "s"}`);
+// "IBJJF, ADCC and The Revolution" rather than a comma-separated dump.
+const andList = (xs) => (xs.length < 2 ? (xs[0] || "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 // --- 1. What is this worth? — asked as a situation, not as a position name ---
 function positionQuestions(rsId) {
@@ -110,6 +112,39 @@ const SEQ_PREAMBLE = {
   adcc: "This is the second half of the match, so points are live. ",
 };
 
+// The Learn view teaches the arithmetic the sequence questions test: one
+// continuous sequence, each position in it, and the total climbing as it goes.
+// Built from the same SEQUENCES and the same scoring table as the questions, so
+// the lesson can never disagree with what the quiz marks correct.
+export function sequenceWalkthrough(rsId, which = 3) {
+  const rs = RULESETS[rsId];
+  if (!rs) return null;
+  const seq = SEQUENCES[which] || SEQUENCES[0];
+  let running = 0;
+  const steps = seq.steps.map((k) => {
+    const sc = rs.scoring[k];
+    const points = sc && sc.points != null ? sc.points : 0;
+    running += points;
+    return {
+      key: k,
+      label: POS_LABEL[k] || k,
+      points,
+      running,
+      control: sc ? sc.control : `${rs.name} does not score this position at all`,
+    };
+  });
+  return {
+    steps,
+    total: running,
+    sum: steps.map((x) => `${x.label} ${x.points}`).join(" + "),
+    preamble: SEQ_PREAMBLE[rsId] || "",
+    note: rsId === "ibjjf"
+      ? "Everything reached in one unbroken sequence scores. The referee counts the three seconds once, at the end — not separately at every stage."
+      : "Each position in the sequence scores on its own once it has been controlled.",
+    cite: `${rs.name} ${rs.version} — ${rsId === "ibjjf" ? "Art. 3.4 (cumulative points)" : "Scoring"}`,
+  };
+}
+
 function sequenceQuestions(rsId) {
   const rs = RULESETS[rsId];
   return SEQUENCES.map((seq, i) => {
@@ -145,18 +180,33 @@ function specialQuestions(rsId) {
     // competition. They are drawn fresh per question: taking the first three
     // off the pool every time meant all seven IBJJF questions shared one set of
     // wrong answers, and after two rounds you could pass by recognising them.
+    // Each distractor carries the ruleset it came from and that ruleset's own
+    // name for it. "That is the ADCC rule on guard pulling, not IBJJF's" is the
+    // entire lesson of this question type, and it used to be discarded the
+    // moment a distractor was picked, leaving a wrong answer with no
+    // explanation at all on the hardest tier in the bank.
     const pool = [];
     RULESET_IDS.filter((x) => x !== rsId).forEach((x) => {
-      RULESETS[x].specials.forEach((o) => { if (o.v !== sp.v) pool.push(o.v); });
+      RULESETS[x].specials.forEach((o) => {
+        if (o.v !== sp.v) pool.push({ v: o.v, from: RULESETS[x].name, k: o.k });
+      });
     });
     const picked = shuffle(pool, rnd).slice(0, 3);
+    const wrong = {};
+    picked.forEach((d) => {
+      wrong[d.v] = `That one is true — under ${d.from}, where it is the rule on ${d.k.toLowerCase()}. It is not ${rs.name}'s.`;
+    });
+    const others = andList([...new Set(picked.map((d) => d.from))]);
     return {
       id, ruleset: rsId, topic: "special", difficulty: 3,
-      prompt: `${rs.name} — ${sp.k.toLowerCase()}. Which of these is the ${rs.name} rule?`,
-      options: shuffle([sp.v, ...picked], rnd),
+      prompt: `${rs.name} — ${sp.k.toLowerCase()}. Which of these is ${rs.name}'s rule?`,
+      options: shuffle([sp.v, ...picked.map((d) => d.v)], rnd),
       answer: sp.v,
-      why: sp.v,
-      wrong: {}, cite: `${rs.name} ${rs.version} — ${sp.cite}`,
+      // The answer text IS the rule, so repeating it here taught nothing. What
+      // an athlete needs after answering is why the other three looked right:
+      // every one of them is a real rule, somewhere else.
+      why: `${rs.name}, ${sp.cite}. The other three options are real rules too — they belong to ${others} — which is exactly how this catches people who cross between promotions.`,
+      wrong, cite: `${rs.name} ${rs.version} — ${sp.cite}`,
     };
   });
 }
@@ -206,6 +256,25 @@ function comparisonQuestions() {
   return out;
 }
 
+// Which rung of the published ladder each wrong option corresponds to. Nothing
+// here is invented: every note is read back off rs.penalties.ladder.
+const PEN_OPTIONS = ["Nothing yet, it is only marked", "An advantage to the opponent",
+  "2 points to the opponent", "Disqualification"];
+function penaltyWrong(rs, answer) {
+  const out = {};
+  PEN_OPTIONS.filter((o) => o !== answer).forEach((o) => {
+    const probe = /advantage/i.test(o) ? /advantage/i
+      : /2 points/i.test(o) ? /\b2 points?\b/i
+      : /disqualif/i.test(o) ? /disqualif/i
+      : /marked|nothing/i;
+    const line = rs.penalties.ladder.find((x) => probe.test(x));
+    out[o] = line
+      ? `That is a different rung — under ${rs.name} it is the ${line.trim()}.`
+      : `${rs.name}'s ladder never does that. It runs: ${rs.penalties.ladder.join(" · ")}.`;
+  });
+  return out;
+}
+
 // --- 5. Advantages, penalties, tiebreaks, durations --------------------------
 function systemQuestions(rsId) {
   const rs = RULESETS[rsId];
@@ -240,7 +309,10 @@ function systemQuestions(rsId) {
       options: ["Nothing yet, it is only marked", "An advantage to the opponent", "2 points to the opponent", "Disqualification"],
       answer: pick,
       why: `The ${rs.name} ladder: ${rs.penalties.ladder.join(" · ")}`,
-      wrong: {}, cite: `${rs.name} ${rs.version} — ${rs.penalties.cite}`,
+      // Each wrong rung is named off the ladder itself, so an athlete who picks
+      // "disqualification" learns which penalty number that actually is.
+      wrong: penaltyWrong(rs, pick),
+      cite: `${rs.name} ${rs.version} — ${rs.penalties.cite}`,
     });
   } else if (rsId === "adcc") {
     out.push({
@@ -252,6 +324,7 @@ function systemQuestions(rsId) {
       wrong: {
         "Your opponent gets an advantage": "ADCC has no advantage scoring at all.",
         "Nothing — guard pulling is allowed": "Pulling guard and staying down during the scoring period costs you a point.",
+        "You are disqualified": `Not for one passive guard pull. ADCC works in negative points: ${rs.penalties.ladder.join(" · ")}.`,
       },
       cite: `${rs.name} ${rs.version} — ${rs.penalties.cite}`,
     });
@@ -262,16 +335,24 @@ function systemQuestions(rsId) {
   // so the generator never has to guess which entry of a tiebreak list is the
   // one that applies after points — the lists are structured differently.
   if (rs.tiebreakSummary) {
+    // Each distractor keeps the organisation it belongs to, so a wrong pick
+    // says whose tiebreak that actually is — which is the thing that catches
+    // somebody who learned one promotion's rules and entered another's.
+    const seenTie = new Set([rs.tiebreakSummary]);
     const others = RULESET_IDS.filter((x) => x !== rsId)
-      .map((x) => RULESETS[x].tiebreakSummary).filter(Boolean);
+      .map((x) => ({ s: RULESETS[x].tiebreakSummary, name: RULESETS[x].name }))
+      .filter((o) => o.s && !seenTie.has(o.s) && (seenTie.add(o.s), true));
     const rnd = mulberry(hashSeed(`${rsId}:tie`));
+    const takeTie = shuffle(others, rnd).slice(0, 3);
+    const tieWrong = {};
+    takeTie.forEach((o) => { tieWrong[o.s] = `That is how ${o.name} breaks a tie, not ${rs.name}.`; });
     out.push({
       id: `${rsId}:tie`, ruleset: rsId, topic: "tiebreak", difficulty: 3,
       prompt: `${rs.name}. The clock runs out and you and your opponent are dead level on points. What decides the match?`,
-      options: shuffle([rs.tiebreakSummary, ...shuffle(others, rnd).slice(0, 3)], rnd),
+      options: shuffle([rs.tiebreakSummary, ...takeTie.map((o) => o.s)], rnd),
       answer: rs.tiebreakSummary,
       why: `${rs.name} tiebreak order: ${rs.tiebreak.join(" → ")}`,
-      wrong: {}, cite: `${rs.name} ${rs.version} — tiebreak`,
+      wrong: tieWrong, cite: `${rs.name} ${rs.version} — tiebreak`,
     });
   }
 
@@ -294,8 +375,33 @@ function systemQuestions(rsId) {
       prompt: `You have signed up for ${rs.name}, ${d.division.toLowerCase()}. How long is the match?`,
       options: shuffle([d.time, ...distractors], rnd),
       answer: d.time, why: `${d.division}: ${d.time}.`,
-      wrong: {}, cite: `${rs.name} ${rs.version} — ${rs.durationCite}`,
+      // Every distractor is a real division's time somewhere, so the note can
+      // name whose it is instead of leaving a wrong answer unexplained.
+      wrong: durationWrong(rs, rsId, d, distractors),
+      cite: `${rs.name} ${rs.version} — ${rs.durationCite}`,
     });
+  });
+  return out;
+}
+
+// A wrong match length is almost always a real division's length — usually one
+// of this ruleset's own, which is exactly the mix-up. Read straight off the
+// durations tables; nothing is inferred.
+function durationWrong(rs, rsId, d, distractors) {
+  const out = {};
+  distractors.forEach((t) => {
+    const mine = rs.durations.filter((x) => x.time === t).map((x) => x.division.toLowerCase());
+    if (mine.length) {
+      const shown = mine.slice(0, 2);
+      const more = mine.length > shown.length ? ", among others" : "";
+      out[t] = `${t} is ${rs.name}'s ${andList(shown)}${more} — not ${d.division.toLowerCase()}, which is ${d.time}.`;
+      return;
+    }
+    const from = RULESET_IDS.filter((x) => x !== rsId)
+      .find((x) => RULESETS[x].durations.some((y) => y.time === t));
+    out[t] = from
+      ? `${t} is a ${RULESETS[from].name} division length. ${rs.name} gives ${d.division.toLowerCase()} ${d.time}.`
+      : `${rs.name} gives ${d.division.toLowerCase()} ${d.time}, not ${t}.`;
   });
   return out;
 }
@@ -331,19 +437,35 @@ function requirementQuestions(rsId) {
     // target's own requirements obviously cannot be either.
     const mine = new Set(r.must.map((x) => x.toLowerCase()));
     const generic = /\b3 second|three second|hold it/i;
+    // Each distractor keeps the position it belongs to. Telling an athlete
+    // "that is part of what mount requires, not knee on belly" is the whole
+    // point of confusing two positions' requirements, and it was being thrown
+    // away: these questions shipped with no feedback on a wrong answer.
+    const seenMust = new Set();
     const others = Object.entries(reqs)
       .filter(([k]) => k !== pos)
-      .flatMap(([, x]) => x.must)
-      .filter((x) => !mine.has(x.toLowerCase()) && !generic.test(x));
+      .flatMap(([k, x]) => x.must.map((m) => ({ m, from: k })))
+      .filter((d) => !mine.has(d.m.toLowerCase()) && !generic.test(d.m))
+      .filter((d) => {
+        const key = d.m.toLowerCase();
+        if (seenMust.has(key)) return false;
+        seenMust.add(key);
+        return true;
+      });
     const specific = r.must.find((x) => !generic.test(x)) || r.must[0];
     if (r.must.length && others.length >= 3) {
+      const take = others.slice(0, 3);
+      const reqWrong = {};
+      take.forEach((d) => {
+        reqWrong[d.m] = `That is part of what ${POS_LABEL[d.from] || d.from} requires, not ${POS_LABEL[pos] || pos}.`;
+      });
       out.push({
         id: `${rsId}:req:${pos}`, ruleset: rsId, topic: pos, difficulty: 2,
         prompt: `${rs.name}. The referee is deciding whether to award ${POS_LABEL[pos] || pos}. Which of these does ${rs.name} require before the points go up?`,
-        options: [specific, ...others.slice(0, 3)],
+        options: [specific, ...take.map((d) => d.m)],
         answer: specific,
         why: `For ${POS_LABEL[pos] || pos} under ${rs.name}: ${r.must.join(" · ")}.`,
-        wrong: {}, cite: `${rs.name} ${rs.version} — ${r.cite}`,
+        wrong: reqWrong, cite: `${rs.name} ${rs.version} — ${r.cite}`,
       });
     }
     // The near-misses. These are the questions that win and lose matches, and
@@ -365,6 +487,13 @@ function requirementQuestions(rsId) {
         wrong: {
           [full]: `That situation does not meet ${rs.name}'s requirement for ${POS_LABEL[pos] || pos}.`,
           "A penalty against you": "Nothing here is a foul — it simply does not meet the requirement for the position.",
+          // Whichever of these is not the answer still needs an explanation.
+          // Before this, the deciding option on the hardest questions in the
+          // bank was the one option that said nothing back.
+          ...(answer === "An advantage"
+            ? { Nothing: `It is not nothing — ${rs.name} came close enough here to award an advantage.` }
+            : { "An advantage": `Not even an advantage. Under ${rs.name} this one falls short of the position altogether.` }),
+          "Half the points": "No ruleset here awards half points. A position either scores in full or it does not score.",
         },
         cite: `${rs.name} ${rs.version} — ${r.cite}`,
       });

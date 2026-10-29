@@ -61,6 +61,34 @@ check("Learn view renders the requirements data", () => {
   click(/Back/);
 });
 
+check("the Learn view teaches before it references", () => {
+  click(/The rules themselves/);
+  const t = txt();
+  // The control rule comes first, because nothing else on the screen scores
+  // without it. It used to be a one-line box above a reference table.
+  if (!/The 3-second rule/.test(t)) throw new Error("control-rule card missing");
+  if (!/paid for staying in it/.test(t)) throw new Error("the control-rule lesson is not on the page");
+  // The ladder: the scoring table grouped by value, highest first.
+  if (!/What everything is worth/.test(t)) throw new Error("scoring ladder missing");
+  const tiers = [...host.querySelectorAll(".rg-tier-val")].map((e) => Number(e.textContent));
+  if (tiers.length < 3) throw new Error(`expected at least 3 scoring tiers, saw ${tiers.length}`);
+  tiers.forEach((n, i) => {
+    if (i && n >= tiers[i - 1]) throw new Error(`tiers are not strictly descending: ${tiers.join(",")}`);
+  });
+  // The arithmetic the sequence questions test, taught in one place.
+  if (!/How points stack/.test(t)) throw new Error("sequence walkthrough missing");
+  const totals = [...host.querySelectorAll(".rg-step-total")].map((e) => Number(e.textContent));
+  if (totals.length < 3) throw new Error(`walkthrough has ${totals.length} steps`);
+  totals.forEach((n, i) => {
+    if (i && n < totals[i - 1]) throw new Error(`the running total goes down: ${totals.join(",")}`);
+  });
+  if (totals[totals.length - 1] <= totals[0]) throw new Error("the running total never climbs");
+  // requirements.js describes every near-miss as it happens on the mat, and the
+  // Learn view rendered the verdict and the reasoning while dropping the scene.
+  if (!host.querySelector(".rg-not-scene")) throw new Error("near-miss scenes still not shown");
+  click(/Back/);
+});
+
 check("Compare view renders all four rule sets", () => {
   click(/Side by side/);
   const t = txt();

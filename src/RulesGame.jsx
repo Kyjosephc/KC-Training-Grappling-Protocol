@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3, RotateCcw, Flame, Gavel } from "lucide-react";
 import { RULESETS, RULESET_IDS, COMPARE_ROWS, DISCLAIMER } from "./rules/rulesets.js";
-import { buildQuestionBank, pickQuestions, rankFor, buildMatch, REF_POINT_CHOICES } from "./rules/engine.js";
+import { buildQuestionBank, pickQuestions, rankFor, buildMatch, sequenceWalkthrough, REF_POINT_CHOICES } from "./rules/engine.js";
 import { REQUIREMENTS, HOLD_SECONDS, SCENES } from "./rules/requirements.js";
 
 const BANK = buildQuestionBank();
@@ -43,6 +43,26 @@ const TOPIC_LABEL = {
   cleanTakedown: "Clean takedowns", cleanSweep: "Clean sweeps", submissionAttempt: "Submission attempts",
 };
 const tLabel = (t) => TOPIC_LABEL[t] || t;
+
+// The scoring object is declared in the order the rulebook lists positions,
+// which is not the order anyone learns them in. Sorted and grouped by what they
+// are worth, the same data reads as a ladder — the shape an athlete actually
+// has to hold in their head before a match.
+function scoringRows(rs) {
+  const val = (s) => (s.points == null ? -1 : s.points);
+  return Object.entries(rs.scoring).filter(([, s]) => s)
+    .map(([key, s]) => ({ key, s })).sort((a, b) => val(b.s) - val(a.s));
+}
+function scoringTiers(rs) {
+  const groups = new Map();
+  scoringRows(rs).forEach(({ key, s }) => {
+    const v = s.points == null ? 0 : s.points;
+    if (!groups.has(v)) groups.set(v, []);
+    groups.get(v).push({ key, s });
+  });
+  return [...groups.entries()].sort((a, b) => b[0] - a[0])
+    .map(([points, items]) => ({ points, items }));
+}
 
 export default function RulesGame({ progress, onProgress }) {
   const p = progress || emptyRulesProgress();
@@ -343,6 +363,8 @@ export default function RulesGame({ progress, onProgress }) {
   // ---------- LEARN ----------
   if (view === "learn") {
     const rs = RULESETS[ruleset === "all" ? "ibjjf" : ruleset];
+    const hold = HOLD_SECONDS[rs.id] || { n: 3, rule: "Control must be established before points are awarded.", cite: "" };
+    const walk = sequenceWalkthrough(rs.id);
     return (
       <div className="pad">
         <button className="link-btn" onClick={() => setView("home")}>Back</button>
@@ -356,13 +378,72 @@ export default function RulesGame({ progress, onProgress }) {
           ))}
         </div>
 
-        <div className="rg-holdbox">
-          <strong>{HOLD_SECONDS[rs.id] ? HOLD_SECONDS[rs.id].n : 3} seconds</strong>
-          <span>{HOLD_SECONDS[rs.id] ? HOLD_SECONDS[rs.id].rule : ""}</span>
-        </div>
+        <Card2 title={`The ${hold.n}-second rule`}>
+          <div className="rg-holdbox">
+            <strong>{hold.n} seconds</strong>
+            <span>{hold.rule}</span>
+          </div>
+          <p className="rg-lead">
+            Nothing else on this page matters until this does. You are not paid for
+            arriving in a position — you are paid for staying in it. If the position
+            breaks before the count finishes, you are back to nothing and you have to
+            earn it again.
+          </p>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            {rs.advantages.used
+              ? `Come close and lose it and ${rs.name} can give you an advantage instead. An advantage is worth nothing on the scoreboard, but it decides a level match before a referee decision does.`
+              : `${rs.name} has no advantages, so a position you nearly held is worth exactly nothing. There is no partial credit here.`}
+            {hold.cite ? <span className="rg-cite-inline">{hold.cite}</span> : null}
+          </p>
+        </Card2>
 
-        <Card2 title="Scoring">
-          {Object.entries(rs.scoring).map(([k, s]) => s && (
+        <Card2 title="What everything is worth">
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+            Learn the ladder, not the list. This is the whole {rs.name} scoring system
+            on one screen.
+          </p>
+          {scoringTiers(rs).map((tier) => (
+            <div key={String(tier.points)} className="rg-tier">
+              <div className={`rg-tier-val${tier.points === 0 ? " zero" : ""}`}>{tier.points}</div>
+              <div className="rg-tier-names">
+                {tier.items.map((it) => <span key={it.key}>{tLabel(it.key)}</span>)}
+              </div>
+            </div>
+          ))}
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            {rs.advantages.used
+              ? "Advantages sit outside this ladder. They are not points and never add to your score — they only break a tie."
+              : "There is nothing outside this ladder: no advantages, so anything not on it scores nothing at all."}
+          </p>
+        </Card2>
+
+        {walk && (
+          <Card2 title="How points stack">
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
+              {walk.preamble}This is one unbroken sequence, and the board climbing with it.
+            </p>
+            {walk.steps.map((st, i) => (
+              <div key={st.key} className="rg-step">
+                <div className="rg-step-n">{i + 1}</div>
+                <div className="rg-step-body">
+                  <div className="rg-step-head">
+                    <span>{st.label}</span>
+                    <strong>{st.points > 0 ? `+${st.points}` : "+0"}</strong>
+                  </div>
+                  <div className="muted">{st.control}</div>
+                </div>
+                <div className="rg-step-total" aria-label={`running total ${st.running}`}>{st.running}</div>
+              </div>
+            ))}
+            <div className="rg-step-sum">{walk.sum} = <strong>{walk.total}</strong></div>
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              {walk.note} <span className="rg-cite-inline">{walk.cite}</span>
+            </p>
+          </Card2>
+        )}
+
+        <Card2 title="Each position in detail">
+          {scoringRows(rs).map(({ key: k, s }) => (
             <div key={k} className="rg-rule">
               <div className="rg-rule-head"><span>{tLabel(k)}</span><strong>{s.points == null ? "No points" : s.points}</strong></div>
               {SCENES[rs.id] && SCENES[rs.id][k] && <div className="rg-scene">{SCENES[rs.id][k]}</div>}
@@ -384,6 +465,7 @@ export default function RulesGame({ progress, onProgress }) {
                   <ul className="rg-not">{r.notPoints.map((x, i) => (
                     <li key={i}>
                       <span className={`rg-verdict ${x.verdict}`}>{x.verdict === "advantage" ? "Advantage only" : "Scores nothing"}</span>
+                      {x.scene && <span className="rg-not-scene">{x.scene}</span>}
                       {x.why}
                     </li>
                   ))}</ul>

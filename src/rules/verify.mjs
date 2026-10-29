@@ -126,6 +126,26 @@ RULESET_IDS.forEach(id => {
 });
 console.log("special-case distractors vary between questions");
 
+// 10b. Every wrong option an athlete can pick has to say something back. The
+// special-case, requirement, near-miss, penalty, tiebreak and duration
+// questions all shipped with an empty or partial `wrong` map, which meant the
+// hardest questions in the bank answered a miss with silence — the one moment
+// an athlete is actually listening.
+bank.forEach(q => {
+  const distractors = q.options.filter(o => o !== q.answer);
+  const silent = distractors.filter(o => !(q.wrong && q.wrong[o]));
+  if (silent.length) fail(`${q.id}: ${silent.length} of ${distractors.length} wrong options have no explanation`);
+  if (q.wrong && q.wrong[q.answer]) fail(`${q.id}: carries a "why that is wrong" note on its own correct answer`);
+});
+console.log("every wrong option explains itself");
+
+// 10c. And the explanation has to add something. `why: sp.v` made the special
+// questions repeat the option the athlete had just picked, teaching nothing.
+bank.forEach(q => {
+  if (q.why.trim() === q.answer.trim()) fail(`${q.id}: the explanation is just the answer again`);
+});
+console.log("no explanation is a copy of its own answer");
+
 // 11. No ruleset's values leaked into another
 if (RULESETS.adcc.scoring.mount.points === RULESETS.ibjjf.scoring.mount.points) fail("ADCC and IBJJF mount are identical — expected 2 vs 4");
 if (RULESETS.gi.advantages.used || RULESETS.adcc.advantages.used) fail("GI/ADCC should have no advantages");
