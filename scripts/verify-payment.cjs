@@ -1,7 +1,7 @@
 // The money path, exercised rather than read. Run: node scripts/verify-payment.cjs
 // Build the bundle first (see scripts/verify-payment.sh).
 const { __t } = require("../.pay.cjs");
-const { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient } = __t;
+const { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient, resolvePaid } = __t;
 
 let failed = 0;
 const check = (label, got, want) => {
@@ -61,9 +61,9 @@ check("paid, deep into block 2", paid({ sessionsCompleted: 20, blockNumber: 2, l
 check("paid, block 5, a year in", paid({ sessionsCompleted: 11, blockNumber: 5, logs: Array(155).fill({}) }), false);
 
 console.log("\nOnly an explicit yes opens the wall");
-// loadActiveClient sets c.paid = (linkPaid === true), so every other shape the
-// server read can come back as has to leave the athlete blocked. These are the
-// shapes that used to let somebody through.
+// loadActiveClient sets c.paid = resolvePaid(linkPaid, cachedFlag), so every
+// other shape the server read can come back as has to leave the athlete
+// blocked. These are the shapes that used to let somebody through.
 const spent = { sessionsCompleted: 3, logs: [{}, {}, {}] };
 check("a brand new athlete starts out not paid", athlete().paid, false);
 check("paid missing from the record blocks", blocked(athlete({ ...spent, paid: undefined })), true);
@@ -76,6 +76,33 @@ check("a failed read (null) blocks", blocked(athlete({ ...spent, paid: null })),
 check("any truthy paid opens the gate — hence the === true on the way in",
   blocked(athlete({ ...spent, paid: "anything" })), false);
 check("a real true opens it", blocked(athlete({ ...spent, paid: true })), false);
+
+// The read can fail, and an installed copy in a gym with no signal falls back
+// to the last answer the server gave rather than locking a paying athlete out
+// of a session. The whole security of that rests on one property: no cached
+// value except a real `true` counts, and a real `true` can only be there
+// because the server once said it. Sweep every combination.
+console.log("\nPaid, decided from a live read and this device's last answer");
+check("live yes, nothing cached", resolvePaid(true, undefined), true);
+check("live yes beats a cached no", resolvePaid(true, false), true);
+check("live no, nothing cached", resolvePaid(false, undefined), false);
+check("live no overrides a cached yes — un-marking takes effect online",
+  resolvePaid(false, true), false);
+check("read failed, cached yes keeps a paid athlete training",
+  resolvePaid(null, true), true);
+check("read failed, cached no stays blocked", resolvePaid(null, false), false);
+check("read failed, nothing cached stays blocked", resolvePaid(null, undefined), false);
+check("read failed and the cache was never written stays blocked",
+  resolvePaid(undefined, undefined), false);
+// Anything that is not the boolean true must not count, however truthy.
+check("no truthy cached junk opens the wall", (() => {
+  const junk = ["true", 1, "yes", {}, [], " ", "1", Infinity, new Date()];
+  return junk.every((v) => resolvePaid(null, v) === false);
+})(), true);
+check("no truthy live junk opens the wall either", (() => {
+  const junk = ["true", 1, "yes", {}, [], "1"];
+  return junk.every((v) => resolvePaid(v, false) === false);
+})(), true);
 
 console.log("\nRestarting the program is not a fresh free week for the unpaid");
 check("unpaid, restarted to day 0 with a block of logs behind them",

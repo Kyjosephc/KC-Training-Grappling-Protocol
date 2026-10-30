@@ -1119,5 +1119,147 @@ check("deleting an entry asks first, and leaves the working-on list alone", () =
   if ((noted.bjjFocus || []).length !== 1) throw new Error("deleting the entry took its drill item with it");
 });
 
+// ===========================================================================
+// WORKING WITHOUT A CONNECTION
+// ===========================================================================
+// The service worker opens the app with no signal; this is the half that makes
+// it usable. Every claim here is about data, so it is tested as data rather
+// than by clicking.
+console.log("\nWorking without a connection");
+
+const { snapRead, snapWrite, snapClearAll, queueRead, queuePut, queueDrop, pendingWriteCount } = A;
+const CLIENT_KEY = (id) => `sc-app:client:${id}`;
+
+const clearStorage = () => {
+  const keys = [];
+  for (let i = 0; i < dom.window.localStorage.length; i++) keys.push(dom.window.localStorage.key(i));
+  keys.forEach((k) => { if (k) dom.window.localStorage.removeItem(k); });
+};
+
+check("a mirrored record comes back as it went in", () => {
+  clearStorage();
+  const rec = { id: "c1", name: "Test Athlete", logs: [{ date: "2026-10-01", totalVolume: 4200 }] };
+  snapWrite("u1", CLIENT_KEY("c1"), rec);
+  const back = snapRead("u1", CLIENT_KEY("c1"));
+  if (!back) throw new Error("nothing came back");
+  if (back.v.name !== "Test Athlete") throw new Error("the record changed in storage");
+  if (back.v.logs[0].totalVolume !== 4200) throw new Error("the history did not survive the round trip");
+  if (!back.at || typeof back.at !== "number") throw new Error("no timestamp stored alongside it");
+});
+
+check("a key that was never mirrored reads as nothing, not as an empty record", () => {
+  clearStorage();
+  if (snapRead("u1", CLIENT_KEY("never")) !== null) throw new Error("a missing mirror did not read as null");
+});
+
+check("one athlete's mirror is not readable as another's", () => {
+  clearStorage();
+  snapWrite("u1", CLIENT_KEY("c1"), { id: "c1", name: "Athlete One" });
+  snapWrite("u2", CLIENT_KEY("c1"), { id: "c1", name: "Athlete Two" });
+  if (snapRead("u1", CLIENT_KEY("c1")).v.name !== "Athlete One") throw new Error("mirrors crossed between users");
+  if (snapRead("u2", CLIENT_KEY("c1")).v.name !== "Athlete Two") throw new Error("mirrors crossed between users");
+});
+
+check("signing out clears this athlete's mirror and nobody else's", () => {
+  clearStorage();
+  snapWrite("u1", CLIENT_KEY("c1"), { id: "c1" });
+  snapWrite("u1", "sc-app:client-list", [{ id: "c1" }]);
+  snapWrite("u2", CLIENT_KEY("c9"), { id: "c9" });
+  snapClearAll("u1");
+  if (snapRead("u1", CLIENT_KEY("c1"))) throw new Error("the record stayed on the device after sign-out");
+  if (snapRead("u1", "sc-app:client-list")) throw new Error("the roster stayed on the device after sign-out");
+  if (!snapRead("u2", CLIENT_KEY("c9"))) throw new Error("signing one athlete out wiped another's copy");
+});
+
+check("a failed write is queued once per key, newest only", () => {
+  clearStorage();
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1", sessionsCompleted: 1 });
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1", sessionsCompleted: 2 });
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1", sessionsCompleted: 3 });
+  const mine = queueRead().filter((x) => x.userId === "u1" && x.key === CLIENT_KEY("c1"));
+  // Three attempts at the same record must leave one entry holding the newest
+  // value. Replaying all three would put session 1 back on top of session 3.
+  if (mine.length !== 1) throw new Error(`${mine.length} queued entries for one key`);
+  if (mine[0].value.sessionsCompleted !== 3) throw new Error(`queued the stale value (${mine[0].value.sessionsCompleted})`);
+});
+
+check("different keys queue separately", () => {
+  clearStorage();
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1" });
+  queuePut("u1", "sc-app:settings", { theme: "light" });
+  if (pendingWriteCount("u1") !== 2) throw new Error(`expected 2 pending, saw ${pendingWriteCount("u1")}`);
+});
+
+check("the pending count is per athlete", () => {
+  clearStorage();
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1" });
+  queuePut("u2", CLIENT_KEY("c2"), { id: "c2" });
+  if (pendingWriteCount("u1") !== 1) throw new Error("another athlete's queued write was counted");
+  if (pendingWriteCount("u2") !== 1) throw new Error("the second athlete's write went missing");
+});
+
+check("a write that lands is taken off the queue", () => {
+  clearStorage();
+  queuePut("u1", CLIENT_KEY("c1"), { id: "c1" });
+  queueDrop("u1", CLIENT_KEY("c1"));
+  if (pendingWriteCount("u1") !== 0) throw new Error("a synced write stayed queued");
+});
+
+check("blocked storage does not throw and does not pretend to have data", () => {
+  clearStorage();
+  const real = dom.window.localStorage;
+  // What a private window or a device with site data blocked actually does.
+  Object.defineProperty(dom.window, "localStorage", {
+    configurable: true,
+    get() { throw new Error("storage blocked"); },
+  });
+  try {
+    snapWrite("u1", CLIENT_KEY("c1"), { id: "c1" });   // must not throw
+    if (snapRead("u1", CLIENT_KEY("c1")) !== null) throw new Error("claimed to read from blocked storage");
+    if (queueRead().length !== 0) throw new Error("claimed to read a queue from blocked storage");
+    queuePut("u1", CLIENT_KEY("c1"), { id: "c1" });    // must not throw
+    snapClearAll("u1");                                 // must not throw
+  } finally {
+    Object.defineProperty(dom.window, "localStorage", { configurable: true, value: real });
+  }
+});
+
+check("the banner says which of the three things is true, and otherwise nothing", () => {
+  // jsdom reports the browser as online, which is the case worth testing: the
+  // two states that are easy to get wrong are "online but still carrying work"
+  // and "online but showing a saved copy".
+  unmount();
+  mount(React.createElement(A.OfflineBanner, { usingSaved: false, pending: 0 }));
+  if (host.querySelector(".offline-banner")) throw new Error("a banner appeared with nothing to report");
+
+  unmount();
+  mount(React.createElement(A.OfflineBanner, { usingSaved: false, pending: 3 }));
+  const pendingText = host.textContent;
+  if (!/3 changes still to sync/.test(pendingText)) throw new Error(`pending state reads: ${pendingText.slice(0, 90)}`);
+
+  unmount();
+  mount(React.createElement(A.OfflineBanner, { usingSaved: false, pending: 1 }));
+  if (!/1 change still to sync/.test(host.textContent)) throw new Error("one pending change is pluralised");
+
+  unmount();
+  mount(React.createElement(A.OfflineBanner, { usingSaved: true, pending: 0 }));
+  if (!/last saved copy/.test(host.textContent)) throw new Error("a saved copy on screen is not announced");
+
+  // Unsynced work is the more urgent of the two, so it wins when both are true.
+  unmount();
+  mount(React.createElement(A.OfflineBanner, { usingSaved: true, pending: 2 }));
+  if (!/still to sync/.test(host.textContent)) throw new Error("pending work was not the message when both applied");
+  unmount();
+});
+
+check("corrupt stored JSON reads as nothing rather than crashing the app", () => {
+  clearStorage();
+  dom.window.localStorage.setItem(`sc-app:snapshot:u1:${CLIENT_KEY("c1")}`, "{not json");
+  dom.window.localStorage.setItem("sc-app:pending-writes", "also not json");
+  if (snapRead("u1", CLIENT_KEY("c1")) !== null) throw new Error("corrupt mirror did not read as null");
+  if (queueRead().length !== 0) throw new Error("corrupt queue did not read as empty");
+  clearStorage();
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

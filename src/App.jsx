@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
+import { toLocalDateStr, todayStr, yesterdayStr } from "./dates.js";
 import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -170,7 +171,11 @@ async function kvSet(userId, key, value, errorMessage) {
     const { error } = await supabase.from("kv_store").upsert({ user_id: userId, key, value, updated_at: new Date().toISOString() });
     if (error) throw error;
   });
-  if (outcome.ok) { markSynced(); return { ok: true }; }
+  if (outcome.ok) { markSynced(); queueDrop(userId, key); return { ok: true }; }
+  // Kept on this device so it can be replayed when the connection returns. The
+  // Retry toast below is the immediate path; this is the one that survives the
+  // app being closed and reopened.
+  queuePut(userId, key, value);
   // Re-read the latest value at retry time. Retrying the stale snapshot could
   // overwrite work the athlete did after the failure while the toast sat there.
   emitToast({ kind: "error", message: errorMessage || "Couldn't save your last change — check your connection.", retryLabel: "Retry", onRetry: () => kvSet(userId, key, latestWrites.get(`${userId}:${key}`) ?? value, errorMessage) });
@@ -653,10 +658,122 @@ function timeAgo(iso) {
   return fmtDate(String(iso).slice(0, 10));
 }
 
-async function getClientList(userId) { const v = await kvGet(userId, CLIENT_LIST_KEY); return v === LOAD_FAILED ? LOAD_FAILED : (v || []); }
-async function setClientList(userId, list) { return kvSet(userId, CLIENT_LIST_KEY, list); }
-async function getClient(userId, id, opts) { const v = await kvGet(userId, clientKey(id), opts); return v === LOAD_FAILED ? LOAD_FAILED : (v || null); }
-async function setClient(userId, id, data) { return kvSet(userId, clientKey(id), data); }
+/* ======================== WORKING WITHOUT A CONNECTION ======================== */
+// The service worker makes an installed copy OPEN without signal. On its own
+// that is not much use: the first read failed, and the athlete got a screen
+// saying the server could not be reached while standing in a gym about to
+// train. This is the other half.
+//
+// Every successful read is mirrored to this device, and a read that fails falls
+// back to that mirror. Every write is mirrored before it goes out, so a failed
+// save still leaves the screen showing what the athlete just did, and the value
+// is queued and replayed when the connection returns.
+//
+// A replay is safe because every client write goes through persistClientRecord,
+// which reads the server copy and merges the history arrays before writing. A
+// session logged on a phone with no signal lands beside anything that happened
+// elsewhere rather than on top of it.
+//
+// None of this is load-bearing. Storage can be full, blocked or wiped, and in
+// that case the app behaves exactly as it did before: online it works, offline
+// it says so.
+const SNAP_PREFIX = "sc-app:snapshot:";
+const QUEUE_KEY = "sc-app:pending-writes";
+const CLIENT_KEY_PREFIX = "sc-app:client:";
+const PAID_SNAP_KEY = "sc-app:paid-flag";
+
+function snapRead(userId, key) {
+  try {
+    const raw = window.localStorage.getItem(`${SNAP_PREFIX}${userId}:${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && "v" in parsed ? parsed : null;
+  } catch { return null; }
+}
+function snapWrite(userId, key, value) {
+  if (!userId) return;
+  try {
+    window.localStorage.setItem(`${SNAP_PREFIX}${userId}:${key}`, JSON.stringify({ at: Date.now(), v: value }));
+  } catch { /* quota, private mode, blocked storage — the app still works online */ }
+}
+function snapClearAll(userId) {
+  try {
+    const doomed = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith(`${SNAP_PREFIX}${userId}:`)) doomed.push(k);
+    }
+    doomed.forEach((k) => window.localStorage.removeItem(k));
+  } catch {}
+}
+
+// One entry per key. Keeping every failed attempt would replay stale versions
+// of the same record on top of the newest one.
+function queueRead() {
+  try {
+    const raw = window.localStorage.getItem(QUEUE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function queueSave(items) {
+  try { window.localStorage.setItem(QUEUE_KEY, JSON.stringify(items.slice(-40))); } catch {}
+}
+function queuePut(userId, key, value) {
+  if (!userId) return;
+  queueSave([...queueRead().filter((x) => !(x.userId === userId && x.key === key)), { userId, key, value, at: Date.now() }]);
+}
+function queueDrop(userId, key) {
+  queueSave(queueRead().filter((x) => !(x.userId === userId && x.key === key)));
+}
+function pendingWriteCount(userId) {
+  return queueRead().filter((x) => x.userId === userId).length;
+}
+let flushingWrites = false;
+async function flushPendingWrites(userId) {
+  if (flushingWrites || !userId || !supabase) return 0;
+  const mine = queueRead().filter((x) => x.userId === userId);
+  if (!mine.length) return 0;
+  flushingWrites = true;
+  let flushed = 0;
+  try {
+    for (const item of mine) {
+      // A client record goes back through the merging writer, not straight to
+      // the key, so a replay cannot clobber work done on another device.
+      const res = item.key.startsWith(CLIENT_KEY_PREFIX)
+        ? await persistClientRecord(userId, item.value)
+        : await kvSet(userId, item.key, item.value);
+      // Stop at the first failure. Still offline means the rest will not go
+      // either, and every attempt raises a toast.
+      if (!res || res.ok === false) break;
+      queueDrop(userId, item.key);
+      flushed++;
+    }
+  } finally { flushingWrites = false; }
+  return flushed;
+}
+
+async function getClientList(userId) {
+  const v = await kvGet(userId, CLIENT_LIST_KEY);
+  if (v === LOAD_FAILED) return LOAD_FAILED;
+  const list = v || [];
+  snapWrite(userId, CLIENT_LIST_KEY, list);
+  return list;
+}
+async function setClientList(userId, list) { snapWrite(userId, CLIENT_LIST_KEY, list); return kvSet(userId, CLIENT_LIST_KEY, list); }
+async function getClient(userId, id, opts) {
+  const v = await kvGet(userId, clientKey(id), opts);
+  if (v === LOAD_FAILED) return LOAD_FAILED;
+  const rec = v || null;
+  if (rec) snapWrite(userId, clientKey(id), rec);
+  return rec;
+}
+async function setClient(userId, id, data) {
+  // Mirrored before the network call. A save that fails still leaves this
+  // device showing the set the athlete just logged.
+  snapWrite(userId, clientKey(id), data);
+  return kvSet(userId, clientKey(id), data);
+}
 
 // The whole athlete record is one row, and every save rewrites all of it from
 // whatever this tab loaded. So a laptop left open on the Today screen will
@@ -799,11 +916,19 @@ function leaderboardNameFor(client) {
 
 async function publishStanding(userId, client) {
   if (!supabase || !userId || !client) return { ok: false };
-  const { total, week, weekStart, bodyweight, totalRatio, weekRatio } = leaderboardTotalsFor(client);
+  // Opting out has to remove the row, not merely stop refreshing it. Skipping
+  // the write would leave whatever was last published sitting on the board for
+  // good, which is the opposite of what the switch says it does.
+  if (client.leaderboardOptOut) { await removeStanding(userId); return { ok: true, optedOut: true }; }
+  const { total, week, weekStart, totalRatio, weekRatio } = leaderboardTotalsFor(client);
   const outcome = await withRetry(async () => {
     const { error } = await supabase.from("leaderboard").upsert({
       user_id: userId, display_name: leaderboardNameFor(client),
-      total_lbs: total, week_lbs: week, bodyweight,
+      // Bodyweight is deliberately not sent. The ratios below are what the board
+      // ranks and displays, and they are computed here — publishing the weight
+      // itself put every member's bodyweight in every other member's network
+      // response for a number no screen ever showed.
+      total_lbs: total, week_lbs: week,
       total_ratio: Number(totalRatio.toFixed(2)), week_ratio: Number(weekRatio.toFixed(2)),
       week_start: weekStart, updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
@@ -820,7 +945,9 @@ async function fetchLeaderboard() {
   const thisWeek = weekStartOf(todayStr());
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("leaderboard")
-      .select("user_id, display_name, total_lbs, week_lbs, bodyweight, total_ratio, week_ratio, week_start")
+      // No bodyweight column. Nothing on the board reads it, and asking for it
+      // meant every member downloaded everybody else's weight.
+      .select("user_id, display_name, total_lbs, week_lbs, total_ratio, week_ratio, week_start")
       .order("total_ratio", { ascending: false })
       .limit(200);
     if (error) throw error;
@@ -860,12 +987,59 @@ async function deleteAthleteCompletely(clientUserId) {
   // row, which the coach can remove again.
   await removeStanding(clientUserId);
   try { await supabase.from("client_links").delete().eq("client_user_id", clientUserId); } catch {}
+  await purgeCommunityTraces(clientUserId);
   return { ok: true };
+}
+
+// Everything this person left in the group. Posts are tried as a delete first,
+// which needs the policy in supabase-community-delete.sql; without it the
+// delete is refused and the posts are hidden instead, which takes them out of
+// every feed and leaves only rows nobody can see. Reactions, reports and any
+// block against them come out either way.
+async function purgeCommunityTraces(clientUserId) {
+  if (!supabase || !clientUserId) return;
+  let postsDeleted = false;
+  try {
+    const { error } = await supabase.from("community_posts").delete().eq("author_id", clientUserId);
+    if (!error) postsDeleted = true;
+  } catch { /* no delete policy yet — fall through to hiding them */ }
+  if (!postsDeleted) {
+    try {
+      // The same stamp hideCommunityPost writes — deleted_at / deleted_by are
+      // the real column names, and every feed query filters on deleted_at.
+      await supabase.from("community_posts")
+        .update({ deleted_at: new Date().toISOString(), deleted_by: clientUserId })
+        .eq("author_id", clientUserId);
+    } catch { /* nothing further available from the browser */ }
+  }
+  try { await supabase.from("community_reactions").delete().eq("user_id", clientUserId); } catch {}
+  try { await supabase.from("community_reports").delete().eq("reporter_id", clientUserId); } catch {}
+  try { await supabase.from("community_blocks").delete().eq("user_id", clientUserId); } catch {}
 }
 
 async function removeStanding(clientUserId) {
   if (!supabase || !clientUserId) return;
   try { await supabase.from("leaderboard").delete().eq("user_id", clientUserId); } catch {}
+}
+
+// Paid or not, in one place so it can be tested on its own rather than only as
+// a side effect of loading a record.
+//
+// `live` is what the client_links read just returned: true, false, or null for a
+// read that did not complete at all. `cached` is the last answer this device got
+// from the server, which is what keeps a paid athlete training in a gym with no
+// signal.
+//
+// The property that matters: a cache can never let somebody in who was never
+// marked paid. A cached yes only exists because the server once said yes, so an
+// athlete who has never been marked has nothing to fall back to, and no other
+// cached value counts. The cost is that an athlete who is later un-marked keeps
+// access until the next successful read, which is the right trade — an offline
+// phone was never the enforcement point.
+function resolvePaid(live, cached) {
+  if (live === true) return true;
+  if (live === false) return false;
+  return cached === true;
 }
 
 // Whether this athlete has paid. It used to live inside their own training
@@ -980,14 +1154,9 @@ async function setCommunityPrefs(userId, p) { return kvSet(userId, COMMUNITY_PRE
 /* ============================== ID / MATH HELPERS ============================== */
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-// Local calendar date, not UTC — new Date().toISOString() rolls over to the next
-// day for anyone west of UTC once it's evening locally (all of the US, for example),
-// which silently mis-logs workouts/bodyweight/check-ins to tomorrow's date.
-const toLocalDateStr = (d) => {
-  const offsetMs = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - offsetMs).toISOString().slice(0, 10);
-};
-const todayStr = () => toLocalDateStr(new Date());
+// toLocalDateStr / todayStr / yesterdayStr are imported from ./dates.js. They
+// used to live here, and a second, UTC-based copy grew in RulesGame.jsx where it
+// stamped every evening round with tomorrow's date. One definition now.
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 // Charts keep the ISO date as their key so two different years can never land
 // on the same point, and only format it for display. Past twelve months the
@@ -1115,14 +1284,34 @@ function useScreenWakeLock(active) {
   }, [active]);
 }
 
-function OfflineBanner() {
+function OfflineBanner({ usingSaved = false, pending = 0 }) {
   const online = useOnlineStatus();
-  if (online) return null;
-  return (
-    <div className="offline-banner" role="status">
-      No connection — keep logging. Your sets stay on this phone; tap Retry on any save that failed once you are back.
-    </div>
-  );
+  // Three different things worth saying, and only one of them at a time.
+  if (!online) {
+    return (
+      <div className="offline-banner" role="status">
+        No connection — keep training. Everything you log is kept on this phone and goes up on its own when you are back.
+        {usingSaved ? " This is your last saved copy." : ""}
+      </div>
+    );
+  }
+  // Online but still carrying work: the queue is draining, or a write is failing
+  // for a reason other than the connection.
+  if (pending > 0) {
+    return (
+      <div className="offline-banner" role="status">
+        {pending} change{pending === 1 ? "" : "s"} still to sync. Leave the app open for a moment and it will go up.
+      </div>
+    );
+  }
+  if (usingSaved) {
+    return (
+      <div className="offline-banner" role="status">
+        Showing your last saved copy — the server could not be reached on open.
+      </div>
+    );
+  }
+  return null;
 }
 function useOnlineStatus() {
   const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine !== false));
@@ -1269,9 +1458,11 @@ function pctFromRpeReps(rpe, reps) {
   }
   const pct = base - (10 - rpe) * 2.5;
   const clamped = Math.max(30, Math.min(100, pct));
-  // Round up to the nearest 5 percent — 79% becomes 80%, 74% becomes 75% — so every
-  // percentage shown anywhere in the app is a clean, easy-to-load number on the bar.
-  return Math.ceil(clamped / 5) * 5;
+  // Nearest 5 percent, not up. Rounding up made every suggestion in the app
+  // heavier than the RPE actually asked for — a computed 81% was shown as 85%,
+  // which on a 300 lb squat is 12 lb over the target effort on every working
+  // set for twelve weeks. Nearest is just as clean a number to load.
+  return Math.round(clamped / 5) * 5;
 }
 // A rep target counts as "loadable" (worth a %1RM suggestion) only if it's a genuine number of reps —
 // "6", "3 each side", "10 to 12 each" all count. Holds, carries, and distance work (seconds, meters,
@@ -2967,6 +3158,27 @@ const WARMUP_VERSION = 4;
 // never applied silently — their copy can carry their own swaps and anything
 // their coach adjusted for them, so the athlete is asked rather than overwritten.
 const PROGRAM_VERSION = 2;
+// Conditioning pools are driven by a fixed per-week plan that ignores
+// blockNumber, so they look like rotation and are not.
+const BLOCK_STATIC_POOLS = new Set(["conditioningIntervalPool", "matchSpecificPool"]);
+// Does this program's next block genuinely look different? resolveExercise folds
+// blockNumber into the rotation offset, so a program with a real lift pool comes
+// back changed and one without does not. This was hardcoded to
+// `variant === "A"`, which told every Program C athlete their next block was
+// identical when a fifth of its slots change — measured, 48 of 240.
+function programRotatesByBlock(program) {
+  if (!program || !program.conjugate) return false;
+  let rotates = false;
+  (program.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
+    (sec.exercises || []).forEach((e) => {
+      if (rotates || !e || !e.rotatingPool) return;
+      if (BLOCK_STATIC_POOLS.has(e.rotatingPool)) return;
+      const pool = program.conjugate[e.rotatingPool];
+      if (Array.isArray(pool) && pool.length > 1) rotates = true;
+    }))));
+  return rotates;
+}
+
 function programIsOutOfDate(client) {
   if (!client || !client.program) return false;
   return (client.program.programVersion || 0) < PROGRAM_VERSION;
@@ -3282,6 +3494,12 @@ const WEEKLY_FLOORS = [
       rest: "2 minutes", quality: "Posterior Chain",
       purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
       cues: "Push the hips back rather than bending the knees. The bar stays against the legs the whole way. Go down as far as the hamstrings allow with a flat back and no further — the depth is set by your hamstrings, not by the floor." }) },
+  { key: "vpress", min: 2, deloadMin: 0, match: /overhead press|shoulder press|landmine press|landmine rotational press|plate lifts/i,
+    make: () => ex({ name: "Standing Barbell Overhead Press", sets: 2, reps: "6 to 8", load: "moderate — leave two reps in the tank", rir: 2,
+      rest: "2 minutes", quality: "Vertical Press",
+      videoUrl: "https://www.youtube.com/watch?v=cGnhixvC8uA",
+      purpose: "Pressing overhead is the pattern a pull-dominant week leaves out, and a shoulder does not stay healthy on pulling alone. It is also the pattern behind every frame and post from the bottom: a shoulder that can hold load overhead is a shoulder that holds a frame under somebody passing.",
+      cues: "Squeeze the glutes and keep the ribs down so the lower back does not arch to get the bar up. Head moves back out of the way, then through at the top. Stop two reps short of a grind." }) },
   { key: "pull", min: 2, deloadMin: 2, match: /pull-up|row\b|lat row|pulldown/i,
     make: () => ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 2,
       rest: "90 seconds", quality: "Pull",
@@ -3405,156 +3623,6 @@ function backfillVideos(program) {
     if (e.videoUrl2 !== undefined && !hasVideo(e.videoUrl2) && url2) e.videoUrl2 = url2;
   });
   return program;
-}
-
-// ---------------------------------------------------------------------------
-// PROGRAM D — IN-SEASON MAINTENANCE (two days a week)
-//
-// There was a two-day Program C once and it was retired for good reason: it was
-// Program A with the third day deleted and its contents pushed into the other
-// two, so its first session was the densest in the catalogue and it never
-// progressed. This is not that. It is written as a two-day program from the
-// start, and it is built on the one thing in-season training has to get right:
-// strength is held with intensity, not volume. The load stays respectable and
-// almost everything else comes off, because the mat is already the hard part of
-// the week and nothing here is allowed to cost a round on Tuesday.
-//
-// What never comes out, in any block: the neck, the adductors, grip, and one
-// hinge. Those are the four that stop injuries, and they are the four people
-// drop first when they get busy.
-// ---------------------------------------------------------------------------
-function inSeasonDayOne(tier) {
-  const mainSets = (tier === "peak" || tier === "deload") ? 2 : 3;
-  const mainReps = tier === "peak" ? "3" : "5";
-  // A deload has to be the lightest week in the block, including lighter than
-  // the competition weeks, so the accessory pairs come down to one set too.
-  const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
-  // Two in reserve in the competition weeks: the sets come down, so what is
-  // left has to be genuinely heavy or it holds nothing.
-  const rir = tier === "deload" ? 5 : (tier === "peak" || tier === "build") ? 2 : 3;
-  return {
-    id: uid(), label: "1", name: "Lower Emphasis — Full Body",
-    intent: tier === "peak"
-      ? "Competition weeks. The weight stays heavy and the number of sets comes down — that is what keeps strength without leaving anything in your legs for the weekend."
-      : "One heavy pull, one heavy pull-up, and the durability work that keeps you training. In and out in around forty-five minutes, warm-up included.",
-    sections: [
-      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
-        ex({ name: "Broad Jump", sets: 3, reps: "3", load: "bodyweight", rir: 5, rest: "60 seconds", quality: "Neuromuscular",
-          purpose: "Power is the first quality you lose in a hard season and the cheapest to keep. Three jumps cost nothing and keep the nervous system used to producing force fast.",
-          cues: "Land and stick it. If you are not landing under control, you are jumping further than you can absorb — shorten it." }) ]},
-      { id: uid(), type: "strength", name: "Working Sets", exercises: [
-        ex({ name: "Trap Bar Deadlift", sets: mainSets, reps: mainReps, load: "heavy enough to be a real set, with the reps below left in the tank", rir, rest: "rest as needed between the paired lifts, 2 to 3 minutes after both", tempo: "2/0/X", quality: "Strength",
-          purpose: "The heaviest thing in the week, and deliberately the one with the lowest technical and recovery cost. Neutral grip, shorter lever, nothing to grind — you can push this in a competition week in a way you cannot push a back squat.",
-          cues: "Chest up, push the floor away. Stop the set the moment bar speed drops off, not when the rep count says to." }),
-        ex({ name: "Weighted Pull-Up", sets: mainSets, reps: tier === "peak" ? "3" : "5", load: "added weight, or bodyweight if that is already hard", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
-          purpose: "Paired with the pull so the session is two movements deep before you have rested twice. Pulling strength is the one quality that transfers to grappling almost one for one, and it is the first thing to go when training time gets cut.",
-          cues: "Full hang at the bottom every rep. Chest to the bar, not chin over it." }),
-        ex({ name: "Bulgarian Split Squat (rear foot elevated, dumbbells)", sets: accSets, reps: "6 each side", load: "moderate", rir, rest: "straight into the next pair", quality: "Accessory",
-          purpose: "Single-leg loading, which is what a sprawl and a shot actually use. Kept light in season — this is maintenance, not a leg day.",
-          cues: "Front shin vertical, back knee travels down rather than forward. Stop two reps short on both sides." }),
-        ex({ name: "Half-Kneeling Single Arm Dumbbell Press", sets: accSets, reps: "6 each side", load: "moderate", rir, rest: "90 seconds, then back to the split squat", quality: "Accessory",
-          purpose: "Overhead strength with the trunk doing the work to stop you leaning. Half-kneeling because it takes the low back out of it in a week where the mat is already loading it.",
-          cues: "Ribs down, glute of the back leg switched on. If you have to lean back to finish the rep, the weight is too heavy." }) ]},
-      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: tier === "deload" ? "15 seconds per side" : "20 to 25 seconds per side", load: "bodyweight", rir: 3, rest: "60 seconds", quality: "Durability",
-          purpose: "Adductor strain is the injury that takes grapplers out for six weeks, and this is the single best-supported thing you can do about it. Two sets, twice a week, all season.",
-          cues: "Top leg on the bench, hips lifted and level. Drop to the short-lever version with the knee on the bench if the hips sag." }),
-        ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction", load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
-          purpose: "The neck is loaded every round you train and it is the first thing dropped when the session gets short. It is isometric, so it costs almost nothing to recover from and can run every week of the season.",
-          cues: "Six directions including the two rotation holds. Build the pressure over two seconds rather than jerking into it. Stop the set if anything pinches or travels down an arm." }),
-        ex({ name: "Gi or Towel Hang", sets: 2, reps: tier === "deload" ? "20 seconds" : "to near failure, capped at 30 seconds", load: "bodyweight, hanging from a gi lapel or a towel over the bar", rir: 1, rest: "90 seconds", quality: "Grip",
-          purpose: "The carries train crushing a thick handle. This trains holding a fistful of cloth while somebody tries to rip it out of your hand, which is the grip a gi match is actually decided by and the one thing in a gi athlete's week that nothing else here covers. Two sets, three minutes.",
-          cues: "A gi jacket or a towel over the bar, one in each hand. Hang with the shoulders allowed to come up by your ears. Let go deliberately before the hands open on their own — dropping off a bar is how wrists get hurt. Thirty seconds is the cap even if you could hold longer; go to one hand or add weight instead of going longer." }) ]},
-    ],
-  };
-}
-
-function inSeasonDayTwo(tier) {
-  const mainSets = (tier === "peak" || tier === "deload") ? 2 : 3;
-  // A deload has to be the lightest week in the block, including lighter than
-  // the competition weeks, so the accessory pairs come down to one set too.
-  const accSets = (tier === "peak" || tier === "deload") ? 1 : 2;
-  const rir = tier === "deload" ? 5 : (tier === "peak" || tier === "build") ? 2 : 3;
-  return {
-    id: uid(), label: "2", name: "Upper Emphasis — Full Body",
-    intent: tier === "peak"
-      ? "Same again on the press and the row — heavy, short, and nothing that leaves you sore for a competition weekend."
-      : "One press, one row, one hinge, and the carry. The hinge stays in every week of the season on purpose.",
-    sections: [
-      { id: uid(), type: "power", name: "Explosive Primer", exercises: [
-        ex({ name: "Medicine Ball Rotational Scoop Throw (each side)", sets: 3, reps: "4 per side", load: "a light ball", rir: 5, rest: "60 seconds", quality: "Rotational Power",
-          purpose: "The only rotational power work in the week, and rotation is how almost every throw and pass is actually expressed. Light and fast, three sets, done.",
-          cues: "Turn from the hips and let the arms follow. Throw it as hard as you can — the point is speed, not the ball." }) ]},
-      { id: uid(), type: "strength", name: "Working Sets", exercises: [
-        ex({ name: "Dumbbell Floor Press", sets: mainSets, reps: tier === "peak" ? "4" : "6", load: "heavy enough to be a real set, with the reps below left in the tank", rir, rest: "rest as needed between the paired lifts, 2 to 3 minutes after both", tempo: "2/0/X", quality: "Strength",
-          purpose: "Pressing strength with the floor cutting the bottom range off, which is the part that bothers shoulders already doing a season of grappling. Dumbbells so each side works for itself.",
-          cues: "Upper arms stop when the triceps touch the floor. Pause there for a beat rather than bouncing off it." }),
-        ex({ name: "Seal Row", sets: mainSets, reps: tier === "peak" ? "5" : "8", load: "moderate to heavy", rir, rest: "straight into the next pair", tempo: "2/1/X", quality: "Strength",
-          purpose: "A row with the chest supported, so the low back contributes nothing. In a week where you are already getting stacked and scrambled, that matters more than the extra few pounds a bent-over row would allow.",
-          cues: "Pull to the bottom of the ribs, hold for a beat, lower under control. No body English — if you are rocking the bench, go lighter." }),
-        ex({ name: "Valslide Hamstring Curls", sets: accSets, reps: tier === "peak" ? "5" : "6 to 8", load: "bodyweight — slide further out to make it harder", rir, rest: "90 seconds", tempo: "3/0/1", quality: "Posterior Chain",
-          purpose: "The only knee-flexion work in the program, and the pattern with the strongest injury-prevention evidence behind it. It replaced a second Romanian deadlift: the trap bar on the first session already covers the hinge, and a heavy eccentric hinge forty-eight hours later was the surest way to be sore the day before a hard round. Here the slow half is the point rather than a side effect, and there is no load on the spine.",
-          cues: "Heels on sliders, hips lifted and held there, drag the heels in and take three seconds letting them slide back out. The hips do not drop. Shorten the slide rather than stopping if they cramp. Leave this one out inside seventy-two hours of competing — it is the one exercise here that can make you sore." }) ]},
-      { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        ex({ name: "Cable Face Pull", sets: 2, reps: "15", load: "light to moderate", rir: 2, rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
-          purpose: "The only loaded work in the program for the back of the shoulder and the muscles that hold the shoulder blade down. Everything else on this day pushes or pulls through the front. Put here deliberately: without it the app was adding one on its own, and landing it on a different day each block.",
-          cues: "Elbows high, pull toward the bridge of your nose, finish with the knuckles beside your ears. Light — this is shoulder health, not a row." }),
-        ex({ name: "Suitcase Carry (each side)", sets: 2, reps: tier === "deload" ? "20 meters each side" : "30 meters each side", load: "heavy — one hand only", rir: 2, rest: "90 seconds", quality: "Grip/Trunk",
-          purpose: "Grip and the whole side of the trunk at once, which is the carry that looks most like holding somebody who does not want to be held. Grip is the quality a gi season builds and a no-gi season quietly loses.",
-          cues: "Stand tall and do not let the weight pull you sideways. Walk, do not rush. Set it down before the grip fails rather than after." }),
-        ex({ name: "Heavy Pallof Press Hold (each side)", sets: 2, reps: tier === "deload" ? "15 seconds each side" : "20 seconds each side", load: "heavy enough that holding still is the work", rir: 3, rest: "60 seconds", quality: "Core",
-          purpose: "Anti-rotation, held rather than repped. Resisting a turn under load is what the trunk actually does in a scramble.",
-          cues: "Arms locked out straight from the sternum, hips square. The cable is trying to turn you — do not let it." }),
-        ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: tier === "deload" ? "15 seconds each direction" : "20 seconds each direction", load: "your own hand, or a folded towel against a wall", rir: 3, rest: "45 seconds", quality: "Durability",
-          purpose: "Twice a week, every week. See the note on the first session — this is the one item in the program that should never be skipped.",
-          cues: "Six directions including the two rotation holds. Resist, do not nod. Stop if anything pinches or travels down an arm." }) ]},
-    ],
-  };
-}
-
-function inSeasonPhase(name, weekStart, weekEnd, tier, objective, intensityNote) {
-  return { id: uid(), name, weekStart, weekEnd, objective, intensityNote,
-    days: [inSeasonDayOne(tier), inSeasonDayTwo(tier)] };
-}
-
-function buildInSeasonProgram() {
-  return {
-    id: uid(),
-    name: "In-Season Maintenance — Twelve-Week Program (Program D)",
-    sport: "Brazilian Jiu-Jitsu / Wrestling",
-    sessionsPerWeek: 2,
-    variant: "D",
-    objective: "Hold the strength you built, keep the neck, adductors, grip and hamstrings covered, and take nothing away from the mat. Two sessions a week, around forty to forty-five minutes each including the warm-up, written for the stretch of the year when you are competing or training hard and the gym is not the priority.",
-    methodology:
-      "Strength is kept with intensity, not volume. That is the whole idea here, it is why this is not simply a shorter version of the other programs, and it is why the sets never climb — the block progresses by getting closer to the limit and by the load the app adds from what you logged, not by getting longer. The loads stay respectable — heavy fives, and heavy triples in the competition weeks — while almost everything else comes off, because the mat is already the hard part of your week.\n\nBoth sessions are full body rather than split. If you miss one, you have missed some of everything rather than all of your lower body, which is what actually happens in a season.\n\nFour things never come out, in any block: the neck, the adductors, grip, and one hinge. Those are the four that keep you training, and they are the four everybody drops first when they get busy.\n\nThere is no conditioning programmed here. In season your mat work is the conditioning, and adding intervals on top of hard rounds is how people arrive at a competition flat. If you have a genuinely light training week, one easy twenty to thirty minute aerobic session on a non-lifting day is plenty.",
-    philosophy: "Nothing in this program should ever cost you a round. Every set is prescribed to stop short — the reps-in-reserve number on each exercise is the point, not a suggestion. If a session leaves you sore enough to notice it on the mat two days later, it was too much, and the answer is less volume rather than skipping the week.",
-    coachNote: "Use this when there are competitions on the calendar, or any stretch where mat volume is high and gym time is short. When the season ends, switch to Program B in Settings and build again — this program is designed to hold ground, not to take it.",
-    warmup: defaultWarmup(),
-    phases: [
-      // Two deloads in twelve weeks, not three. The fatigue an in-season
-      // athlete is carrying comes from the mat, and the mat does not deload on
-      // this calendar — so a scheduled easy week off the back of an already
-      // easy block buys nothing, and three of them in a program whose only job
-      // is to not lose ground will cost ground. The week 4 deload is gone and
-      // the base block runs four weeks instead. The two that remain are the
-      // mid-season one and the one that closes the block out.
-      inSeasonPhase("In-Season Base — Weeks 1 to 4", 1, 4, "base",
-        "Settle into two sessions a week and establish what a real working weight is for each of the four main lifts. The load should climb a little each week while the sets and reps stay the same.",
-        "Leave three reps in the tank on everything. If you competed or had an unusually hard week on the mat, cut the accessory pairs to one set and keep the main lifts heavy — that is the right trade, every time, and it is better than skipping the session."),
-      inSeasonPhase("In-Season Build — Weeks 5 to 7", 5, 7, "build",
-        "Same sessions, one rep closer to the limit. Nothing gets longer — the main lifts just get harder, and the app keeps adding load from what you logged.",
-        "Two reps in reserve on the main lifts instead of three. That is the whole progression, and it is deliberate: adding sets in the weeks your mat load is climbing is how an in-season program turns into a problem. If two in reserve is costing you anything on the mat, go back to three and stay there."),
-      inSeasonPhase("Deload — Week 8", 8, 8, "deload",
-        "The one scheduled easy week in the block, halfway through. Same movements, half the sets, deliberately light.",
-        "Five reps in reserve throughout. This should feel too easy. That is the dose, not a mistake. If your mat week was light and you feel good, you can skip this and carry on — the week is here for the season that has been hard, not the calendar."),
-      inSeasonPhase("Competition Weeks — Weeks 9 to 11", 9, 11, "peak",
-        "The weeks that matter. Load stays heavy and the sets come down to two. You should leave the gym feeling like you could have done more — that is the design.",
-        "Two reps in reserve on the main lifts, two sets each. Heavy is the point: the volume came off so what is left could be genuinely hard. Nothing to failure and nothing new. If you compete this week, do the session no later than forty-eight hours before you step on, leave the hamstring curl out, and skip it entirely inside twenty-four — missing one in-season session costs you nothing."),
-      inSeasonPhase("Deload — Week 12", 12, 12, "deload",
-        "Close the block out light, then decide what comes next.",
-        "Five reps in reserve. If your season is over, switch to Program B in Settings and start building again. If it is not, start this program over — it is designed to be run back as many times as the season needs."),
-    ],
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -3720,7 +3788,7 @@ function buildConjugateTwoDay() {
     methodology:
       "The engine of a conjugate program is not the exercise list, it is pairing a max effort lift with dynamic effort speed work every week, on a main lift that rotates every two weeks so you never accommodate to it. Program A already carries all of that on its first two sessions, which is why this version keeps the structure whole rather than diluting it: the first session is max effort lower plus speed pressing, the second is max effort upper plus speed jumping, exactly as the three-day program runs them.\n\nWhat comes off is volume, not method. The speed work drops from eight sets to six on the press and five on the jump, because the quality of dynamic effort work is per rep rather than per set, which makes it the right thing to shave. The accessory list comes down to what earns its minutes.\n\nWhat is gone is the third day: the sprints, the agility shuttle, the rotational landmine work and the aerobic session. That is a deliberate call rather than an oversight. You train on the mat three to five times a week, and mat work already delivers maximal accelerations, cuts, reactive changes of direction and rotation under an opponent's load, at a volume and a specificity no ten minutes in a gym matches. Unaccustomed sprinting is also the single most reliable way to be sore for the session that actually matters. The rate-of-force stimulus stays, in the dynamic effort slot.\n\nIf you are a wrestler who wants the sprint and shuttle work back, add it to a mat-day warm-up rather than to these two sessions.",
     philosophy: "The max effort sets are genuinely hard and that is where the strength comes from — push them. Everything else is dosed to leave the mat alone, and the reps-in-reserve number on each exercise is the instruction, not a suggestion. If a session leaves you sore enough to notice two days later it was too much, and the fix is fewer accessory sets, not a skipped week.",
-    coachNote: "This is the two-day program to pick if you are competing. The max effort and dynamic effort pairing survives the cut to two days better than anything else, because its stimulus is per-rep quality rather than accumulated volume — a short session is a quality-dense session by force.",
+    coachNote: "This is the two-day program to pick if you are competing. The max effort and dynamic effort pairing survives the cut to two days better than anything else, because its stimulus is per-rep quality rather than accumulated volume — a short session is a quality-dense session by force. There is no sprint or agility work anywhere in this program, and that is deliberate rather than an oversight: two sessions and ninety minutes a week do not have room for it, and your mat time is already repeat-effort conditioning against a resisting opponent, which is the thing sprinting is a substitute for. If you ever find yourself with three days to give, Program A carries real sprint work.",
     warmup: defaultWarmup(),
     phases: [
       conjugateTwoDayPhase("Conjugate Base — Weeks 1 to 4", 1, 4, "base", 50,
@@ -3851,7 +3919,7 @@ function buildOffseasonTwoDay() {
     methodology:
       "Nothing here is calculated off a one-rep max. Every working set carries a reps-in-reserve number, and the load is whatever hits that number for you on the day. The lifts are paired so two patterns are underway before you have rested twice, tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives, and the progression inside a block is load going up while the sets and the reps stay exactly where they are.\n\nWhat changes going from three days to two is pattern frequency, not method. Each pattern now gets one exposure a week instead of two or three, so the sessions split by pattern rather than by variation: squat, horizontal press and vertical pull on the first day; hinge, overhead press and horizontal pull on the second. Both days own a hinge of their own, so a missed session never costs you the pattern.\n\nWhat comes off is variety. Three squat variations a week became one, six press variations became two, six pulls became two. That is the right thing to lose — variety was the three-day program's luxury and intensity is its engine — but it should be said plainly: weekly volume per pattern is down roughly forty percent against Program B. Expect this to build strength and to hold the muscle you have. If putting on size is the actual goal of your offseason, two days a week will not do what three does, and you should know that in week one rather than week ten.",
     philosophy: "The number after each exercise is the reps you should still have left when you stop. Three in reserve means three — not two and not failure. The load climbs when that number says it can, which the app works out from what you logged last time.",
-    coachNote: "This is the two-day program for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days — its stimulus is per-rep quality rather than accumulated volume, which is exactly what survives a short week.",
+    coachNote: "This is the two-day program for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days — its stimulus is per-rep quality rather than accumulated volume, which is exactly what survives a short week. There is no sprint or agility work anywhere in this program, and that is deliberate rather than an oversight: two sessions and ninety minutes a week do not have room for it, and your mat time is already repeat-effort conditioning against a resisting opponent, which is the thing sprinting is a substitute for. If you ever find yourself with three days to give, Program A carries real sprint work.",
     warmup: defaultWarmup(),
     phases: [
       offseasonTwoDayPhase("Strength Base — Weeks 1 to 4", 1, 4, "base",
@@ -3943,6 +4011,9 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     bjjFocus: [],
     rulesProgress: emptyRulesProgress(),
     paid: false,
+    // On the board by default, because that is how it has always worked and
+    // emptying it would make the feature look broken. Switchable in Settings.
+    leaderboardOptOut: false,
     promoDiscount: promoDiscount || 0,
     excludedExercises: [],
     injuryNotes: injuryNotes ? injuryNotes.trim() : "",
@@ -5681,6 +5752,9 @@ function MainApp({ userId, onSignOut }) {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [clientLoadError, setClientLoadError] = useState(false);
+  // True when what is on screen came off this device rather than the server.
+  const [offlineData, setOfflineData] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
   const [theme, setTheme] = useState("dark");
   const [newSignupCount, setNewSignupCount] = useState(0);
 
@@ -5728,10 +5802,22 @@ function MainApp({ userId, onSignOut }) {
     const list = await getClientList(userId);
     const settings = await getSettings(userId);
     setTheme(settings.theme || "dark");
-    // A failed read stops here. Falling through would show an existing athlete
-    // the onboarding screen and let them overwrite their own client list.
-    if (list === LOAD_FAILED) { setLoadError(true); setLoaded(true); return; }
+    // A failed read does not fall through — doing so would show an existing
+    // athlete the onboarding screen and let them overwrite their own list. But
+    // if this device has a mirror of the list, use it: an athlete in a gym with
+    // no signal should get their session, not an error screen.
+    if (list === LOAD_FAILED) {
+      const snap = snapRead(userId, CLIENT_LIST_KEY);
+      if (!snap || !Array.isArray(snap.v) || !snap.v.length) { setLoadError(true); setLoaded(true); return; }
+      setLoadError(false);
+      setOfflineData(true);
+      setClients(snap.v);
+      setActiveId(snap.v[0].id);
+      setLoaded(true);
+      return;
+    }
     setLoadError(false);
+    setOfflineData(false);
     setClients(list || []);
     if (list && list.length) setActiveId(list[0].id);
     setLoaded(true);
@@ -5751,12 +5837,22 @@ function MainApp({ userId, onSignOut }) {
     const requestedId = activeId;
     if (!background) setClientLoadError(false);
     {
-      const c = await getClient(userId, activeId, background ? { quiet: true } : undefined);
+      const fetched = await getClient(userId, activeId, background ? { quiet: true } : undefined);
       if (activeIdRef.current !== requestedId) return;
       // A poll that fails is a poll that fails. Only a read the athlete is
       // actually waiting on earns the full-screen connection error — otherwise
       // one bad tick on gym wifi wipes out the session they are mid-way through.
-      if (c === LOAD_FAILED) { if (!background) setClientLoadError(true); return; }
+      // And before any error, try this device's own copy.
+      let c = fetched;
+      let fromMirror = false;
+      if (fetched === LOAD_FAILED) {
+        if (background) return;
+        const snap = snapRead(userId, clientKey(requestedId));
+        if (!snap || !snap.v) { setClientLoadError(true); return; }
+        c = snap.v;
+        fromMirror = true;
+      }
+      setOfflineData(fromMirror);
       const linkPaid = await fetchPaidFlag(userId);
       if (activeIdRef.current !== requestedId) return;
       let healedReadiness = false;
@@ -5765,10 +5861,21 @@ function MainApp({ userId, onSignOut }) {
         // client_links row read above, in a column only the coach may write.
         // Paid is true when that column came back true, and in no other
         // circumstance: not because the record says so (the athlete can write
-        // their record), not because the row is missing, and not because the
-        // read failed. Anything short of a yes leaves the wall up until the
-        // coach marks them paid in the dashboard.
-        c.paid = linkPaid === true;
+        // their record), and not because the row is missing. Anything short of
+        // a yes leaves the wall up until the coach marks them paid.
+        //
+        // The one exception is a read that could not complete at all, where the
+        // answer falls back to the last one the server gave. That cannot be used
+        // to get in: a cached yes only exists if the server once said yes, so
+        // somebody who has never been marked paid has nothing to fall back to.
+        // What it does mean is that an athlete who was paid keeps their program
+        // in a gym with no signal, and that one who is later un-marked keeps it
+        // until the next read succeeds. Offline was never the enforcement point.
+        const paidSnap = snapRead(userId, PAID_SNAP_KEY);
+        c.paid = resolvePaid(linkPaid, paidSnap ? paidSnap.v : undefined);
+        // Only a real answer is worth remembering. Caching the result of a
+        // failed read would turn one bad tick into a stored verdict.
+        if (linkPaid === true || linkPaid === false) snapWrite(userId, PAID_SNAP_KEY, linkPaid === true);
         if (!c.bodyweightLog) c.bodyweightLog = [];
         if (!c.mobilityLogs) c.mobilityLogs = [];
         if (!c.prLog) c.prLog = [];
@@ -5788,6 +5895,7 @@ function MainApp({ userId, onSignOut }) {
         if (!c.bjjNotes) c.bjjNotes = [];
         if (!c.bjjFocus) c.bjjFocus = [];
         if (!c.rulesProgress) c.rulesProgress = emptyRulesProgress();
+        if (c.leaderboardOptOut === undefined) c.leaderboardOptOut = false;
         if (!c.program) {
           // Nothing sensible to render without a program, and silently throwing
           // here used to leave the app on a spinner with no way out.
@@ -5878,7 +5986,10 @@ function MainApp({ userId, onSignOut }) {
     const previous = clientRef.current;
     setClientState(updated);
     const res = await persistClientRecord(userId, updated);
+    setPendingWrites(pendingWriteCount(userId));
     if (res && res.ok === false) {
+      // The screen goes back, but the value is already queued on this device —
+      // so the athlete's set is not lost, it is just not on the server yet.
       if (previous) setClientState(previous);
       return res;
     }
@@ -5887,6 +5998,31 @@ function MainApp({ userId, onSignOut }) {
     if (res && res.record && res.record !== updated) setClientState(res.record);
     return res;
   }, [userId]);
+  // Anything that failed to save is replayed here: once on load, whenever the
+  // browser says the connection is back, and on a slow tick for the case where
+  // the network returns without an event (switching from a dead gym wifi to
+  // cellular often does exactly that). Queued writes survive the app being
+  // closed, so this also picks up a session logged in a gym and then put in a
+  // pocket until the drive home.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let dead = false;
+    const run = async () => {
+      const n = await flushPendingWrites(userId);
+      if (dead) return;
+      setPendingWrites(pendingWriteCount(userId));
+      if (n > 0) {
+        setOfflineData(false);
+        emitToast({ kind: "info", message: `${n} saved change${n === 1 ? "" : "s"} synced.`, autoDismissMs: 4000 });
+      }
+    };
+    run();
+    const onUp = () => run();
+    window.addEventListener("online", onUp);
+    const tick = setInterval(() => { if (typeof navigator === "undefined" || navigator.onLine !== false) run(); }, 60000);
+    return () => { dead = true; window.removeEventListener("online", onUp); clearInterval(tick); };
+  }, [userId]);
+
   // Holds the newest Personal Record list across taps that fire faster than a
   // re-render. Reset whenever the active athlete changes.
   const prLogRef = useRef(null);
@@ -5920,6 +6056,21 @@ function MainApp({ userId, onSignOut }) {
     if (!listSaved || listSaved.ok === false) return;
     setClients(list);
     setActiveId(id);
+  };
+  // The athlete's own delete. Everything the app holds comes out: training
+  // records, settings, community prefs, their standing, their posts and
+  // reactions, and the link that put them on the coach's dashboard. The login
+  // itself needs a server-side key the browser must never hold, so they are
+  // signed out and a later sign-in lands on a fresh signup with nothing on it.
+  const deleteOwnAccount = async () => {
+    const res = await deleteAthleteCompletely(userId);
+    if (!res || res.ok === false) return res || { ok: false };
+    // Both halves here: nothing of theirs stays on the device, and no queued
+    // write can resurrect a record they asked to have deleted.
+    snapClearAll(userId);
+    queueRead().filter((x) => x.userId === userId).forEach((x) => queueDrop(userId, x.key));
+    await onSignOut();
+    return { ok: true };
   };
   const resetAppData = async () => {
     for (const c of clients) await deleteClientStorage(userId, c.id);
@@ -6038,7 +6189,7 @@ function MainApp({ userId, onSignOut }) {
   return (
     <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
       {!logging && <UpdateBanner />}
-      <OfflineBanner />
+      <OfflineBanner usingSaved={offlineData} pending={pendingWrites} />
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
       <div className="scroll-area">
         {tab === "today" && (
@@ -6066,7 +6217,7 @@ function MainApp({ userId, onSignOut }) {
       </div>
       <BottomNav tab={tab} setTab={setTab} tabs={visibleTabs} unread={communityUnread} />
       <ToastHost />
-      {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onSignOut={onSignOut} />}
+      {showSettings && <SettingsModal client={client} isCoach={isCoach} onPersist={persistClient} theme={theme} onChangeTheme={changeTheme} onClose={() => setShowSettings(false)} onResetApp={resetAppData} onRefreshProgram={refreshProgramTemplate} onOpenCoachDashboard={() => { setShowSettings(false); setShowCoachDashboard(true); }} onOpenTerms={() => { setShowSettings(false); setShowTerms(true); }} onDeleteAccount={deleteOwnAccount} onSignOut={onSignOut} />}
       {showCoachDashboard && isCoach && <CoachDashboard userId={userId} isCoach={isCoach} clients={clients} activeId={activeId} onPersistActive={persistClient} onSignupsReviewed={refreshNewSignups} onClose={() => setShowCoachDashboard(false)} />}
       {showPayment && <PaymentModal userId={userId} onClose={() => setShowPayment(false)} />}
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -7088,8 +7239,11 @@ function SettingsSection({ title, defaultOpen = false, children }) {
     </details>
   );
 }
-function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut }) {
+function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut, onDeleteAccount }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteTyped, setDeleteTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [showWaiverCopy, setShowWaiverCopy] = useState(false);
   const [showSafetyCopy, setShowSafetyCopy] = useState(false);
   const [confirmingRefresh, setConfirmingRefresh] = useState(false);
@@ -7299,6 +7453,20 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
           <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
         </>
       )}
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Leaderboard</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        The board shows your first name and last initial, the total weight you have moved, and
+        that total relative to your bodyweight — which is the only fair way to rank a 135 lb
+        athlete against a 220 lb one. Your actual bodyweight is never published, and nothing
+        about your training is reachable from it. Turn this off and your row is removed.
+      </p>
+      <button type="button" role="switch" aria-checked={!client?.leaderboardOptOut}
+        className={`checkin-switch ${client?.leaderboardOptOut ? "" : "on"}`}
+        onClick={() => onPersist({ ...client, leaderboardOptOut: !client?.leaderboardOptOut })}>
+        <span className="checkin-switch-box">{client?.leaderboardOptOut ? null : <Check size={12} strokeWidth={3} />}</span>
+        <span>Show me on the leaderboard</span>
+      </button>
+
       <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
       {showSafetyCopy && <SafetyScreenModal onClose={() => setShowSafetyCopy(false)} />}
       <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
@@ -7436,6 +7604,40 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         <>
           <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Account</h3>
           <button className="btn-ghost wide" onClick={onSignOut}><LogOut size={15} style={{ marginRight: 6, verticalAlign: -2 }} />Sign Out</button>
+        </>
+      )}
+
+      {onDeleteAccount && !isCoach && (
+        <>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Delete your account and data</h3>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            This removes everything: every session, record, check-in and mat note, your
+            leaderboard row, your posts and reactions in the group, and your place on the
+            coach's list. It cannot be undone and there is no copy kept — export your data
+            first if you want to keep it.
+          </p>
+          {!confirmingDelete ? (
+            <button className="btn-ghost wide" style={{ borderColor: "var(--red)", color: "var(--red)" }}
+              onClick={() => { setConfirmingDelete(true); setDeleteTyped(""); }}>
+              Delete my account and data
+            </button>
+          ) : (
+            <div className="adjust-box" style={{ borderColor: "var(--red)" }}>
+              Type DELETE to confirm. Everything above goes, permanently.
+              <input className="labeled-input" style={{ marginTop: 10 }} value={deleteTyped}
+                onChange={(e) => setDeleteTyped(e.target.value)} aria-label="Type DELETE to confirm"
+                autoComplete="off" spellCheck={false} />
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+                  disabled={deleteTyped.trim().toUpperCase() !== "DELETE" || deleting}
+                  onClick={async () => { setDeleting(true); const r = await onDeleteAccount(); if (!r || r.ok === false) setDeleting(false); }}>
+                  {deleting ? "Deleting…" : "Delete everything"}
+                </button>
+                <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+                  disabled={deleting} onClick={() => { setConfirmingDelete(false); setDeleteTyped(""); }}>Cancel</button>
+              </div>
+            </div>
+          )}
         </>
       )}
       </SettingsSection>
@@ -8049,6 +8251,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const [viewIndex, setViewIndex] = useState(client.sessionsCompleted || 0);
   const [showPreview, setShowPreview] = useState(false);
   const [showJumpPicker, setShowJumpPicker] = useState(false);
+  // The jump confirmation was the one window.confirm left in the app. In an
+  // installed copy that renders as browser chrome with the origin in it, which
+  // reads like something went wrong, and it walks straight past the focus
+  // handling every other dialog here does properly.
+  const [pendingJump, setPendingJump] = useState(null);
   const [showMentalLibrary, setShowMentalLibrary] = useState(false);
   const todaysMentalTip = useMemo(() => mentalTipForDate(todayStr()), []);
   useEffect(() => { setViewIndex(client.sessionsCompleted || 0); }, [client.sessionsCompleted, client.id]);
@@ -8167,7 +8374,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
           <p className="muted" style={{ marginBottom: 14 }}>
             You've finished Block {client.blockNumber || 1} of "{client.program.name}". Every workout, check-in, and Personal Record you logged is saved permanently — review Progress and Records, then start the next block whenever you're ready. Nothing gets deleted.
           </p>
-          {(client.program?.variant || "B") === "A" ? (
+          {programRotatesByBlock(client.program) ? (
             <p className="muted" style={{ marginBottom: 14 }}>
               Block {(client.blockNumber || 1) + 1} keeps the same structure but moves your Max Effort rotation forward, so Week 1 won't repeat the exact same exercises this block's Week 1 did.
             </p>
@@ -8177,7 +8384,9 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 Block {(client.blockNumber || 1) + 1} is the same twelve weeks again, and that is the design — this program progresses by load, not by swapping exercises. You go back to Week 1 stronger than you started it, and the same sets and reps now sit on heavier bars. That is what the charts and your records are for.
               </p>
               <p className="muted" style={{ marginBottom: 14 }}>
-                If you want different lifts rather than heavier ones, switch to {PROGRAM_VARIANT_LABELS.A} in Settings before you start. It rotates its main lifts every block, so no two blocks open the same way. Your logs, records and leaderboard standing carry over either way.
+                If you want different lifts rather than heavier ones, switch to{" "}
+                {(client.program?.sessionsPerWeek || 3) <= 2 ? PROGRAM_VARIANT_LABELS.C : PROGRAM_VARIANT_LABELS.A}{" "}
+                in Settings before you start. It rotates its main lifts every block, so no two blocks open the same way, and it asks for the same number of days a week as this one — nothing about your schedule has to change. Your logs, records and leaderboard standing carry over either way.
               </p>
             </>
           )}
@@ -8323,12 +8532,16 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 </div>
               ) : null}
               <p className="muted pay-after">
-                Once Kyle confirms it, this screen unlocks on its own within a minute.
+                Put your name on the payment so Kyle can match it to your account. He marks
+                payments by hand, so this is not instant — usually the same day, and at most a
+                day or two if he is away competing. The moment he confirms it, this screen
+                unlocks on its own; you do not need to do anything or stay on this page.
               </p>
               <button className="btn-ghost wide" style={{ marginTop: 0, marginBottom: paidCheckEmpty ? 6 : 10 }} disabled={checkingPaid} onClick={onCheckPaid}>{checkingPaid ? "Checking…" : "Check again"}</button>
               {paidCheckEmpty && !checkingPaid && (
                 <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-                  Not showing as paid yet. This screen keeps checking on its own.
+                  Not showing as paid yet — that is expected until Kyle has marked it, and this
+                  screen keeps checking on its own.
                   {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
                 </p>
               )}
@@ -8364,19 +8577,30 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
             Previewing Week {pos.weekNumber}, Day {pos.day.label} — this is not today's actual session.
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               <button className="link-btn" onClick={() => setViewIndex(client.sessionsCompleted || 0)}>Jump back to today</button>
-              <button className="link-btn" onClick={async () => {
-                const goingBack = viewIndex < (client.sessionsCompleted || 0);
-                // Both directions move the marker, so both ask. Forward used to
-                // be silent, which meant a curious athlete could jump to week
-                // five on their first day and skip eleven sessions by accident.
-                const question = goingBack
-                  ? "This moves you back to this day. Sessions you've already finished stay in your history, but your progress marker goes back to here. Continue?"
-                  : `This skips you forward to Week ${pos.weekNumber}, Day ${pos.day.label}. The sessions in between will be marked as passed and you will not be prompted to do them. Continue?`;
-                if (!window.confirm(question)) return;
-                await onPersist({ ...client, sessionsCompleted: viewIndex, maxSessionsReached: Math.max(client.maxSessionsReached || 0, client.sessionsCompleted || 0) });
-                setShowJumpPicker(false);
-              }}>{viewIndex < (client.sessionsCompleted || 0) ? "Go back to this day" : "Skip ahead — make this my current day"}</button>
+              {/* Both directions move the marker, so both ask. Forward used to
+                  be silent, which meant a curious athlete could jump to week
+                  five on their first day and skip eleven sessions by accident. */}
+              <button className="link-btn" onClick={() => setPendingJump({ goingBack: viewIndex < (client.sessionsCompleted || 0) })}>
+                {viewIndex < (client.sessionsCompleted || 0) ? "Go back to this day" : "Skip ahead — make this my current day"}
+              </button>
             </div>
+            {pendingJump && (
+              <div className="adjust-box" style={{ marginTop: 10, borderColor: "var(--amber)" }}>
+                {pendingJump.goingBack
+                  ? "This moves you back to this day. Sessions you have already finished stay in your history, but your progress marker goes back to here."
+                  : `This skips you forward to Week ${pos.weekNumber}, Day ${pos.day.label}. The sessions in between are marked as passed and you will not be prompted to do them.`}
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+                    onClick={async () => {
+                      await onPersist({ ...client, sessionsCompleted: viewIndex, maxSessionsReached: Math.max(client.maxSessionsReached || 0, client.sessionsCompleted || 0) });
+                      setPendingJump(null);
+                      setShowJumpPicker(false);
+                    }}>{pendingJump.goingBack ? "Move me back" : "Skip me forward"}</button>
+                  <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center" }}
+                    onClick={() => setPendingJump(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -11834,7 +12058,16 @@ export default function AppGate() {
   if (!session) return <AuthScreen />;
   return (
     <AppErrorBoundary>
-      <MainApp userId={session.user.id} onSignOut={() => supabase.auth.signOut()} />
+      <MainApp userId={session.user.id} onSignOut={async () => {
+        // The mirrored copy comes off the device on the way out, so signing out
+        // on somebody else's phone does not leave a training history on it. The
+        // pending-write queue deliberately stays: it is the athlete's own
+        // unsaved work, it is keyed to their id so nobody else's session can
+        // flush it, and discarding it here would throw away the sets they
+        // logged in a gym with no signal.
+        snapClearAll(session.user.id);
+        await supabase.auth.signOut();
+      }} />
     </AppErrorBoundary>
   );
 }

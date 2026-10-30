@@ -222,9 +222,20 @@ check("getting a review question right clears it", () => {
   if (after >= before) throw new Error(`still owed ${after} after a clean review round (was ${before})`);
 });
 
-check("a day streak is counted", () => {
+// The athlete's own calendar date. This check used to compare against
+// new Date().toISOString(), which is the UTC date — the same mistake the game
+// itself was making, so the test agreed with the bug and only passed during the
+// hours when UTC and local happen to match.
+const localToday = () => {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
+check("a day streak is counted, on the athlete's own calendar", () => {
   if (!prog.dayStreak || prog.dayStreak < 1) throw new Error("no day streak recorded after playing");
-  if (prog.lastSeen !== new Date().toISOString().slice(0, 10)) throw new Error("lastSeen not set to today");
+  if (prog.lastSeen !== localToday()) {
+    throw new Error(`lastSeen is ${prog.lastSeen}, expected the local date ${localToday()} — a UTC stamp here files evening rounds under tomorrow`);
+  }
 });
 
 check("the referee round plays and scores a card", () => {
@@ -253,6 +264,30 @@ check("the referee round plays and scores a card", () => {
   if (!/Every exchange/.test(t)) throw new Error("no exchange-by-exchange breakdown");
   if (/\[object Object\]/.test(t)) throw new Error("an object leaked into the referee result");
   console.log(`       ${exchanges} exchanges called, card compared against the real score`);
+});
+
+check("a refereed match is recorded", () => {
+  // Refereeing used to write nothing at all: onProgress was called from the
+  // quiz and nowhere else, so a whole match left no trace once you tapped Back.
+  const r = prog.ref;
+  if (!r) throw new Error("no referee record on the progress object");
+  if (!r.matches) throw new Error("the match just played was not counted");
+  if (!r.calls) throw new Error("calls were not counted");
+  if (r.callsRight > r.calls) throw new Error(`callsRight ${r.callsRight} exceeds calls ${r.calls}`);
+  if (r.cardsRight > r.matches) throw new Error(`cardsRight ${r.cardsRight} exceeds matches ${r.matches}`);
+  // And it must not have moved the quiz accuracy figure, which answers a
+  // different question.
+  if (prog.answered < prog.correct) throw new Error("referee calls leaked into the quiz tallies");
+  console.log(`       ${r.matches} match(es), ${r.callsRight}/${r.calls} calls right, ${r.cardsRight} card(s) matched`);
+});
+
+check("the referee record reaches the stats screen", () => {
+  goHome();
+  click(/Your stats/);
+  const t = txt();
+  if (!/As a referee/.test(t)) throw new Error("the referee block is missing from the stats screen");
+  if (!/Cards matched/.test(t)) throw new Error("cards-matched figure not shown");
+  click(/Back/);
 });
 
 check("matches contain exchanges that score and exchanges that do not", () => {

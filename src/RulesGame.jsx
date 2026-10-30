@@ -3,6 +3,7 @@ import { Trophy, ChevronRight, Check, X, Info, BookOpen, Zap, BarChart3, RotateC
 import { RULESETS, RULESET_IDS, COMPARE_ROWS, DISCLAIMER } from "./rules/rulesets.js";
 import { buildQuestionBank, pickQuestions, rankFor, buildMatch, sequenceWalkthrough, REF_POINT_CHOICES } from "./rules/engine.js";
 import { REQUIREMENTS, HOLD_SECONDS, SCENES } from "./rules/requirements.js";
+import { todayStr, yesterdayStr } from "./dates.js";
 
 const BANK = buildQuestionBank();
 const XP_RIGHT = 10, XP_STREAK_BONUS = 5;
@@ -18,15 +19,24 @@ export function emptyRulesProgress() {
     // Days in a row with at least one answer. lastSeen was already written on
     // every answer and never read by anything.
     dayStreak: 0, bestDayStreak: 0,
+    // Referee mode, kept apart from the quiz on purpose. Accuracy answers
+    // "how often do I know what a position is worth"; a referee's record
+    // answers "can I keep a card through a whole match". Averaging the two
+    // would leave one number meaning neither.
+    ref: { matches: 0, calls: 0, callsRight: 0, cardsRight: 0 },
   };
 }
+const EMPTY_REF = { matches: 0, calls: 0, callsRight: 0, cardsRight: 0 };
 const REVIEW_TIMES = 2;
-const todayStamp = () => new Date().toISOString().slice(0, 10);
+// The athlete's own calendar, shared with the rest of the app. This was a local
+// UTC copy, which stamped anything answered after late afternoon in the US with
+// tomorrow's date: an evening round and the next morning's round both landed on
+// the same stamp, so a streak could never count past one.
+const todayStamp = todayStr;
 function dayStreakAfter(progress) {
   const today = todayStamp();
   if (progress.lastSeen === today) return progress.dayStreak || 1;
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (progress.lastSeen === yesterday) return (progress.dayStreak || 0) + 1;
+  if (progress.lastSeen === yesterdayStr()) return (progress.dayStreak || 0) + 1;
   return 1;
 }
 const missedIds = (progress) => Object.keys(progress.missed || {});
@@ -74,6 +84,14 @@ export default function RulesGame({ progress, onProgress }) {
   const weak = useMemo(() => topicStats(p).filter((x) => x.pct < 70).map((x) => x.topic), [p]);
   const rank = rankFor(p.xp);
   const accuracy = p.answered ? Math.round((p.correct / p.answered) * 100) : 0;
+  // A day streak is live until a whole day passes without an answer. The hero
+  // used to print 0 the moment the clock turned over, directly above a nudge
+  // reading "9 days in a row" — the number contradicting the sentence under it.
+  const answeredToday = p.lastSeen === todayStamp();
+  const liveDayStreak = useMemo(() => {
+    if (!p.dayStreak) return 0;
+    return (p.lastSeen === todayStamp() || p.lastSeen === yesterdayStr()) ? p.dayStreak : 0;
+  }, [p.dayStreak, p.lastSeen]);
 
   const startQuiz = useCallback((rsId, count, difficulty, minDifficulty, opts = {}) => {
     const qs = pickQuestions(BANK, {
@@ -84,6 +102,33 @@ export default function RulesGame({ progress, onProgress }) {
     setQuiz({ qs, i: 0, picked: null, right: 0, showWhy: false, wrong: [] });
     setView("quiz");
   }, [weak, p]);
+
+  // Refereeing a whole match used to leave no trace whatsoever — onProgress was
+  // called from the quiz and nowhere else, so eight or ten calls and a scorecard
+  // comparison vanished the moment you tapped Back. Recorded on the last
+  // exchange rather than in the render of the summary, which would count the
+  // same match again on every re-render.
+  const recordMatch = useCallback((m, calls) => {
+    const right = calls.filter((c) => c.ok).length;
+    const blue = calls.reduce((n, c) => n + (c.who === "Blue" ? c.said : 0), 0);
+    const white = calls.reduce((n, c) => n + (c.who === "White" ? c.said : 0), 0);
+    const base = p.ref || EMPTY_REF;
+    const next = { ...p };
+    next.ref = {
+      matches: base.matches + 1,
+      calls: base.calls + calls.length,
+      callsRight: base.callsRight + right,
+      cardsRight: base.cardsRight + ((blue === m.finalBlue && white === m.finalWhite) ? 1 : 0),
+    };
+    // A correct call is worth the same as a correct answer. It is the same
+    // knowledge asked a harder way, and leaving it out of Rules IQ meant the
+    // rank bar ignored the mode entirely.
+    next.xp = (p.xp || 0) + right * XP_RIGHT;
+    next.dayStreak = dayStreakAfter(next);
+    next.bestDayStreak = Math.max(next.bestDayStreak || 0, next.dayStreak);
+    next.lastSeen = todayStamp();
+    onProgress(next);
+  }, [p, onProgress]);
 
   const startMatch = useCallback((rsId) => {
     const id = rsId === "all" ? "ibjjf" : rsId;
@@ -274,6 +319,15 @@ export default function RulesGame({ progress, onProgress }) {
               </div>
             );
           })}
+          {(p.ref || EMPTY_REF).matches > 0 && (
+            <div className="adjust-box" style={{ marginBottom: 12 }}>
+              {(() => {
+                const r = p.ref || EMPTY_REF;
+                const pctCalls = r.calls ? Math.round((r.callsRight / r.calls) * 100) : 0;
+                return `${r.matches} match${r.matches === 1 ? "" : "es"} refereed, ${pctCalls}% of calls right, and your card matched the real score ${r.cardsRight} time${r.cardsRight === 1 ? "" : "s"}.`;
+              })()}
+            </div>
+          )}
           <button className="btn-primary wide" onClick={() => startMatch(match.ruleset)}>Another match</button>
           <button className="btn-ghost wide" onClick={() => { setMatch(null); setView("home"); }}>Back</button>
         </div>
@@ -318,7 +372,9 @@ export default function RulesGame({ progress, onProgress }) {
             </div>
             <button className="btn-primary wide" onClick={() => {
               const call = { who: ev.who, said: picked, ok: picked === ev.points };
-              setMatch({ ...match, i: match.i + 1, picked: null, calls: [...match.calls, call] });
+              const nextCalls = [...match.calls, call];
+              if (match.i + 1 >= match.events.length) recordMatch(match, nextCalls);
+              setMatch({ ...match, i: match.i + 1, picked: null, calls: nextCalls });
             }}>{match.i + 1 >= match.events.length ? "See the card" : "Next exchange"}</button>
           </>
         )}
@@ -520,6 +576,22 @@ export default function RulesGame({ progress, onProgress }) {
           <StatChip2 label="Accuracy" value={p.answered ? `${accuracy}%` : "—"} />
           <StatChip2 label="Best streak" value={String(p.bestStreak || 0)} />
         </div>
+        {(p.ref || EMPTY_REF).matches > 0 && (
+          <Card2 title="As a referee">
+            <div className="stat-chip-row">
+              <StatChip2 label="Matches" value={String((p.ref || EMPTY_REF).matches)} />
+              <StatChip2 label="Calls right"
+                value={(p.ref || EMPTY_REF).calls ? `${Math.round(((p.ref || EMPTY_REF).callsRight / (p.ref || EMPTY_REF).calls) * 100)}%` : "—"} />
+              <StatChip2 label="Cards matched"
+                value={`${(p.ref || EMPTY_REF).cardsRight} of ${(p.ref || EMPTY_REF).matches}`} />
+            </div>
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0 }}>
+              Calls right counts every exchange you scored correctly. Cards matched is how often your
+              final score agreed with the real one — the harder of the two, because one missed call
+              carries all the way to the end of the match.
+            </p>
+          </Card2>
+        )}
         <Card2 title="By area">
           {stats.length === 0 ? <p className="muted">Answer a few rounds and your weak areas show up here.</p>
             : stats.map((x) => (
@@ -549,7 +621,7 @@ export default function RulesGame({ progress, onProgress }) {
         <div className="rg-hero-stats">
           <div><strong>{p.answered ? `${accuracy}%` : "—"}</strong><span>accuracy</span></div>
           <div><strong>{p.bestStreak || 0}</strong><span>best run</span></div>
-          <div><strong>{p.lastSeen === todayStamp() ? (p.dayStreak || 1) : 0}</strong><span>day streak</span></div>
+          <div><strong>{liveDayStreak}</strong><span>day streak</span></div>
         </div>
       </div>
 
@@ -560,10 +632,10 @@ export default function RulesGame({ progress, onProgress }) {
         ))}
       </div>
 
-      {p.lastSeen !== todayStamp() && (p.dayStreak || 0) > 0 && (
+      {liveDayStreak > 0 && !answeredToday && (
         <div className="rg-streak-nudge">
           <Flame size={14} />
-          <span>{p.dayStreak} day{p.dayStreak === 1 ? "" : "s"} in a row. One round today keeps it.</span>
+          <span>{liveDayStreak} day{liveDayStreak === 1 ? "" : "s"} in a row. One round today keeps it.</span>
         </div>
       )}
 
