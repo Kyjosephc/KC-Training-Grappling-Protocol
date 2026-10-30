@@ -8,7 +8,7 @@
     <!-- Per scheme, so the status-bar area is not black behind a light app. The
          values are the --bg tokens from the two themes in App.jsx. -->
     <meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1b1c20" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-title" content="Strength Matrix" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -26,7 +26,7 @@
          that first frame instead; the app takes over from there. */
       html, body, #root { margin: 0; padding: 0; height: 100%; background: #eceef1; }
       @media (prefers-color-scheme: dark) {
-        html, body, #root { background: #1b1c20; }
+        html, body, #root { background: #000000; }
       }
     </style>
   </head>
