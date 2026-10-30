@@ -18,6 +18,8 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
 // Handles get typed with and without their sigil, and with stray spaces. Take
 // whatever is in the variable and produce a URL that works either way.
+const venmoHandle = (h) => `@${String(h || "").trim().replace(/^@/, "")}`;
+const cashAppTag = (h) => `$${String(h || "").trim().replace(/^\$/, "")}`;
 function venmoUrl(handle) {
   const h = String(handle || "").trim().replace(/^@+/, "");
   return h ? `https://venmo.com/u/${encodeURIComponent(h)}` : "";
@@ -2379,16 +2381,15 @@ const rpeProgramCues = {
   "Assault Bike, Treadmill, or Outdoor — Aerobic Base (Zone 2)": "This should feel genuinely easy the whole way through — the test is that you could hold a conversation without gasping. If you can only manage short sentences, slow down. It is meant to feel almost boring, and that is correct.",
   "Band Pull-Apart": "Arms straight, pull the band apart until it touches your chest, shoulder blades together at the end. Keep the ribs down and do not shrug. Light band, slow return.",
   "Banded Clamshell": "Side lying, heels together, knees open against the band. Do not let the hips roll backwards to get more range — if the top hip rotates back, stop and reset.",
-  "Banded Face Pulls": "Pull toward the bridge of your nose with the elbows high and finish with the hands beside your ears. Think about rotating the shoulders back at the end rather than just pulling.",
   "Banded Single Leg Single Arm Row": "Standing on one leg, rowing with the opposite arm. The challenge is keeping the hips square while one side pulls. Slow and controlled — if you are hopping to stay up, drop the load.",
   "Banded Terminal Knee Extension": "Band behind the knee pulling it forward, you push the knee back until the leg is straight and squeeze the quad at the top. Small range, slow. This is for the tissue around the knee, not a leg exercise — keep it light.",
   "Bent Over Barbell Row": "Chest down near parallel and hold that position for the whole set — the moment your torso rises, the set is over. Pull to the bottom of the ribs. Reset the brace between reps.",
   "Bent Over Single Arm Dumbbell Row": "Chest low, back flat, pull the dumbbell to the hip rather than the armpit. Do not let the shoulder rotate open as you pull. One side at a time with the free hand braced.",
-  "Cable Face Pull": "Elbows high, pull to the face and externally rotate at the end so the knuckles end up beside your ears. Light. This is shoulder health, so never let it turn into a heavy row.",
+  "Cable Face Pull": "A cable or a band, whichever the gym has. Elbows high, pull toward the bridge of your nose and externally rotate at the end so the knuckles finish beside your ears. Light — this is shoulder health, so never let it turn into a heavy row.",
   "Cable Lat Row": "Pull to the bottom of the ribs with the elbow close to the body, hold for a beat, and let it stretch out at the front under control. No leaning back to move more weight.",
   "Dumbbell Glute Bridge Floor Press": "Hips up and held there the whole set, ribs down. Upper arms stop when the triceps touch the floor, pause for a beat, then press. The bridge is what keeps your lower back out of it.",
   "Five-Ten-Five Pro Agility Shuttle": "Five yards one way, ten back, five home, touching the line each time. Get the hips low into the turn rather than rounding it. Never run this cold and stop the set the moment the changes of direction get sloppy.",
-  "Front-Foot-Elevated Split Squat (dumbbells)": "Front foot on a low plate so the front hip gets more range. Shin stays vertical, back knee travels down rather than forward. Control the way down.",
+  "Front-Foot-Elevated Split Squat (each side)": "Front foot on a low plate so the front hip gets more range. Shin stays vertical, back knee travels down rather than forward. Control the way down.",
   "Glute Hip Thrust with Medicine Ball": "Upper back on the bench, chin tucked, drive through the heels and squeeze the glutes at the top. Ribs down — do not finish the rep by arching the lower back.",
   "Half-Kneeling Landmine Press Hold (each side)": "Half-kneeling with the glute of the back leg switched on. Press out and hold — the trunk stops you leaning away from the load. If you have to lean to hold it, go lighter.",
   "Hanging Leg Raise": "Hang still before the first rep so you are not swinging. Lift with the lower abs and lower slowly — the lowering half is where this is earned. Bend the knees if the back starts to arch.",
@@ -2769,7 +2770,7 @@ const conjugateProgram = {
             { id: uid(), type: "strength", name: "Main Strength", exercises: [
               meLowerBlock(),
               ex({ name: "Barbell Romanian Deadlift", sets: 4, reps: "6", load: "heavier than the base block — still leave reps in the tank", rir: 3, rest: "90 seconds", tempo: "3/0/1", purpose: "Eccentric-biased posterior chain strength. This program prescribes maximal sprinting every week, and sprinting is where hamstrings tear — loading the hamstring long and slow under control is well-supported protection against that, and it also balances the knee-dominant accessory work on this day.", cues: "Push the hips back, keep the bar close to the legs, and take a full three seconds to lower. Stop the rep the moment your lower back rounds — the range comes from the hips, not the spine. The lowering half is the point; don't rush it to get more reps.", quality: "Posterior Chain" }),
-              ex({ name: "Front-Foot-Elevated Split Squat (dumbbells)", sets: 3, reps: "6 per leg", load: "moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — a different single-leg loading angle than the base phase to keep the movement fresh while still training the pattern a sprawl or single-leg takedown defense relies on", quality: "Accessory" }),
+              ex({ name: "Front-Foot-Elevated Split Squat (each side)", sets: 3, reps: "6 each side", load: "dumbbells, moderate to heavy", rir: 2, rest: "90 seconds", purpose: "Unilateral knee-dominant strength — a different single-leg loading angle than the base phase to keep the movement fresh while still training the pattern a sprawl or single-leg takedown defense relies on", quality: "Accessory" }),
             ]},
             { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
               ex({ name: "Heavy Farmer Carry", sets: 3, reps: "20 meters", load: "heavier", rir: 1, rest: "2 minutes", purpose: "Grip and trunk under near-maximal load", quality: "Grip/Trunk" }),
@@ -3014,14 +3015,72 @@ function armSuperset(num, sets) {
       quality: "Arms" }),
   ];
 }
+// Why each movement is in a grappler's week, not how to do it — the cues map
+// above covers that. Programs A, C and D carry a purpose on every exercise;
+// Program B carried one on fourteen of sixty-two, which mattered because B is
+// what an athlete gets if they tap through signup without choosing. Keyed by
+// name and read by ssPair and ssSingle, so a movement cannot reach the program
+// without its reason.
+const rpeProgramPurpose = {
+  "Back Squat": "Bilateral knee-dominant strength, the base the rest of the program is built on. The strongest position you own on your feet is what a shot, a sprawl and standing up with somebody hanging on you all draw from.",
+  "Front Squat": "The bar in front forces the torso upright and the trunk braced. That posture is a stack defence — the position is harder to hold than the weight is to lift, which is the point.",
+  "Zercher Squat": "The bar in the crooks of the elbows makes an upright torso and a locked trunk the only way to stand up. That is the shape you hold when somebody is riding your back or stacking you.",
+  "Bulgarian Split Squat (rear foot elevated, dumbbells)": "Single-leg strength through a long hip range. Harder than it looks for the load on the bar, which is why the numbers here stay honest.",
+  "Trap Bar Deadlift": "The heaviest full-body pull in the program. Handles beside you rather than in front keeps the lower back out of a bad position at loads this high.",
+  "Split Stance Trap Bar Deadlift": "Heavy pulling from a staggered stance, so one hip takes more than the other. Nothing in a scramble happens square.",
+  "Single Leg Romanian Deadlift": "A hinge on one leg, which is balance and hamstring in the same set. Every scramble ends up on one foot at some point.",
+  "Split Stance Romanian Deadlift": "The hinge with the feet offset — the shape a hinge actually takes when you are pulling somebody while moving.",
+  "Bench Press": "Horizontal pressing strength: every frame, every post, every time you make space from underneath. The barbell is here because it loads heavier than anything you can do one arm at a time.",
+  "Incline Bench Press": "Pressing on an upward angle, covering the shoulder range between a flat bench and an overhead press so neither end is the only one trained.",
+  "Incline Close Grip Bench Press": "Elbows in rather than wide, which loads the triceps and keeps the shoulder in a safer slot — worth having in a week that already spends a lot of time at end range.",
+  "Weighted Push-Ups": "Pressing with the shoulder blade free to move, unlike a bench. That is the version that matches posting and framing from the bottom.",
+  "Standing Barbell Overhead Press": "The pattern a pull-dominant week leaves out, and a shoulder does not stay healthy on pulling alone. It is also the shape of every frame you hold above you.",
+  "Offset Single Arm Dumbbell Press": "Pressing one arm with the load off-centre, so the trunk fights a bend while the shoulder works. No press in a scramble is ever even.",
+  "Landmine Punch Press": "Pressing on an arc with rotation through the hip — a frame and a shove rather than a bench press. One side at a time, because that is how it happens.",
+  "Dumbbell Glute Bridge Floor Press": "Pressing and hip extension at once, with the floor stopping the elbow before it travels too far. That limit is the point for a shoulder that lives at end range all week.",
+  "Single Leg Glute Bridge Dumbbell Floor Press": "Hip extension on one leg while pressing on the other side, so the trunk has to stop the whole thing twisting. That is a bridge with somebody on you.",
+  "Weighted Pull-Up": "Vertical pulling with load, the closest a gym gets to climbing somebody's back. Relative strength on a pull-up moves with bodyweight, so this is the lift that says whether you got stronger or just heavier.",
+  "Pull-Up Hold": "The top of a pull-up held still is grip, lat and elbow with nowhere to hide. It is a gi grip in the shape it actually happens.",
+  "Bent Over Barbell Row": "Heavy horizontal pulling with the hinge held throughout, which is the posture of a bodylock and of a sprawl you are trying to keep.",
+  "Bent Over Single Arm Dumbbell Row": "One side at a time, so the stronger side cannot carry the weaker one. Rowing from a hinge is the same shape as pulling a sleeve while your hips stay back.",
+  "Seal Row": "Chest on the bench takes the lower back and the legs out of it, so the row is only the back. Useful on a day the hinge pattern has already been loaded.",
+  "Incline Chest-Supported Dumbbell Row": "Rowing with the chest supported so nothing but the back works, on an angle that reaches the upper back harder than a flat row.",
+  "Cable Lat Row": "Horizontal pulling without a hinge to fatigue, so the back gets its volume on a day the lower back is already spent.",
+  "Renegade Row": "Rowing from a plank, so the trunk resists rotation while one arm pulls. That is the top of a scramble, more or less exactly.",
+  "Banded Single Leg Single Arm Row": "One leg and the opposite arm. That cross-body pattern is how force actually travels when you pull somebody while standing on one foot.",
+  "Cable Face Pull": "Rear delts and the muscles that hold the shoulder blade down and back. Grappling spends all day pulling the shoulders forward — gripping, framing, posting — and this is what pulls them back.",
+  "Band Pull-Apart": "Rear delts and mid-back between pressing sets. The smallest useful dose of the thing a grappling week undoes constantly.",
+  "Weighted Scarecrows": "External rotation under control at a range the shoulder rarely gets loaded in. Slow on purpose — this is maintenance, not a lift to chase.",
+  "Supine Y, T, W": "Shoulder blade control against gravity with nothing to cheat with. Three positions because the blade has to move three ways.",
+  "Prone Bench Y, T, W's": "The same three positions with gravity pulling the other way, so the mid-back works at full range without the lower back helping.",
+  "Scapular Push-Up": "The shoulder blade only, no elbow. It trains the muscle that holds the blade flat to the ribs, which is what keeps a shoulder healthy under everything else in this program.",
+  "Side Plank": "Lateral trunk under a long lever, which is what holds your frame when somebody is crossing your body to pass. A hold rather than a rep, because that is how it is used.",
+  "Weighted Plank": "Anti-extension with load on your back. Holding a hollow trunk while somebody drives into you is the whole job of the position.",
+  "Heavy Pallof Press Hold (each side)": "Resisting a turn you are not making. That is what keeps you square when somebody is trying to spin you, and it is trained as a hold because it is never a rep.",
+  "Toes to Bar": "Hanging flexion, which is the shape of a guard recovery and of an inversion. Your grip pays for it on the way, which is the other half.",
+  "Medicine Ball Abdominal Extension": "Trunk flexion thrown rather than crunched, so the fast end of the trunk gets trained and not only the strong end.",
+  "Glute Hip Thrust with Medicine Ball": "Hip extension at the very top of the range, which is a bridge. The ball between the knees keeps them from falling apart and turning it into something else.",
+  "Supine Hamstring Single Leg Glute Bridge (ball or slides)": "Hamstring at long range with the knee bending, which is the half a squat and a deadlift never reach. It is also the tissue that holds the knee together when a leg gets attacked.",
+  "Valslide Hamstring Curls": "Hamstring with the knee bending under an eccentric you control. The slide lets the load come off at the bottom rather than pulling at the knee.",
+  "Banded Terminal Knee Extension": "The last few degrees of knee extension, where the quad is weakest and where knees get hurt. Cheap insurance for the joint that takes the most in a scramble.",
+  "Banded Clamshell": "Glute medius, which holds the hip square when you are on one leg or defending from the bottom. Small, and it stops being small the week it is missing.",
+  "Hip Adduction Machine": "Adductor strain is the most common soft-tissue injury in grappling, and the adductor works every time you retain guard or stop a pass. Loaded directly here rather than left to the mat to train.",
+  "Copenhagen Plank (each side)": "The adductor under a long lever, held. Same reason as the machine and a different angle, and it needs no equipment when the gym is busy.",
+  "6-Way Isometric Neck Holds": "The neck takes load every round — in guard, in a scramble, under somebody's pressure. Isometric work builds it with no movement through the joint, which is why it can be trained this often.",
+  "Wall Neck Hold (feet walked out)": "The same work with bodyweight as the load. This is the version that still happens when there is no partner and no machine free.",
+  "Suitcase Carry (each side)": "Grip, trunk and a loaded walk on one side. Carrying something that is trying to tip you over is the same demand as holding position while somebody bridges.",
+  "Single Arm Kettlebell Hold": "Standing still with a load on one side. Grip and trunk, and the simplest way to train the side that quits first.",
+  "Trap Bar Static Hold (Quarter Squat)": "Standing under more weight than you can pull. It builds the ability to hold a position under load, which is most of what posture and grip actually are.",
+};
+
 function ssPair(num, aName, aPre, bName, bPre) {
   return [
-    ex({ name: aName, supersetLabel: `${num}A`, rpeWave: true, cues: aPre.cues || rpeProgramCues[aName] || "", load: aPre.load || "", sets: aPre.sets, reps: aPre.reps, tempo: aPre.tempo || "", rir: 10 - aPre.rpe, rest: "as needed between the paired exercises, 2 to 3 minutes after both are done", quality: "Strength", pct1rmFlat: takesPercentTarget(aName, aPre.reps) ? pctFromRpeReps(aPre.rpe, aPre.reps) : null }),
-    ex({ name: bName, supersetLabel: `${num}B`, cues: bPre.cues || rpeProgramCues[bName] || "", load: bPre.load || "", sets: bPre.sets, reps: bPre.reps, tempo: bPre.tempo || "", rir: 10 - bPre.rpe, rest: "moves straight into the next superset round", quality: "Accessory", pct1rmFlat: takesPercentTarget(bName, bPre.reps) ? pctFromRpeReps(bPre.rpe, bPre.reps) : null }),
+    ex({ name: aName, supersetLabel: `${num}A`, rpeWave: true, cues: aPre.cues || rpeProgramCues[aName] || "", purpose: aPre.purpose || rpeProgramPurpose[aName] || "", load: aPre.load || "", sets: aPre.sets, reps: aPre.reps, tempo: aPre.tempo || "", rir: 10 - aPre.rpe, rest: "as needed between the paired exercises, 2 to 3 minutes after both are done", quality: "Strength", pct1rmFlat: takesPercentTarget(aName, aPre.reps) ? pctFromRpeReps(aPre.rpe, aPre.reps) : null }),
+    ex({ name: bName, supersetLabel: `${num}B`, cues: bPre.cues || rpeProgramCues[bName] || "", purpose: bPre.purpose || rpeProgramPurpose[bName] || "", load: bPre.load || "", sets: bPre.sets, reps: bPre.reps, tempo: bPre.tempo || "", rir: 10 - bPre.rpe, rest: "moves straight into the next superset round", quality: "Accessory", pct1rmFlat: takesPercentTarget(bName, bPre.reps) ? pctFromRpeReps(bPre.rpe, bPre.reps) : null }),
   ];
 }
 function ssSingle(num, name, pre, quality) {
-  return ex({ name, supersetLabel: String(num), rpeWave: (quality || "Strength") === "Strength", cues: pre.cues || rpeProgramCues[name] || "", load: pre.load || "", sets: pre.sets, reps: pre.reps, tempo: pre.tempo || "", rir: 10 - pre.rpe, rest: "90 seconds to 2 minutes", quality: quality || "Strength", pct1rmFlat: takesPercentTarget(name, pre.reps) ? pctFromRpeReps(pre.rpe, pre.reps) : null });
+  return ex({ name, supersetLabel: String(num), rpeWave: (quality || "Strength") === "Strength", cues: pre.cues || rpeProgramCues[name] || "", purpose: pre.purpose || rpeProgramPurpose[name] || "", load: pre.load || "", sets: pre.sets, reps: pre.reps, tempo: pre.tempo || "", rir: 10 - pre.rpe, rest: "90 seconds to 2 minutes", quality: quality || "Strength", pct1rmFlat: takesPercentTarget(name, pre.reps) ? pctFromRpeReps(pre.rpe, pre.reps) : null });
 }
 
 function buildProgramCPhase(nameLabel, weekStart, weekEnd, objective, dayDefs) {
@@ -3050,7 +3109,7 @@ function buildProgramCContent() {
       { name: "Zercher & Overhead — Grip & Trunk", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Zercher Squat", { sets: 4, reps: "6", tempo: "1/2/X", rpe: 8 }, "Supine Hamstring Single Leg Glute Bridge (ball or slides)", { sets: 4, reps: "8 each side", tempo: "2/0/X", rpe: 8 }),
-          ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
+          ...ssPair(2, "Standing Barbell Overhead Press", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Cable Face Pull", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 7 }),
           ...ssPair(3, "Weighted Pull-Up", { sets: 3, reps: "8", tempo: "1/2/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "3/1/X", rpe: 7 }),
           ssSingle(4, "Weighted Plank", { sets: 2, reps: "1 minute", rpe: 8 }, "Trunk"),
           ...armSuperset(5, 2),
@@ -3087,7 +3146,7 @@ function buildProgramCContent() {
       { name: "Front Squat & Landmine Press", intent: "Front squat and landmine press pattern.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Front Squat", { sets: 4, reps: "5", tempo: "2/0/X", rpe: 8 }, "Banded Terminal Knee Extension", { sets: 4, reps: "10 each side", tempo: "2/2/2", rpe: 7 }),
-          ...ssPair(2, "Landmine Punch Press", { sets: 3, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Banded Face Pulls", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
+          ...ssPair(2, "Landmine Punch Press", { sets: 3, reps: "6 each side", tempo: "2/0/X", rpe: 8 }, "Cable Face Pull", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Bent Over Barbell Row", { sets: 3, reps: "6", tempo: "2/1/X", rpe: 8 }, "Prone Bench Y, T, W's", { sets: 3, reps: "5 each way", rpe: 7 }),
           ssSingle(4, "Toes to Bar", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 8 }, "Trunk"),
         ]},
@@ -3259,6 +3318,34 @@ function defaultWarmup() {
 // Segments pulled from the cool-down. Each client carries their own copy of the
 // program, so dropping one from the default is not enough on its own — these are
 // filtered out on load as well.
+// Two movements shipped under two names each. History is matched on the exact
+// string, so simply renaming them in the programs would strand every set an
+// athlete had already logged. This carries those logs across, once, on load.
+const RENAMED_EXERCISES = {
+  "Banded Face Pulls": "Cable Face Pull",
+  "Front-Foot-Elevated Split Squat (dumbbells)": "Front-Foot-Elevated Split Squat (each side)",
+};
+// Returns true when something actually changed, so a client whose logs are
+// already clean is not rewritten on every single load.
+function healRenamedExercises(c) {
+  let changed = false;
+  (c.logs || []).forEach((log) => {
+    (log.exercises || []).forEach((e) => {
+      const to = e && RENAMED_EXERCISES[e.name];
+      if (to) { e.name = to; changed = true; }
+    });
+  });
+  (c.prLog || []).forEach((p) => {
+    const to = p && RENAMED_EXERCISES[p.exerciseName];
+    if (to) { p.exerciseName = to; changed = true; }
+  });
+  (c.excludedExercises || []).forEach((name, i) => {
+    const to = RENAMED_EXERCISES[name];
+    if (to) { c.excludedExercises[i] = to; changed = true; }
+  });
+  return changed;
+}
+
 const RETIRED_MOBILITY = new Set(["neck mobility flow", "closing body scan"]);
 
 function defaultMobility() {
@@ -5971,6 +6058,9 @@ function MainApp({ userId, onSignOut }) {
         // stored data forever. Repair any of those on load, and any pool entries
         // that are missing a name, using the current default pools as reference.
         let healed = healedReadiness;
+        // Two exercises used to ship under two names each. Carry any sets
+        // logged under the old ones across so the history is not stranded.
+        if (healRenamedExercises(c)) healed = true;
         // Weekly schedule used to be free-typed text per day; it's now a set of
         // fixed activity chips per day (an array). A schedule saved in the old
         // text format can't be mapped onto the new chips automatically, so it
@@ -7547,14 +7637,20 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
       <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
       <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
-      {SUPPORT_EMAIL && (
-        <>
-          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Contact</h3>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
-          </p>
-          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
-        </>
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Contact</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
+      </p>
+      {SUPPORT_EMAIL ? (
+        <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
+      ) : (coachVenmo || coachCashApp) ? (
+        <p className="muted" style={{ marginBottom: 10 }}>
+          Message him on the same {coachVenmo && coachCashApp ? "Venmo or Cash App" : coachVenmo ? "Venmo" : "Cash App"} account
+          you paid through — {[coachVenmo && `Venmo ${venmoHandle(coachVenmo)}`, coachCashApp && `Cash App ${cashAppTag(coachCashApp)}`].filter(Boolean).join(", ")}.
+          He reads those.
+        </p>
+      ) : (
+        <p className="muted" style={{ marginBottom: 10 }}>Ask him at the gym — there is no contact address set up in the app yet.</p>
       )}
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Leaderboard</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -8615,7 +8711,11 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
                 <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
                   Not showing as paid yet — that is expected until Kyle has marked it, and this
                   screen keeps checking on its own.
-                  {SUPPORT_EMAIL ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</> : null}
+                  {SUPPORT_EMAIL
+                    ? <> If you have already sent it and it has been more than a day, <a href={`mailto:${SUPPORT_EMAIL}?subject=Payment%20sent`}>email him</a>.</>
+                    : (coachVenmo || coachCashApp)
+                      ? <> If you have already sent it and it has been more than a day, message him on the same account you paid through.</>
+                      : null}
                 </p>
               )}
               <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.5, marginBottom: 0 }}>

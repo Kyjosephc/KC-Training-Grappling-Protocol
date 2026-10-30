@@ -619,10 +619,31 @@ VARIANTS.forEach((v) => {
   });
   check(`program ${v} coaches every exercise it prescribes`, () => {
     const p = A.buildProgramVariant(v);
-    const bare = [];
-    (p.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
-      (sec.exercises || []).forEach((e) => { if (e.name && !e.cues) bare.push(e.name); }))));
-    if (bare.length) throw new Error(`${bare.length} exercises with no cues, e.g. ${bare.slice(0, 3).join(", ")}`);
+    // Cues are how, purpose is why, and an exercise needs both. This used to
+    // ask for cues only, and passed while Program B prescribed forty-nine
+    // exercises that never said what they were for — in the program an athlete
+    // gets by default if they tap through signup without choosing.
+    // Resolved, not raw. A phase entry carrying a rotatingPool is a template
+    // that resolveExercise swaps out before an athlete ever sees it, so judging
+    // the raw entries flags twelve exercises in A that are never delivered and
+    // misses nothing that is. This walks what actually reaches the screen.
+    const noCues = [], noWhy = [];
+    const total = A.totalSessionsIn(p);
+    const seen = new Set();
+    for (let i = 0; i < total; i++) {
+      const pos = A.positionAtIndex(p, i);
+      if (!pos) continue;
+      A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false,
+        { blockNumber: 1, excludedExercises: [], injuryAreas: [] })
+        .forEach((sec) => (sec.exercises || []).forEach((e) => {
+          if (!e || !e.name || seen.has(e.name)) return;
+          seen.add(e.name);
+          if (!e.cues || String(e.cues).trim().length < 20) noCues.push(e.name);
+          if (!e.purpose || String(e.purpose).trim().length < 20) noWhy.push(e.name);
+        }));
+    }
+    if (noCues.length) throw new Error(`${noCues.length} with no cues, e.g. ${noCues.slice(0, 3).join(", ")}`);
+    if (noWhy.length) throw new Error(`${noWhy.length} with no purpose, e.g. ${noWhy.slice(0, 3).join(", ")}`);
   });
   check(`program ${v} is named in the switcher`, () => {
     if (!A.PROGRAM_VARIANT_LABELS[v]) throw new Error("no label, so it cannot be switched to");
@@ -698,6 +719,29 @@ check("the warm-up does not repeat the jump the session already prescribes", () 
     const clash = warm.filter((w) => primers.some((pr) => pr && w && pr.toLowerCase() === w.toLowerCase()));
     if (clash.length) throw new Error(`program ${v}: ${clash.join(", ")} is in the warm-up and prescribed again as a primer`);
   });
+});
+check("one movement, one name, across every program", () => {
+  // History is matched on the exact string, so two names for one exercise are
+  // two separate histories: a face pull logged in Program B never informed the
+  // same face pull in A, C or D, and an athlete moving from A to C lost their
+  // split squat entirely. Both of these shipped under two names each.
+  const names = new Set();
+  ["A", "B", "C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    (p.phases || []).forEach((ph) => (ph.days || []).forEach((d) => (d.sections || []).forEach((sec) =>
+      (sec.exercises || []).forEach((e) => { if (e && e.name) names.add(e.name); }))));
+    // The rotating pools too — a name can reach an athlete from there without
+    // ever appearing in a phase.
+    Object.values(p.conjugate || {}).forEach((pool) => {
+      if (Array.isArray(pool)) pool.forEach((it) => { if (it && it.name) names.add(it.name); });
+    });
+  });
+  [["Banded Face Pulls", "Cable Face Pull"],
+   ["Front-Foot-Elevated Split Squat (dumbbells)", "Front-Foot-Elevated Split Squat (each side)"]]
+    .forEach(([retired, kept]) => {
+      if (names.has(retired)) throw new Error(`"${retired}" is back — a second name for a movement that already has one`);
+      if (!names.has(kept)) throw new Error(`"${kept}" has gone missing — the rename lost the movement`);
+    });
 });
 check("no two-day session runs longer than forty-five minutes", () => {
   ["C", "D"].forEach((v) => {
