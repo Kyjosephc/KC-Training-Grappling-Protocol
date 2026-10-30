@@ -1600,7 +1600,52 @@ function generateMilestones() {
 }
 const LIFT_MILESTONES = generateMilestones();
 
-const BELT_COLORS = { White: "#d9d9d9", Grey: "#8a8d91", Yellow: "#e8c547", Orange: "#e07b39", Green: "#3f9142", Blue: "#2f6fb3", Purple: "#7c3fa8", Brown: "#7a4a24", Black: "#c81e2c" };
+// One belt map. There used to be two and they disagreed: BELT_COLORS gave a
+// black belt a red glow while BELT_EMBLEM_COLORS drew the belt itself near-black,
+// and White was #d9d9d9 in one and #f1f3f6 in the other.
+//
+// Each belt carries four values, because one hex cannot do four jobs:
+//
+//   belt     the belt body, for the emblem
+//   bar      the rank bar on the emblem
+//   fill     what tints the background and fills the progress bars. For a black
+//            belt this is the red bar — #3a3f4d on a black background is nothing
+//            at all, and the red bar is what identifies a black belt anyway.
+//   inkDark  the nearest shade of the same hue that reaches 4.5:1 on that
+//   inkLight theme's ground, for the few places the belt has to carry text.
+//            null means there is no honest answer: a white belt has no legible
+//            ink on a white ground and a yellow belt's comes out olive. Those
+//            fall back to the ordinary text colour rather than to a lie.
+//
+// Measured, not guessed. Not one belt colour clears 4.5:1 in both themes, which
+// is why --accent is never the belt colour and the belt lives in fills, rules
+// and the emblem instead.
+const BELT_THEME = {
+  White:  { belt: "#f1f3f6", bar: "#17191e", fill: "#f1f3f6", inkDark: "#f1f3f6", inkLight: null },
+  Grey:   { belt: "#9aa1aa", bar: "#17191e", fill: "#9aa1aa", inkDark: "#9aa1aa", inkLight: "#6e7782" },
+  Yellow: { belt: "#e8c33a", bar: "#17191e", fill: "#e8c33a", inkDark: "#e8c33a", inkLight: null },
+  Orange: { belt: "#e2872c", bar: "#17191e", fill: "#e2872c", inkDark: "#e2872c", inkLight: "#af6318" },
+  Green:  { belt: "#3f9d5a", bar: "#17191e", fill: "#3f9d5a", inkDark: "#3f9d5a", inkLight: "#36854c" },
+  Blue:   { belt: "#2f6fd0", bar: "#17191e", fill: "#2f6fd0", inkDark: "#3573d1", inkLight: "#2f6fd0" },
+  Purple: { belt: "#7d4cc0", bar: "#17191e", fill: "#7d4cc0", inkDark: "#8b5fc7", inkLight: "#7d4cc0" },
+  Brown:  { belt: "#6d4a2f", bar: "#17191e", fill: "#6d4a2f", inkDark: "#9d6b44", inkLight: "#6d4a2f" },
+  Black:  { belt: "#3a3f4d", bar: "#c4172a", fill: "#c81e2c", inkDark: "#df2b39", inkLight: "#c81e2c" },
+};
+const beltTheme = (level) =>
+  (Object.prototype.hasOwnProperty.call(BELT_THEME, level) ? BELT_THEME[level] : BELT_THEME.White);
+// The custom properties the whole app themes off. --belt-glow keeps its old name
+// because the top bar and the glow above the screen already read it.
+function beltVars(level, theme) {
+  const b = beltTheme(level);
+  const ink = theme === "light" ? b.inkLight : b.inkDark;
+  return {
+    "--belt": b.belt,
+    "--belt-bar": b.bar,
+    "--belt-fill": b.fill,
+    "--belt-glow": b.fill,
+    "--belt-ink": ink || "var(--text)",
+  };
+}
 
 function formatWeight(lbs) {
   if (lbs >= 1e24) return `${(lbs / 1e24).toFixed(1)} septillion pounds`;
@@ -4029,16 +4074,9 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
 // A tied jiu-jitsu belt, drawn rather than imported, so it takes the athlete's
 // own belt colour and stays sharp at any size. The rank bar is dropped below
 // about 26px, where it stops being a detail and becomes noise.
-const BELT_EMBLEM_COLORS = {
-  White: "#f1f3f6", Grey: "#9aa1aa", Yellow: "#e8c33a", Orange: "#e2872c",
-  Green: "#3f9d5a", Blue: "#2f6fd0", Purple: "#7d4cc0", Brown: "#6d4a2f", Black: "#3a3f4d",
-};
-
 function BeltEmblem({ level, size = 30, title }) {
-  const lvl = Object.prototype.hasOwnProperty.call(BELT_EMBLEM_COLORS, level) ? level : "White";
-  const fill = BELT_EMBLEM_COLORS[lvl];
-  // A black belt wears a red rank bar; every other belt wears a black one.
-  const bar = lvl === "Black" ? "#c4172a" : "#17191e";
+  const lvl = Object.prototype.hasOwnProperty.call(BELT_THEME, level) ? level : "White";
+  const { belt: fill, bar } = beltTheme(lvl);
   const stitching = size >= 34;
   const label = title === null ? undefined : (title || `${lvl} belt`);
   return (
@@ -6187,7 +6225,7 @@ function MainApp({ userId, onSignOut }) {
   }
 
   return (
-    <div className="app-shell" data-theme={theme} style={{ "--belt-glow": BELT_COLORS[client.beltLevel] || BELT_COLORS.White }}>
+    <div className="app-shell" data-theme={theme} style={beltVars(client.beltLevel, theme)}>
       {!logging && <UpdateBanner />}
       <OfflineBanner usingSaved={offlineData} pending={pendingWrites} />
       <TopBar client={client} isCoach={isCoach} newSignupCount={newSignupCount} onOpenSettings={() => setShowSettings(true)} onOpenPayment={() => setShowPayment(true)} onOpenCalculator={() => setShowCalculator(true)} onOpenDashboard={() => setShowDashboard(true)} onOpenHelp={() => setShowTutorial(true)} onOpenCoachDashboard={() => setShowCoachDashboard(true)} onOpenShare={() => setShowShare(true)} />
@@ -6202,6 +6240,7 @@ function MainApp({ userId, onSignOut }) {
         {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
         {tab === "rules" && (
           <RulesGame
+            belt={client.beltLevel}
             progress={client.rulesProgress || emptyRulesProgress()}
             onProgress={(next) => persistClient({ ...client, rulesProgress: next })} />
         )}
@@ -6984,7 +7023,7 @@ function TrainingHeatmap({ logs, weeks = 16 }) {
               <span key={cell.key}
                 title={cell.vol ? `${cell.key}: ${Math.round(cell.vol).toLocaleString()} lb` : `${cell.key}: rest`}
                 className={`heatmap-cell ${cell.intensity ? "" : "is-rest"}`}
-                style={{ background: cell.intensity ? `color-mix(in srgb, var(--accent) ${Math.round(cell.intensity * 100)}%, var(--card))` : "var(--card)",
+                style={{ background: cell.intensity ? `color-mix(in srgb, var(--belt-fill) ${Math.round(cell.intensity * 100)}%, var(--card))` : "var(--card)",
                          opacity: cell.future ? 0.3 : 1 }} />
             ))}
           </div>
@@ -6994,7 +7033,7 @@ function TrainingHeatmap({ logs, weeks = 16 }) {
         <span>Rest</span>
         <span className="heatmap-cell is-rest" />
         {[0.25, 0.5, 0.75, 1].map((t) => (
-          <span key={t} className="heatmap-cell" style={{ background: `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--card))` }} />
+          <span key={t} className="heatmap-cell" style={{ background: `color-mix(in srgb, var(--belt-fill) ${Math.round(t * 100)}%, var(--card))` }} />
         ))}
         <span>Heaviest</span>
       </div>
@@ -11070,9 +11109,14 @@ function GlobalStyle() {
   return (
     <style>{`
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
-        background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#666a70; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
+        background: var(--bg); color: var(--text);
+        /* The belt, at a tenth, under everything. Measured against both themes
+           and all nine belts: at 10% the dimmest text in the app still clears
+           4.5:1 on it, which is the whole budget this tint has. The plain
+           declaration above is the fallback for anything without color-mix. */
+        background: color-mix(in srgb, var(--belt-fill) 10%, var(--bg)); }
+      .app-shell[data-theme="dark"] { --belt-fill: var(--bg); --belt-ink: var(--text); --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --belt-fill: var(--bg); --belt-ink: var(--text); --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#585c63; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -11244,7 +11288,7 @@ function GlobalStyle() {
       .dash-stat-value { font-weight: 700; font-size: 14px; }
       .dash-stat-label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
       .progress-bar-track { width: 100%; height: 10px; border-radius: 999px; background: var(--border); overflow: hidden; }
-      .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+      .progress-bar-fill { height: 100%; background: var(--belt-fill); border-radius: 999px; }
       .milestone-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
       .milestone-row.achieved { opacity: 1; border-color: var(--green); }
       .milestone-emoji { font-size: 26px; flex-shrink: 0; }
@@ -11341,6 +11385,11 @@ function GlobalStyle() {
       .card:first-child { border-top: none; padding-top: 0; }
       .card-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
       .card-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); }
+      /* The belt as a rule rather than a paint job: no word changes colour, so
+         no belt can make anything harder to read. */
+      .card-title::after, .section-subheading::after {
+        content: ""; display: block; width: 26px; height: 2px; border-radius: 2px;
+        margin-top: 5px; background: var(--belt-fill); }
       .muted { color: var(--text-dim); font-size: 14px; line-height: 1.4; }
       .pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; color: #ffffff; }
       /* Form fields need a 3:1 edge against their background. --border is 1.4:1,
@@ -11510,7 +11559,7 @@ function GlobalStyle() {
       .rg-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--text-dim); font-weight: 600; margin-bottom: 8px; }
       .rg-streak { color: var(--accent); }
       .rg-progress { height: 4px; background: var(--border); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
-      .rg-progress-fill { height: 100%; background: var(--accent); transition: width .25s ease; }
+      .rg-progress-fill { height: 100%; background: var(--belt-fill); transition: width .25s ease; }
       .rg-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
       .rg-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
         color: var(--accent); margin-bottom: 8px; }
@@ -11589,6 +11638,12 @@ function GlobalStyle() {
       .rg-table .rg-num { text-align: center; font-family: 'Oswald', sans-serif; font-size: 15px; font-weight: 600; }
       .rg-table tr.rg-differs .rg-num { color: var(--accent); }
       .rg-table tr.rg-differs td:first-child { font-weight: 600; }
+      .rg-mine { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+        padding: 12px 14px; border-radius: 11px; margin-bottom: 12px;
+        background: color-mix(in srgb, var(--belt-fill) 12%, var(--card));
+        border: 1px solid color-mix(in srgb, var(--belt-fill) 45%, var(--border)); }
+      .rg-mine-div { font-size: 14px; font-weight: 700; }
+      .rg-mine-time { font-family: 'Oswald', sans-serif; font-size: 26px; line-height: 1; color: var(--belt-ink); }
       .rg-holdbox { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--accent);
         border-radius: 12px; padding: 13px 15px; margin-bottom: 12px; }
       .rg-holdbox strong { font-family: 'Oswald', sans-serif; font-size: 24px; color: var(--accent); flex-shrink: 0; }

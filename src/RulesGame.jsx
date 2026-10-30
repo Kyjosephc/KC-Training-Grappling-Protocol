@@ -74,7 +74,24 @@ function scoringTiers(rs) {
     .map(([points, items]) => ({ points, items }));
 }
 
-export default function RulesGame({ progress, onProgress }) {
+// Which row of this ruleset's duration table is the athlete's own. IBJJF names
+// its adult divisions by belt, so the belt answers the question directly; the
+// coloured youth belts are all Juvenile. A ruleset that does not divide by belt
+// returns nothing, and the table is shown as it always was.
+const YOUTH_BELTS = ["grey", "yellow", "orange", "green"];
+function ownDivision(rs, belt) {
+  if (!rs || !Array.isArray(rs.durations) || !belt) return null;
+  const b = String(belt).trim().toLowerCase();
+  const adult = rs.durations.find((d) =>
+    new RegExp(`adult\\s+${b}\\b`, "i").test(String(d.division || "")));
+  if (adult) return adult;
+  if (YOUTH_BELTS.includes(b)) {
+    return rs.durations.find((d) => /juvenile/i.test(String(d.division || ""))) || null;
+  }
+  return null;
+}
+
+export default function RulesGame({ progress, onProgress, belt }) {
   const p = progress || emptyRulesProgress();
   const [view, setView] = useState("home");
   const [ruleset, setRuleset] = useState("all");
@@ -542,6 +559,22 @@ export default function RulesGame({ progress, onProgress }) {
         </Card2>
 
         <Card2 title="Match times">
+          {(() => {
+            // The table was shown to everybody in full, so an athlete had to
+            // find their own line in nine. The app knows the belt, so it can
+            // answer the question first and keep the rest underneath.
+            const mine = ownDivision(rs, belt);
+            if (!mine) return null;
+            return (
+              <div className="rg-mine">
+                <div>
+                  <div className="section-subheading" style={{ marginTop: 0 }}>Your division</div>
+                  <div className="rg-mine-div">{mine.division}</div>
+                </div>
+                <div className="rg-mine-time">{mine.time}</div>
+              </div>
+            );
+          })()}
           {rs.durations.map((d, i) => (
             <div key={i} className="rg-rule"><div className="rg-rule-head"><span>{d.division}</span><strong>{d.time}</strong></div></div>
           ))}

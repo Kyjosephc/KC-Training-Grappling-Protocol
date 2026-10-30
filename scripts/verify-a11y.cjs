@@ -258,6 +258,58 @@ let colourFails = 0;
   });
 });
 
+// --- the belt tint, against every belt -----------------------------------
+// The background carries the athlete's belt colour at a percentage set in the
+// stylesheet. The pairs above are computed from the plain tokens and know
+// nothing about it, so on their own they would pass a tint of any strength.
+// This reads the real belt colours and the real percentage out of App.jsx and
+// checks that the dimmest text in the app still clears the bar on top of it,
+// for all nine belts in both themes. Raise the percentage or add a belt colour
+// and this is what says no.
+console.log("\n=== the belt tint on the background ===");
+const mixPct = (() => {
+  const m = src.match(/color-mix\(in srgb, var\(--belt-fill\) (\d+(?:\.\d+)?)%, var\(--bg\)\)/);
+  return m ? Number(m[1]) : null;
+})();
+const beltFills = (() => {
+  const block = src.match(/const BELT_THEME = \{([\s\S]*?)\n\};/);
+  if (!block) return {};
+  const out = {};
+  const re = /(\w+):\s*\{[^}]*?fill:\s*"(#[0-9a-fA-F]{6})"/g;
+  let m;
+  while ((m = re.exec(block[1]))) out[m[1]] = m[2];
+  return out;
+})();
+const belts = Object.keys(beltFills);
+if (mixPct === null) {
+  console.log("    ?    no belt tint found on .app-shell — skipped");
+} else if (!belts.length) {
+  colourFails++;
+  console.log("    LOW  the belt tint is applied but BELT_THEME has no fill colours to check it against");
+} else {
+  const hexToRgb = (h) => [0, 2, 4].map((i) => parseInt(h.replace("#", "").slice(i, i + 2), 16));
+  const rgbToHex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  const over = (fg, a, bg) => rgbToHex(hexToRgb(fg).map((v, i) => v * a + hexToRgb(bg)[i] * (1 - a)));
+  const a = mixPct / 100;
+  console.log(`\n  tint ${mixPct}% of the belt colour, ${belts.length} belts`);
+  ["dark", "light"].forEach((theme) => {
+    const t = tokens(theme);
+    let worst = Infinity, worstBelt = "";
+    belts.forEach((b) => {
+      const ground = over(beltFills[b], a, t.bg);
+      const r = ratio(t["text-dim"], ground);
+      if (r < worst) { worst = r; worstBelt = b; }
+      if (ratio(t.text, ground) < 4.5) {
+        colourFails++;
+        console.log(`    LOW  ${theme}: body text over a ${b} belt's tint is ${ratio(t.text, ground).toFixed(2)}:1`);
+      }
+    });
+    const pass = worst >= 4.5;
+    if (!pass) colourFails++;
+    console.log(`    ${pass ? "ok  " : "LOW "} ${theme}: dimmest text over the worst belt (${worstBelt}) is ${worst.toFixed(2)}:1`);
+  });
+}
+
 // --- type size, out of the stylesheet ------------------------------------
 // Uppercase Oswald at wide tracking reads fine below 12px, which is why the
 // micro-labels sit at 10px. 9.5px is the floor; anything under it is a bug.

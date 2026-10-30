@@ -30,8 +30,9 @@ let prog = RG.emptyRulesProgress();
 // App.jsx feeds new progress straight back in through React state
 // (persistClient -> re-render), so the harness does the same. Without it every
 // answer would be computed from the same stale object.
+let belt = "Blue";
 const render = () => act(() => root.render(React.createElement(Game, {
-  progress: prog, onProgress(p) { prog = p; render(); },
+  belt, progress: prog, onProgress(p) { prog = p; render(); },
 })));
 render();
 
@@ -264,6 +265,36 @@ check("the referee round plays and scores a card", () => {
   if (!/Every exchange/.test(t)) throw new Error("no exchange-by-exchange breakdown");
   if (/\[object Object\]/.test(t)) throw new Error("an object leaked into the referee result");
   console.log(`       ${exchanges} exchanges called, card compared against the real score`);
+});
+
+check("the rules show the athlete their own division first", () => {
+  // The duration table was shown in full to everybody, so a blue belt had to
+  // find their line among nine. The belt answers it.
+  const cases = [["Blue", /Adult blue belt/i, "6 min"], ["Black", /Adult black belt/i, "10 min"],
+                 ["Purple", /Adult purple belt/i, "7 min"], ["Orange", /Juvenile/i, "5 min"]];
+  cases.forEach(([lvl, div, time]) => {
+    // Changing the variable is not enough — the element on screen was created
+    // with the old props, so it has to be rendered again before the click.
+    belt = lvl;
+    render();
+    goHome();
+    click(/The rules themselves/);
+    const box = host.querySelector(".rg-mine");
+    if (!box) throw new Error(`${lvl} belt got no division of their own`);
+    if (!/Your division/i.test(box.textContent)) throw new Error(`${lvl}: the block is not labelled`);
+    if (!div.test(box.textContent)) throw new Error(`${lvl}: wrong division — ${box.textContent.trim()}`);
+    if (!box.textContent.includes(time)) throw new Error(`${lvl}: expected ${time}, got ${box.textContent.trim()}`);
+    click(/Back/);
+  });
+  // An unknown or missing belt must not invent one.
+  belt = undefined;
+  render();
+  goHome();
+  click(/The rules themselves/);
+  if (host.querySelector(".rg-mine")) throw new Error("an athlete with no belt was given a division");
+  click(/Back/);
+  belt = "Blue";
+  render();
 });
 
 check("a refereed match is recorded", () => {
