@@ -258,14 +258,16 @@ let colourFails = 0;
   });
 });
 
-// --- the belt tint, against every belt -----------------------------------
-// The background carries the athlete's belt colour at a percentage set in the
-// stylesheet. The pairs above are computed from the plain tokens and know
-// nothing about it, so on their own they would pass a tint of any strength.
-// This reads the real belt colours and the real percentage out of App.jsx and
-// checks that the dimmest text in the app still clears the bar on top of it,
-// for all nine belts in both themes. Raise the percentage or add a belt colour
-// and this is what says no.
+// --- a belt tint on the background, if there ever is one -----------------
+// The background is deliberately one charcoal for every belt: the belt shows in
+// the fills, the heading rules, the glow and the emblem, not in the ground
+// under the text. There is no tint to check right now and this reports that.
+//
+// It stays because the pairs above are computed from the plain tokens and know
+// nothing about a tint, so on their own they would pass one of any strength. If
+// a tint is ever put back, this reads the real belt colours and the real
+// percentage out of App.jsx and checks the dimmest text still clears the bar
+// over it, for every belt in both themes.
 console.log("\n=== the belt tint on the background ===");
 const mixPct = (() => {
   const m = src.match(/color-mix\(in srgb, var\(--belt-fill\) (\d+(?:\.\d+)?)%, var\(--bg\)\)/);
@@ -282,7 +284,7 @@ const beltFills = (() => {
 })();
 const belts = Object.keys(beltFills);
 if (mixPct === null) {
-  console.log("    ?    no belt tint found on .app-shell — skipped");
+  console.log("    ok   the background is one charcoal for every belt — no tint to check");
 } else if (!belts.length) {
   colourFails++;
   console.log("    LOW  the belt tint is applied but BELT_THEME has no fill colours to check it against");
