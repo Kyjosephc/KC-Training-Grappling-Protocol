@@ -930,19 +930,47 @@ check("settings renders for an athlete and offers no payment button", () => {
   if (byText(/^mark as (paid|unpaid)$/i)) throw new Error("an athlete can see a Mark as Paid button");
 });
 check("settings opens as a short list of groups, not a wall", () => {
-  // Twenty headings in one scroll was the densest screen in the app. They are
-  // grouped and collapsed now, so what somebody sees on opening Settings is a
-  // handful of choices with one group already open.
+  // Twenty headings in one scroll was the densest screen in the app, so they
+  // were grouped and collapsed — but the first group was left open, which meant
+  // the page still began with a picture, a belt card, a dropdown and a
+  // full-width green button stacked above an otherwise tidy list. Kyle's words
+  // for the result were "too messy and hard to read". Nothing opens on arrival
+  // now: what you see is the list.
   const groups = [...host.querySelectorAll("details.settings-section")];
   if (groups.length < 6) throw new Error(`only ${groups.length} group(s) — Settings is still one long scroll`);
   if (groups.length > 12) throw new Error(`${groups.length} groups is another wall`);
   const open = groups.filter((g) => g.open);
-  if (open.length !== 1) throw new Error(`${open.length} groups open on arrival, expected exactly 1`);
-  if (groups[0] !== open[0]) throw new Error("the open group is not the first one");
+  if (open.length !== 0) throw new Error(`${open.length} group(s) open on arrival — the page should open as a plain list`);
   groups.forEach((g) => {
     const head = g.querySelector("summary");
     if (!head || !head.textContent.trim()) throw new Error("a group has no readable heading");
   });
+});
+check("a closed row still says what is behind it", () => {
+  // A title and a chevron is not enough to choose from. Every row carries a
+  // line of plain text and an icon, so the list can be read without opening
+  // anything — which is the whole point of collapsing it.
+  const groups = [...host.querySelectorAll("details.settings-section")];
+  groups.forEach((g) => {
+    const title = g.querySelector(".settings-section-title");
+    const hint = g.querySelector(".settings-section-hint");
+    if (!title || !title.textContent.trim()) throw new Error("a row has no title");
+    if (!hint || !hint.textContent.trim()) throw new Error(`"${title.textContent.trim()}" has no line saying what is inside`);
+    if (hint.textContent.trim().length < 12) throw new Error(`"${title.textContent.trim()}" has a hint too short to help`);
+    if (!g.querySelector("svg")) throw new Error(`"${title.textContent.trim()}" has no icon`);
+  });
+});
+check("the rows are gathered under headings rather than nine in a row", () => {
+  const labels = [...host.querySelectorAll(".settings-group-label")].map((e) => e.textContent.trim());
+  if (labels.length < 3) throw new Error(`${labels.length} group heading(s) — the list is still flat`);
+  if (new Set(labels).size !== labels.length) throw new Error(`duplicate group headings: ${labels.join(", ")}`);
+  // Every row has to sit under one of them, or a heading is decoration.
+  const first = host.querySelector(".settings-group-label");
+  const firstSection = host.querySelector("details.settings-section");
+  if (!first || !firstSection) throw new Error("no headings or no rows");
+  if (first.compareDocumentPosition(firstSection) !== 4) {
+    throw new Error("the first row comes before the first heading");
+  }
 });
 check("every settings group can be opened", () => {
   const groups = [...host.querySelectorAll("details.settings-section")];

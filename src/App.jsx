@@ -7228,16 +7228,29 @@ function InstallGuide() {
 // screen in the app by a wide margin. Grouped and collapsed, built on native
 // details and summary so the keyboard and screen-reader behaviour comes free
 // and there is no open/closed state to get wrong.
-function SettingsSection({ title, defaultOpen = false, children }) {
+// A settings row. Nothing opens on arrival any more: one group open by default
+// meant the page began with a picture, a belt card, a dropdown and a full-width
+// green button stacked on top of an otherwise tidy list, which is what made the
+// screen read as messy. Every row now carries an icon and a line saying what is
+// behind it, so the list can be scanned without opening anything.
+function SettingsSection({ title, hint, icon: Icon, children }) {
   return (
-    <details className="settings-section" open={defaultOpen || undefined}>
+    <details className="settings-section">
       <summary className="settings-section-head">
-        <span>{title}</span>
+        {Icon ? <Icon size={17} className="settings-section-icon" aria-hidden="true" /> : null}
+        <span className="settings-section-label">
+          <span className="settings-section-title">{title}</span>
+          {hint ? <span className="settings-section-hint">{hint}</span> : null}
+        </span>
         <ChevronRight size={16} className="settings-section-chevron" />
       </summary>
       <div className="settings-section-body">{children}</div>
     </details>
   );
+}
+// Four or five rows under a quiet label beats nine rows under none.
+function SettingsGroup({ label }) {
+  return <div className="settings-group-label">{label}</div>;
 }
 function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClose, onResetApp, onRefreshProgram, onOpenCoachDashboard, onOpenTerms, onSignOut, onDeleteAccount }) {
   const [confirmingAppReset, setConfirmingAppReset] = useState(false);
@@ -7320,7 +7333,9 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
   return (
     <ModalShell onClose={onClose} title="Settings">
-      <SettingsSection title="Profile and belt" defaultOpen>
+      <SettingsGroup label="YOU" />
+      <SettingsSection title="Profile and belt" icon={Pencil}
+        hint="Your picture, and the belt shown on it">
       <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Profile Picture</h3>
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
         <div className="settings-avatar-preview">
@@ -7346,11 +7361,33 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       <select className="select-input" aria-label="Brazilian Jiu-Jitsu belt level" style={{ width: "100%", marginBottom: 10 }} value={belt} onChange={(e) => setBelt(e.target.value)}>
         {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
-      <button className="btn-primary wide" onClick={saveBelt}>{savedBelt ? "Saved" : "Save Belt Level"}</button>
+      {/* A full-width primary button made a minor setting the loudest element on
+          the screen. Quiet, and only live once the belt has actually changed. */}
+      <button className="btn-ghost wide" onClick={saveBelt}
+        disabled={!savedBelt && belt === (client?.beltLevel || "White")}>
+        {savedBelt ? "Saved" : "Save belt level"}
+      </button>
 
       </SettingsSection>
 
-      <SettingsSection title="Injuries and substitutions">
+      <SettingsGroup label="YOUR TRAINING" />
+      <SettingsSection title="Your training week" icon={CalendarDays}
+        hint="Which days you train, and what you do on them">
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
+      <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
+      {strengthDayCount(schedule) < requiredStrengthDaysFor(client?.program?.variant) && (
+        <div className="schedule-requirement" role="status">
+          {strengthDayCount(schedule)} of {requiredStrengthDaysFor(client?.program?.variant)} Strength/Conditioning days selected. {requiredStrengthDaysFor(client?.program?.variant) === 2 ? "Your program is written for two a week" : "Your program is written for three a week"} — you can save fewer, but the plan assumes that many.
+        </div>
+      )}
+      <CombinedLoadNote schedule={schedule} />
+      <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
+
+      </SettingsSection>
+
+      <SettingsSection title="Injuries and substitutions" icon={Heart}
+        hint="Work around a sore area, or swap an exercise out">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Anything to Work Around</h3>
       <p className="muted" style={{ marginBottom: 10 }}>Optional note to yourself — a bad shoulder, a cranky knee, anything recent. Not a medical form, and nobody reviews it.</p>
       <textarea className="notes-box" aria-label="Anything to work around" rows={2} style={{ fontSize: 13, marginBottom: 10 }} value={injuryNotes} onChange={(e) => setInjuryNotes(e.target.value)} placeholder="For example: left shoulder is a little cranky overhead right now" />
@@ -7378,43 +7415,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       </SettingsSection>
 
-      <SettingsSection title="Sync, schedule and coach tools">
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Data &amp; Sync</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>
-        {lastSynced ? `Everything is saved to your account. Last synced ${lastSynced.toLocaleString()}.` : "Everything you log saves to your account automatically. If a save ever fails, you'll see a banner at the bottom of the screen with a Retry button — nothing is lost silently."}
-      </p>
-
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>My Weekly Training Schedule</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>Tap what you do on each day — Low Intensity BJJ, High Intensity BJJ, Strength/Conditioning, any combination, or leave a day blank. This shows up on the History tab so you always know what's coming this week.</p>
-      <WeeklyScheduleEditor schedule={schedule} onChange={setSchedule} />
-      {strengthDayCount(schedule) < requiredStrengthDaysFor(client?.program?.variant) && (
-        <div className="schedule-requirement" role="status">
-          {strengthDayCount(schedule)} of {requiredStrengthDaysFor(client?.program?.variant)} Strength/Conditioning days selected. {requiredStrengthDaysFor(client?.program?.variant) === 2 ? "Your program is written for two a week" : "Your program is written for three a week"} — you can save fewer, but the plan assumes that many.
-        </div>
-      )}
-      <CombinedLoadNote schedule={schedule} />
-      <button className="btn-primary wide" onClick={saveSchedule}>{savedSchedule ? "Saved" : "Save Schedule"}</button>
-
-      {isCoach && (
-        <>
-          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Coach Dashboard</h3>
-          <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
-          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
-
-          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</h3>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            An athlete's first week is free. From Week 2 on they see your Venmo and Cash App codes and cannot start a session until you mark them as paid. Once you do it is permanent — they are never asked again, through this block and every block after it.
-          </p>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            You mark somebody paid in the Coach Dashboard, on their row. That is the only place in the app that can do it, and it has to be: the flag lives on the server in a column only your account is allowed to write, which is what stops an athlete handing it to themselves. Their copy of the app is told the answer, it never decides it.
-          </p>
-          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
-        </>
-      )}
-
-      </SettingsSection>
-
-      <SettingsSection title="Competing?">
+      <SettingsSection title="Competition date" icon={Trophy}
+        hint="Set a date and your program tapers into it">
       <p className="muted" style={{ marginBottom: 10 }}>
         Set a date and the last ten days before it taper automatically — volume comes down gradually as the date approaches, intensity stays, no maximal lifting, and competition day itself is left clear. Leave it blank and the program runs as normal.
       </p>
@@ -7440,46 +7442,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       </SettingsSection>
 
-      <SettingsSection title="Terms, privacy and your waiver">
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
-      <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
-      {SUPPORT_EMAIL && (
-        <>
-          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Contact</h3>
-          <p className="muted" style={{ marginBottom: 10 }}>
-            Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
-          </p>
-          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
-        </>
-      )}
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Leaderboard</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>
-        The board shows your first name and last initial, the total weight you have moved, and
-        that total relative to your bodyweight — which is the only fair way to rank a 135 lb
-        athlete against a 220 lb one. Your actual bodyweight is never published, and nothing
-        about your training is reachable from it. Turn this off and your row is removed.
-      </p>
-      <button type="button" role="switch" aria-checked={!client?.leaderboardOptOut}
-        className={`checkin-switch ${client?.leaderboardOptOut ? "" : "on"}`}
-        onClick={() => onPersist({ ...client, leaderboardOptOut: !client?.leaderboardOptOut })}>
-        <span className="checkin-switch-box">{client?.leaderboardOptOut ? null : <Check size={12} strokeWidth={3} />}</span>
-        <span>Show me on the leaderboard</span>
-      </button>
-
-      <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
-      {showSafetyCopy && <SafetyScreenModal onClose={() => setShowSafetyCopy(false)} />}
-      <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
-      {client?.waiver?.at && (
-        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-          Signed {client.waiver.signature ? `as ${client.waiver.signature} ` : ""}on {fmtDateTime(client.waiver.at)}.
-        </p>
-      )}
-      {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
-
-      </SettingsSection>
-
-      <SettingsSection title="Your program">
+      <SettingsSection title="Your program" icon={BookOpen}
+        hint="Pull in the latest version, or switch to a different one">
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Update Your Program</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
         Your program was saved when you set up your profile, so later improvements to the program don't reach you automatically. Use this any time to pull your saved profile up to the newest version of the program — every workout, check-in, and Personal Record you've logged stays exactly as it is. This only replaces the program itself, so any exercises, warm-up items, or video links you've manually edited in the Program tab will be overwritten back to the current default.
@@ -7538,7 +7502,54 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       </SettingsSection>
 
-      <SettingsSection title="Export your data">
+      <SettingsGroup label="PRIVACY AND DATA" />
+      <SettingsSection title="Privacy, terms and your waiver" icon={Lock}
+        hint="What is shared, what is not, and the waiver you signed">
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Terms &amp; Privacy</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>How this app handles your information, and the terms of using it.</p>
+      <button className="btn-ghost wide" onClick={onOpenTerms}>View Terms &amp; Privacy</button>
+      {SUPPORT_EMAIL && (
+        <>
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Contact</h3>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Payment not showing up, something wrong in the group, or you want your account deleted — this reaches Kyle directly.
+          </p>
+          <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block", textAlign: "center" }} href={`mailto:${SUPPORT_EMAIL}`}>Email support</a>
+        </>
+      )}
+      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Leaderboard</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        The board shows your first name and last initial, the total weight you have moved, and
+        that total relative to your bodyweight — which is the only fair way to rank a 135 lb
+        athlete against a 220 lb one. Your actual bodyweight is never published, and nothing
+        about your training is reachable from it. Turn this off and your row is removed.
+      </p>
+      <button type="button" role="switch" aria-checked={!client?.leaderboardOptOut}
+        className={`checkin-switch ${client?.leaderboardOptOut ? "" : "on"}`}
+        onClick={() => onPersist({ ...client, leaderboardOptOut: !client?.leaderboardOptOut })}>
+        <span className="checkin-switch-box">{client?.leaderboardOptOut ? null : <Check size={12} strokeWidth={3} />}</span>
+        <span>Show me on the leaderboard</span>
+      </button>
+
+      <button className="btn-ghost wide" onClick={() => setShowSafetyCopy(true)}>Read the safety notes again</button>
+      {showSafetyCopy && <SafetyScreenModal onClose={() => setShowSafetyCopy(false)} />}
+      <button className="btn-ghost wide" onClick={() => setShowWaiverCopy(true)}>View Liability Waiver</button>
+      {client?.waiver?.at && (
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          Signed {client.waiver.signature ? `as ${client.waiver.signature} ` : ""}on {fmtDateTime(client.waiver.at)}.
+        </p>
+      )}
+      {showWaiverCopy && <WaiverModal accepted={client?.waiver || null} onClose={() => setShowWaiverCopy(false)} onAccept={() => setShowWaiverCopy(false)} />}
+
+      </SettingsSection>
+
+      <SettingsSection title="Your data" icon={Download}
+        hint="Download everything, and when it last synced">
+      <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Saving and sync</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>
+        {lastSynced ? `Everything is saved to your account. Last synced ${lastSynced.toLocaleString()}.` : "Everything you log saves to your account automatically. If a save ever fails, you'll see a banner at the bottom of the screen with a Retry button — nothing is lost silently."}
+      </p>
+
       <p className="muted" style={{ marginBottom: 10 }}>Download every workout, bodyweight entry, readiness check-in, and Personal Record you've ever logged as a single file — a personal backup that's yours to keep, independent of this app.</p>
       <button className="btn-ghost wide" onClick={() => {
         const exportData = {
@@ -7567,7 +7578,8 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       </SettingsSection>
 
-      <SettingsSection title="Appearance">
+      <SettingsGroup label="THE APP" />
+      <SettingsSection title="Appearance" icon={Sun} hint="Light or dark">
       <div className="radio-group">
         <label className={`radio-pill ${theme === "dark" ? "active" : ""}`} onClick={() => onChangeTheme("dark")}>
           <input type="radio" checked={theme === "dark"} onChange={() => onChangeTheme("dark")} />
@@ -7581,7 +7593,29 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
 
       </SettingsSection>
 
-      <SettingsSection title="Starting over and your account">
+      {/* The label goes with the section — an athlete was seeing a COACH heading with nothing under it. */}
+      {isCoach && <SettingsGroup label="COACH" />}
+      {isCoach && (
+        <SettingsSection title="Coach tools" icon={LayoutDashboard}
+          hint="Your athletes, and who has paid">
+          <h3 className="log-exercise-name" style={{ marginBottom: 6 }}>Coach Dashboard</h3>
+          <p className="muted" style={{ marginBottom: 10 }}>See every athlete on your account at a glance — payment status, most recent PR, bodyweight, and readiness check-in. No code needed, it's also one tap away from the icon at the top of the app.</p>
+          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
+
+          <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Payment</h3>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            An athlete's first week is free. From Week 2 on they see your Venmo and Cash App codes and cannot start a session until you mark them as paid. Once you do it is permanent — they are never asked again, through this block and every block after it.
+          </p>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            You mark somebody paid in the Coach Dashboard, on their row. That is the only place in the app that can do it, and it has to be: the flag lives on the server in a column only your account is allowed to write, which is what stops an athlete handing it to themselves. Their copy of the app is told the answer, it never decides it.
+          </p>
+          <button className="btn-ghost wide" onClick={onOpenCoachDashboard}>Open Coach Dashboard</button>
+        </SettingsSection>
+      )}
+
+      <SettingsGroup label="YOUR ACCOUNT" />
+      <SettingsSection title="Your account" icon={LogOut}
+        hint="Sign out, start fresh, or delete everything">
       {isCoach && (<>
       <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Start Over From the Welcome Screen</h3>
       <p className="muted" style={{ marginBottom: 10 }}>
@@ -11063,7 +11097,21 @@ function GlobalStyle() {
       .program-switch-row:disabled { opacity: 1; border-color: var(--accent); }
       .settings-section { border-bottom: 1px solid var(--border); }
       .settings-section:first-of-type { border-top: 1px solid var(--border); }
-      .settings-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 2px; cursor: pointer; list-style: none; min-height: 44px; font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12.5px; font-weight: 600; color: var(--text); }
+      .settings-section-head { display: flex; align-items: center; gap: 12px; padding: 13px 2px; cursor: pointer;
+        list-style: none; min-height: 56px; color: var(--text); }
+      .settings-section-icon { flex-shrink: 0; color: var(--accent); }
+      .settings-section-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      /* The title keeps the display face the rest of the app uses; the hint is
+         plain, because a line of explanation set in condensed uppercase is
+         harder to read than no line at all. */
+      .settings-section-title { font-family: 'Oswald', sans-serif; text-transform: uppercase;
+        letter-spacing: 0.1em; font-size: 12.5px; font-weight: 600; }
+      .settings-section-hint { font-size: 12px; line-height: 1.4; color: var(--text-dim);
+        text-transform: none; letter-spacing: 0; font-weight: 400; }
+      .settings-group-label { font-family: 'Oswald', sans-serif; font-size: 11px; font-weight: 600;
+        letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim);
+        margin: 24px 0 2px; }
+      .settings-group-label:first-of-type { margin-top: 4px; }
       .settings-section-head::-webkit-details-marker { display: none; }
       .settings-section-chevron { flex-shrink: 0; color: var(--text-dim); transition: transform 0.15s ease; }
       .settings-section[open] .settings-section-chevron { transform: rotate(90deg); }
