@@ -247,6 +247,18 @@ function channelsAreReady() {
 function markChannelsMissing() { channelsMissingSince = Date.now(); }
 // PostgREST reports an unknown column as 42703, and its schema cache as PGRST204.
 // Matching the message as well, because the code is not always populated.
+// The database carries a CHECK constraint listing the rooms it will accept. If
+// the app ships a room the constraint does not know about — the window between
+// deploying a new channel and running its migration — the insert comes back
+// 23514 and nothing about it is a connection problem. It is also deterministic,
+// so retrying it three times just makes the athlete wait longer for the same
+// answer. This tells that case apart from everything else.
+function isRejectedChannel(error) {
+  if (!error) return false;
+  if (String(error.code || "") !== "23514") return false;
+  const msg = [error.message, error.details, error.constraint].filter(Boolean).join(" ").toLowerCase();
+  return msg.includes("channel");
+}
 function isMissingChannelColumn(error) {
   if (!error) return false;
   const code = String(error.code || "");
@@ -325,7 +337,11 @@ async function searchCommunityPosts(term, channel) {
         .is("deleted_at", null)
         .is("parent_id", null)
         .ilike("body", `%${safe}%`);
-      if (withChannel) sel = sel.eq("channel", channel || DEFAULT_CHANNEL);
+      // Null channel means every room. With one technique room, searching the
+      // room you were standing in searched everything; with nine, a clip
+      // posted in Passing became invisible from Guard retention, which is the
+      // opposite of what a library is for.
+      if (withChannel && channel) sel = sel.eq("channel", channel);
       return sel.order("created_at", { ascending: false }).limit(COMMUNITY_SEARCH_LIMIT);
     };
     let { data, error } = await run(channelsAreReady());
@@ -458,10 +474,21 @@ async function createCommunityPost(post) {
           .select(channelsAreReady() ? COMMUNITY_COLS : COMMUNITY_BASE_COLS).eq("id", row.id).maybeSingle();
         if (already) return already;
       }
+      // Returned rather than thrown, so withRetry stops instead of asking the
+      // same deterministic question twice more and then blaming the wifi.
+      if (isRejectedChannel(error)) return { __channelRejected: true };
       throw error;
     }
     return data;
   });
+  if (outcome.ok && outcome.result && outcome.result.__channelRejected) {
+    emitToast({
+      kind: "error",
+      autoDismissMs: 9000,
+      message: "That room isn't switched on yet, so nothing was posted. Post it in General for now — your text is still in the box.",
+    });
+    return { ok: false, channelRejected: true };
+  }
   if (!outcome.ok) {
     emitToast({ kind: "error", message: "Couldn't post that — check your connection and try again.", autoDismissMs: 6000 });
     return { ok: false };
@@ -5279,7 +5306,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
     if (q.length < 2) { setResults(null); setSearchFailed(false); return; }
     const mine = ++searchSeq.current;
     setSearching(true);
-    const res = await searchCommunityPosts(q, channel);
+    // Every room, not the one they happen to be standing in. Each result says
+    // which room it came from.
+    const res = await searchCommunityPosts(q, null);
     // A slower earlier search must never overwrite a newer one's results.
     if (mine !== searchSeq.current) return;
     setSearching(false);
@@ -5636,7 +5665,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
       {results !== null && (
         <div className="search-results">
           <div className="search-results-head">
-            <span>{searching ? "Searching…" : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}”`}</span>
+            <span>{searching ? "Searching…" : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}” across every room`}</span>
             <button type="button" className="link-btn" onClick={clearSearch}>Back to the feed</button>
           </div>
           {searchFailed && (
@@ -5647,13 +5676,20 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
           {!searching && !searchFailed && results.length === 0 && (
             <Card title="Nothing found">
               <p className="muted" style={{ marginBottom: 0 }}>
-                No posts in {channelMeta(channel).label} mention “{query.trim()}”. Try a shorter word, or post the question yourself — somebody here will have it.
+                Nothing in any room mentions “{query.trim()}”. Try a shorter word, or post the question yourself — somebody here will have it.
               </p>
             </Card>
           )}
           <div className="feed" aria-live="polite">
             {results.map((p) => (
-              <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
+              <div key={p.id}>
+              {p.channel && p.channel !== channel && (
+                <button type="button" className="search-result-room"
+                  onClick={() => { clearSearch(); setChannel(p.channel); }}>
+                  in {channelMeta(p.channel).label}
+                </button>
+              )}
+              <PostCard post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
                 onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
                 reportedReplyIds={reportedIds}
                 reactedBy={reactedBy[p.id] || []} onReact={react}
@@ -5661,6 +5697,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
                 onHide={(post) => setConfirmHide(post)}
                 replyOpen={replyOpen === p.id}
                 onToggleReply={(id) => setReplyOpen((cur) => (cur === id ? null : id))} />
+              </div>
             ))}
           </div>
         </div>
@@ -11881,6 +11918,11 @@ function GlobalStyle() {
         padding: 8px 13px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--text);
         cursor: pointer; text-transform: capitalize; }
       .tech-suggest:hover { border-color: var(--accent); color: var(--accent); }
+      /* Results come from every room now, so each one says which. Tapping it
+         leaves the search and drops you into that room. */
+      .search-result-room { display: inline-block; margin: 0 0 4px 2px; padding: 3px 9px; border-radius: 999px;
+        background: var(--bg); border: 1px solid var(--border); color: var(--text-dim);
+        font-size: 11.5px; font-weight: 600; cursor: pointer; }
       .search-results-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
         flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; color: var(--text-dim); font-weight: 600; }
       .board-list { list-style: none; margin: 0; padding: 0; }
