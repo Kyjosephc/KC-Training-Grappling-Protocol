@@ -4984,6 +4984,9 @@ function ConditioningPlan({ target, name }) {
 // notifying them is worse than not offering it.
 function useCommunityUnread(prefs, userId, enabled) {
   const [count, setCount] = useState(0);
+  // Which rooms have something new, for the dots on the strip. Same single
+  // query as the badge — nine rooms must not become nine polls.
+  const [byChannel, setByChannel] = useState({});
   const p = prefs || {};
   const seenBy = lastSeenMap(prefs);
   // One query for both channels, filtered from whichever was read longer ago,
@@ -5009,6 +5012,12 @@ function useCommunityUnread(prefs, userId, enabled) {
         // With no channel column every row reads as the default channel, which
         // is exactly the single-feed behaviour from before channels existed.
         setCount(unseen.length);
+        const per = {};
+        unseen.forEach((row) => {
+          const id = row.channel || DEFAULT_CHANNEL;
+          per[id] = (per[id] || 0) + 1;
+        });
+        setByChannel(per);
       } catch { /* offline; the badge just stays where it was */ }
     };
     check();
@@ -5017,7 +5026,7 @@ function useCommunityUnread(prefs, userId, enabled) {
     document.addEventListener("visibilitychange", onVis);
     return () => { cancelled = true; clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, [enabled, userId, seenKey]); // eslint-disable-line
-  return count;
+  return { count, byChannel };
 }
 
 function VideoEmbed({ url }) {
@@ -5220,13 +5229,19 @@ function ReplyComposer({ userId, onSend }) {
   );
 }
 
-function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
+function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel = {} }) {
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
   const [channel, setChannel] = useState(() => (
     COMMUNITY_CHANNELS.some((c) => c.id === prefs?.channel) ? prefs.channel : DEFAULT_CHANNEL
   ));
   const [posts, setPosts] = useState(null);
+  const [composerOpen, setComposerOpen] = useState(false);
+  // The strip scrolls, so the room you are in has to be brought into view —
+  // otherwise arriving in a room near the end of nine looks like no room is
+  // selected at all, which is exactly how it looked.
+  const stripRef = useRef(null);
+  const activeChipRef = useRef(null);
   const [reactions, setReactions] = useState([]);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
@@ -5243,6 +5258,19 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const savePrefs = onPrefs;
+
+  useEffect(() => {
+    const chip = activeChipRef.current;
+    const strip = stripRef.current;
+    if (!chip || !strip) return;
+    // scrollIntoView would scroll the whole page on some browsers; this moves
+    // only the strip.
+    const left = Math.max(0, chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2);
+    // scrollTo is missing in jsdom and in a few older mobile browsers, and an
+    // exception here would take the whole tab down over a cosmetic scroll.
+    if (typeof strip.scrollTo === "function") strip.scrollTo({ left, behavior: "smooth" });
+    else strip.scrollLeft = left;
+  }, [channel]);
 
   // Bumped by every local change. A poll that started before your tap and
   // lands after it is stale by definition, and applying it used to un-fill a
@@ -5549,14 +5577,25 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         </div>
       )}
 
-      <div className="view-toggle-row channel-row" role="tablist" aria-label="Channels">
-        {COMMUNITY_CHANNELS.map((c) => (
-          <button key={c.id} role="tab" aria-selected={channel === c.id}
-            className={`view-toggle-btn ${channel === c.id ? "active" : ""}`}
-            onClick={() => switchChannel(c.id)}>{c.label}</button>
-        ))}
+      {/* Nine rooms do not fit a phone, so the strip scrolls. It used to clip a
+          label mid-word against a hard border, which reads as broken rather
+          than as "there is more over there": the fade says scroll, and the
+          selected chip is scrolled into view on arrival so the room you are in
+          is never the one off the edge. */}
+      <div className="channel-strip">
+        <div className="channel-row" role="tablist" aria-label="Rooms" ref={stripRef}>
+          {COMMUNITY_CHANNELS.map((c) => (
+            <button key={c.id} role="tab" aria-selected={channel === c.id}
+              ref={channel === c.id ? activeChipRef : null}
+              className={`channel-chip${channel === c.id ? " active" : ""}`}
+              onClick={() => switchChannel(c.id)}>
+              {c.label}
+              {unreadByChannel[c.id] ? <span className="channel-dot" aria-label="new posts" /> : null}
+            </button>
+          ))}
+        </div>
       </div>
-      <p className="muted" style={{ margin: "-6px 0 12px", fontSize: 12.5 }}>{channelMeta(channel).blurb}</p>
+      <p className="channel-blurb">{channelMeta(channel).blurb}</p>
 
       <div className="tech-search">
         <Search size={15} className="tech-search-icon" aria-hidden="true" />
@@ -5601,26 +5640,27 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         </div>
       )}
 
-      <div className="community-prefs" role="group" aria-label="Community settings">
-        <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
-          <LogOut size={14} aria-hidden="true" />Leave
-        </button>
-      </div>
-
       {iAmBlocked ? (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
           You can read the group but can't post in it right now. Talk to Kyle if you think that's a mistake.
         </div>
+      ) : !composerOpen ? (
+        /* An empty three-line box and two paragraphs of instructions used to be
+           the first thing on the screen, above every post in the room. The feed
+           is what people came for; this is one line until somebody wants it. */
+        <button type="button" className="composer-open" onClick={() => setComposerOpen(true)}>
+          <Plus size={16} aria-hidden="true" />
+          <span>Post in {channelMeta(channel).label}</span>
+        </button>
       ) : (
       <div className="composer">
+        <div className="composer-head">
+          <span className="composer-title">Post in {channelMeta(channel).label}</span>
+          <button type="button" className="link-btn" onClick={() => { setComposerOpen(false); setBody(""); setVideoUrl(""); }}>Cancel</button>
+        </div>
         <label className="sr-only" htmlFor="post-body">Write a post</label>
         <textarea id="post-body" className="composer-text" rows={3} value={body} maxLength={COMMUNITY_MAX_CHARS}
-          placeholder={channelMeta(channel).placeholder} onChange={(e) => setBody(e.target.value)} />
-        {channel === "technique" && (
-          <p className="composer-hint">
-            Start with the name of the technique. The search box above only finds what people wrote, so an unnamed clip is a clip nobody finds again.
-          </p>
-        )}
+          placeholder={channelMeta(channel).placeholder} onChange={(e) => setBody(e.target.value)} autoFocus />
         {!isUploadedClip(videoUrl) && (
           <>
             <label className="sr-only" htmlFor="post-video">Video link</label>
@@ -5638,7 +5678,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
             onClick={async () => {
               setPosting(true);
               const ok = await send(body.trim(), videoUrl.trim(), null);
-              if (ok) { setBody(""); setVideoUrl(""); }
+              if (ok) { setBody(""); setVideoUrl(""); setComposerOpen(false); }
               setPosting(false);
             }}>{posting ? "Posting…" : uploading ? "Uploading…" : "Post"}</button>
         </div>
@@ -5656,6 +5696,12 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
           ))}
         </Card>
       )}
+
+      <div className="community-prefs" role="group" aria-label="Community settings">
+        <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
+          <LogOut size={14} aria-hidden="true" />Leave the group
+        </button>
+      </div>
 
       {failed && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -5705,11 +5751,18 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
 
       {results === null && posts === null && !failed && <p className="muted">Loading…</p>}
       {results === null && posts !== null && roots.length === 0 && !failed && (
-        <Card title={`Nothing in ${channelMeta(channel).label} yet`}>
-          <p className="muted">{channel === "technique"
-            ? "Be the first. Post a clip of something you're drilling, or a detail you want eyes on."
-            : "Be the first. Ask about a lift, the app, or anything that isn't clicking."}</p>
-        </Card>
+        <div className="room-empty">
+          <MessageCircle size={26} aria-hidden="true" />
+          <div className="room-empty-title">No posts in {channelMeta(channel).label} yet</div>
+          <p>{channel === "general"
+            ? "Ask about a lift, the app, or anything that isn't clicking. Somebody here has had the same question."
+            : "Post a clip of something you're drilling, or a detail you want eyes on. The first one makes it a room."}</p>
+          {!iAmBlocked && !composerOpen && (
+            <button type="button" className="btn-primary" onClick={() => setComposerOpen(true)}>
+              Post the first one
+            </button>
+          )}
+        </div>
       )}
 
       <div className="feed" aria-live="polite" hidden={results !== null}>
@@ -6312,7 +6365,8 @@ function MainApp({ userId, onSignOut }) {
   const communityLeft = !!(communityPrefs && communityPrefs.left);
   // Hooks run before the early returns below, so this one has to sit here and
   // cope with `client` still being null.
-  const communityUnread = useCommunityUnread(communityPrefs, userId, communityOpen && !communityLeft && !!communityPrefs);
+  const { count: communityUnread, byChannel: communityUnreadByChannel } =
+    useCommunityUnread(communityPrefs, userId, communityOpen && !communityLeft && !!communityPrefs);
   const visibleTabs = useMemo(() => TABS.filter((t) => t.id !== "community" || communityOpen), [communityOpen]);
   // If the tab goes away underneath you — the coach unmarks a payment while you
   // are sitting on it — land somewhere real instead of on an empty screen with
@@ -6407,7 +6461,7 @@ function MainApp({ userId, onSignOut }) {
           <ProgressHub client={client} onPersist={persistClient} userId={userId} />
         )}
         {tab === "community" && communityOpen && (
-          <CommunityTab client={client} userId={userId} isCoach={isCoach}
+          <CommunityTab client={client} userId={userId} isCoach={isCoach} unreadByChannel={communityUnreadByChannel}
             prefs={communityPrefs || {}} onPrefs={saveCommunityPrefs} />
         )}
       </div>
@@ -11672,12 +11726,58 @@ function GlobalStyle() {
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 12px 18px; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: center; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
-      /* The channel strip carries nine rooms. Squashing them to fit makes every
-         label unreadable, so it scrolls sideways instead and each chip keeps
-         its whole name and a 44px target. */
-      .view-toggle-row.channel-row { overflow-x: auto; scrollbar-width: none; }
-      .view-toggle-row.channel-row::-webkit-scrollbar { display: none; }
-      .view-toggle-row.channel-row > button { flex: 0 0 auto; white-space: nowrap; }
+      /* THE ROOM STRIP
+         Nine rooms do not fit a phone. The old version put them inside a
+         bordered box that clipped a label mid-word against a hard edge, which
+         reads as a rendering fault rather than as "scroll me". No box now: the
+         chips sit on the page, the strip fades out at the right so the clip is
+         obviously an invitation, and the selected chip is filled rather than
+         merely a slightly different grey. */
+      .channel-strip { position: relative; margin: 0 -16px 10px; }
+      .channel-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
+        padding: 2px 16px 2px; scroll-behavior: smooth; }
+      .channel-row::-webkit-scrollbar { display: none; }
+      .channel-strip::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 34px;
+        pointer-events: none; background: linear-gradient(to right, transparent, var(--bg)); }
+      .channel-chip { flex: 0 0 auto; white-space: nowrap; position: relative; min-height: 38px;
+        padding: 8px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+        background: var(--card); border: 1px solid var(--border); color: var(--text-dim);
+        transition: background .15s ease, color .15s ease, border-color .15s ease; }
+      .channel-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+      .channel-dot { position: absolute; top: 5px; right: 7px; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--belt-fill); box-shadow: 0 0 0 2px var(--card); }
+      .channel-chip.active .channel-dot { box-shadow: 0 0 0 2px var(--accent); }
+      .channel-blurb { margin: 0 0 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+      @media (prefers-reduced-motion: reduce) {
+        .channel-row { scroll-behavior: auto; }
+        .channel-chip { transition: none; }
+      }
+
+      /* THE COMPOSER, CLOSED
+         One line until somebody wants it, so the room's posts are what the
+         screen is for. */
+      .composer-open { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px;
+        margin-bottom: 16px; padding: 12px 15px; border-radius: 12px; cursor: pointer;
+        background: var(--card); border: 1px dashed var(--border); color: var(--text-dim);
+        font-size: 13.5px; font-weight: 600; text-align: left; }
+      .composer-open:hover { border-color: var(--accent); color: var(--accent); }
+      .composer-head { display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; margin-bottom: 10px; }
+      .composer-title { font-family: 'Oswald', sans-serif; text-transform: uppercase;
+        letter-spacing: 0.1em; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+
+      /* AN EMPTY ROOM
+         With nine rooms most of them start empty, so this is the screen people
+         see most on day one. It used to be a card whose title read NOTHING IN
+         EVERYTHING ELSE YET in condensed uppercase — a sentence pretending to
+         be a heading. */
+      .room-empty { display: flex; flex-direction: column; align-items: center; text-align: center;
+        gap: 10px; padding: 34px 22px; border-radius: 14px; background: var(--card);
+        border: 1px solid var(--border); color: var(--text-dim); }
+      .room-empty > svg { color: var(--belt-fill); opacity: .9; }
+      .room-empty-title { font-size: 15px; font-weight: 700; color: var(--text); }
+      .room-empty p { margin: 0; font-size: 13px; line-height: 1.55; max-width: 34ch; }
+      .room-empty .btn-primary { margin-top: 4px; }
       .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 2px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
       .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
@@ -11904,7 +12004,6 @@ function GlobalStyle() {
       .rg-not li::marker { color: var(--red); }
       .rg-disclaimer { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 18px;
         padding: 11px 13px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
-      .composer-hint { font-size: 12px; color: var(--text-dim); margin: -4px 0 8px; line-height: 1.45; }
       .tech-search { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
       .tech-search-icon { position: absolute; left: 12px; color: var(--text-dim); pointer-events: none; }
       .tech-search-input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 999px;

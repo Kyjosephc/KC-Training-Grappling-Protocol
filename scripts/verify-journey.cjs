@@ -576,6 +576,69 @@ check("a paid athlete gets the feed", () => {
   if (!txt().trim()) throw new Error("blank community tab for a paid athlete");
 });
 
+const mountGroup = (over = {}) => {
+  unmount();
+  mount(React.createElement(A.CommunityTab, Object.assign({
+    client: marcusPaid, userId: "u", isCoach: false, prefs: {}, onPrefs() {},
+  }, over)));
+};
+
+check("the room strip marks the room you are in", () => {
+  // Nine rooms scroll sideways, and the selected one used to be a slightly
+  // different grey inside a box that clipped a label mid-word. If nothing on
+  // the strip is marked, nothing tells you where you are.
+  mountGroup();
+  const chips = [...host.querySelectorAll(".channel-chip")];
+  if (chips.length < 8) throw new Error(`${chips.length} rooms on the strip`);
+  const on = chips.filter((c) => c.classList.contains("active"));
+  if (on.length !== 1) throw new Error(`${on.length} rooms marked as selected, expected 1`);
+  const tabbed = chips.filter((c) => c.getAttribute("aria-selected") === "true");
+  if (tabbed.length !== 1) throw new Error(`${tabbed.length} rooms carry aria-selected`);
+  if (on[0] !== tabbed[0]) throw new Error("the styled room and the announced room are different rooms");
+  chips.forEach((c) => { if (!c.textContent.trim()) throw new Error("a room chip has no label"); });
+});
+
+check("a room with something new carries a dot, and the rest do not", () => {
+  mountGroup({ unreadByChannel: { passing: 3 } });
+  const dotted = [...host.querySelectorAll(".channel-chip")].filter((c) => c.querySelector(".channel-dot"));
+  if (dotted.length !== 1) throw new Error(`${dotted.length} rooms show a dot, expected 1`);
+  if (!/passing/i.test(dotted[0].textContent)) throw new Error(`the dot landed on ${dotted[0].textContent.trim()}`);
+  mountGroup();
+  if (host.querySelector(".channel-dot")) throw new Error("a dot with nothing unread");
+});
+
+check("the composer is shut until somebody wants it", () => {
+  // It used to open on an empty three-line box plus two paragraphs of
+  // instructions, above every post in the room.
+  mountGroup();
+  if (host.querySelector("#post-body")) throw new Error("the composer is open before anyone asked");
+  const opener = [...host.querySelectorAll("button")].find((b) => /^post in /i.test(b.textContent.trim()));
+  if (!opener) throw new Error("no way to open the composer");
+  hit(opener);
+  const box = host.querySelector("#post-body");
+  if (!box) throw new Error("tapping it did not open the composer");
+  if (!box.getAttribute("placeholder")) throw new Error("the composer has no prompt in it");
+  const cancel = [...host.querySelectorAll("button")].find((b) => /cancel/i.test(b.textContent));
+  if (!cancel) throw new Error("no way back out of the composer");
+  hit(cancel);
+  if (host.querySelector("#post-body")) throw new Error("cancel did not shut it");
+});
+
+check("the prompt is not printed twice", () => {
+  // The placeholder said "name the technique first"; a paragraph underneath
+  // said the same thing again in different words, before a single post.
+  mountGroup();
+  const opener = [...host.querySelectorAll("button")].find((b) => /^post in /i.test(b.textContent.trim()));
+  hit(opener);
+  const box = host.querySelector("#post-body");
+  const prompt = (box.getAttribute("placeholder") || "").toLowerCase();
+  const onScreen = txt().toLowerCase();
+  const phrase = "name the technique first";
+  if (prompt.includes(phrase) && onScreen.includes(phrase)) {
+    throw new Error("the same instruction is in the placeholder and on the page");
+  }
+});
+
 console.log("\nThe coach's dashboard");
 check("the dashboard renders while it is still loading", () => {
   unmount();
