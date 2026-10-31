@@ -254,12 +254,42 @@ function isMissingChannelColumn(error) {
   if (code === "42703" || code === "PGRST204") return msg.includes("channel") || !msg;
   return msg.includes("channel") && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
 }
+// One room per part of the game, so a passing question and a leg lock question
+// are not in the same scroll. `technique` stays and keeps its id: every post
+// already made lives under it, and dropping it would strand them behind the
+// channel filter. It is the room for anything that does not fit the others.
+//
+// Adding an id here is not enough on its own — community_posts carries a CHECK
+// constraint listing the allowed channels. supabase-technique-channels.sql
+// widens it, and until that is run a post to a new channel is refused by the
+// database.
 const COMMUNITY_CHANNELS = [
   { id: "general", label: "General",
     blurb: "Questions about the app, the program, how to log something, or anything else.",
     placeholder: "Ask anything — about a lift, the app, or the week you are having." },
-  { id: "technique", label: "Technique",
-    blurb: "Instructionals, breakdowns and clips. Post what you are working on and what you want eyes on.",
+  { id: "passing", label: "Passing",
+    blurb: "Getting past the legs — pressure, speed, knee cuts, torreandos, leg drags, stacks.",
+    placeholder: "Name the pass first — knee cut, leg drag, over-under — then the guard you were trying to pass and where it stalled." },
+  { id: "retention", label: "Guard retention",
+    blurb: "Keeping the legs between you and them. Frames, recoveries, inversions, hip movement.",
+    placeholder: "Name the guard and the pass that beat it. \"They knee cut my half guard and I could not get the underhook\" is a question somebody can answer." },
+  { id: "wrestling", label: "Wrestling",
+    blurb: "Takedowns, hand fighting, sprawls and getting back up. Gi and no-gi.",
+    placeholder: "Name the takedown or the position — single, double, snap down, front headlock — then what went wrong." },
+  { id: "footsweeps", label: "Foot sweeps",
+    blurb: "Off-balancing and sweeping from standing — uchi mata, osoto, ko uchi, grip fighting into them.",
+    placeholder: "Name the sweep and the grip you had. Foot sweeps live or die on the grip and the timing, so say both." },
+  { id: "submissions", label: "Submissions",
+    blurb: "Finishing — chokes, armlocks, the details that turn a tight position into a tap.",
+    placeholder: "Name the submission and the position you hit it from, then say what the escape was that beat you." },
+  { id: "escapes", label: "Escapes",
+    blurb: "Getting out — mount, side control, back, and the frames that stop it getting worse.",
+    placeholder: "Name the position you were stuck in and how long you had been there. Escapes are mostly about the moment, so describe it." },
+  { id: "leglocks", label: "Leg locks",
+    blurb: "Entries, positions and finishes below the belt, and defending them.",
+    placeholder: "Name the entanglement — ashi, 50/50, saddle — and the finish or the escape you are chasing." },
+  { id: "technique", label: "Everything else",
+    blurb: "Instructionals, breakdowns and clips that do not fit a room above.",
     placeholder: "Name the technique first — berimbolo, knee cut, heel hook — then say what you want eyes on. Naming it is how people find your clip later." },
 ];
 const DEFAULT_CHANNEL = "general";
@@ -5490,7 +5520,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs }) {
         </div>
       )}
 
-      <div className="view-toggle-row" role="tablist" aria-label="Channels">
+      <div className="view-toggle-row channel-row" role="tablist" aria-label="Channels">
         {COMMUNITY_CHANNELS.map((c) => (
           <button key={c.id} role="tab" aria-selected={channel === c.id}
             className={`view-toggle-btn ${channel === c.id ? "active" : ""}`}
@@ -11605,6 +11635,12 @@ function GlobalStyle() {
       .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 12px 18px; font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: center; }
       .program-actions { display: flex; gap: 8px; margin-bottom: 14px; }
       .view-toggle-row { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+      /* The channel strip carries nine rooms. Squashing them to fit makes every
+         label unreadable, so it scrolls sideways instead and each chip keeps
+         its whole name and a 44px target. */
+      .view-toggle-row.channel-row { overflow-x: auto; scrollbar-width: none; }
+      .view-toggle-row.channel-row::-webkit-scrollbar { display: none; }
+      .view-toggle-row.channel-row > button { flex: 0 0 auto; white-space: nowrap; }
       .view-toggle-btn { flex: 1; background: none; border: none; border-radius: 7px; padding: 8px 2px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
       .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
