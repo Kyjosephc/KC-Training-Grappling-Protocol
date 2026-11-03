@@ -624,30 +624,82 @@ async function fetchCommunityReactions(postIds) {
 // enforced by the row-level policy, not by this file. Saves are deliberately
 // not reactions: a like says something to the room, a save says something to
 // you, and conflating them means people stop doing one of them honestly.
+// Why a save did not happen, when the answer is not "the network". Both of
+// these were reported to the athlete as "check your connection", which is a
+// lie that sends somebody to reset their wifi over a migration that was never
+// run.
+const SAVES_MISSING = "saves-missing";
+const SAVES_REFUSED = "saves-refused";
+
+// The table is not there at all — supabase-rooms-and-saves.sql has not been
+// run. PostgREST answers 42P01 from Postgres, or PGRST205 from its own schema
+// cache, depending on which layer notices first.
+function isMissingSavesTable(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  if (code === "42P01" || code === "PGRST205") return true;
+  const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
+  return msg.includes("community_saves")
+    && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
+}
+
+// The table is there and the write was refused. A different problem with a
+// different fix, so it must not be folded into the one above: the policies
+// need looking at, not the migration re-running.
+function isRefusedSave(error) {
+  if (!error) return false;
+  // 42501 is insufficient_privilege and means exactly one thing. An expired
+  // token reports its own codes and is not this: sending the coach to read his
+  // policies because somebody needs to sign in again is the wrong answer.
+  return String(error.code || "") === "42501";
+}
+
+// Set once, the first time the database says the table is not there, so every
+// later save does not spend three retries and two and a half seconds finding
+// out the same thing.
+let savesMissing = false;
+const savesReady = () => !savesMissing;
+const markSavesMissing = () => { savesMissing = true; };
+
 async function fetchMySaves(userId) {
   if (!supabase || !userId) return LOAD_FAILED;
+  if (!savesReady()) return [];
   const outcome = await withRetry(async () => {
     const { data, error } = await supabase.from("community_saves")
       .select("post_id").eq("user_id", userId);
-    if (error) throw error;
+    if (error) {
+      if (isMissingSavesTable(error)) return SAVES_MISSING;
+      throw error;
+    }
     return (data || []).map((r) => r.post_id);
   });
+  if (outcome.ok && outcome.result === SAVES_MISSING) { markSavesMissing(); return []; }
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
 async function setCommunitySave(postId, userId, on) {
   if (!supabase || !userId) return { ok: false };
+  if (!savesReady()) return { ok: false, reason: SAVES_MISSING };
   const outcome = await withRetry(async () => {
-    if (on) {
-      const { error } = await supabase.from("community_saves")
-        .upsert({ post_id: postId, user_id: userId }, { onConflict: "user_id,post_id" });
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("community_saves")
-        .delete().eq("post_id", postId).eq("user_id", userId);
-      if (error) throw error;
+    // ignoreDuplicates sends ON CONFLICT DO NOTHING. Without it an upsert that
+    // lands on a row already there performs an UPDATE, and the table has no
+    // update policy — by design, since there is nothing on a save to amend.
+    // So the honest write is an insert that shrugs at a duplicate.
+    const { error } = on
+      ? await supabase.from("community_saves")
+          .upsert({ post_id: postId, user_id: userId },
+            { onConflict: "user_id,post_id", ignoreDuplicates: true })
+      : await supabase.from("community_saves")
+          .delete().eq("post_id", postId).eq("user_id", userId);
+    if (error) {
+      if (isMissingSavesTable(error)) return SAVES_MISSING;
+      if (isRefusedSave(error)) return SAVES_REFUSED;
+      throw error;
     }
+    return true;
   });
+  if (outcome.ok && outcome.result === SAVES_MISSING) { markSavesMissing(); return { ok: false, reason: SAVES_MISSING }; }
+  if (outcome.ok && outcome.result === SAVES_REFUSED) return { ok: false, reason: SAVES_REFUSED };
   return { ok: outcome.ok };
 }
 
@@ -657,11 +709,15 @@ async function setCommunitySave(postId, userId, on) {
 // then anyway — the foreign key cascades.
 async function fetchSavedPosts(userId) {
   if (!supabase || !userId) return LOAD_FAILED;
+  if (!savesReady()) return [];
   const outcome = await withRetry(async () => {
     const { data: rows, error: rowsErr } = await supabase.from("community_saves")
       .select("post_id, created_at").eq("user_id", userId)
       .order("created_at", { ascending: false }).limit(300);
-    if (rowsErr) throw rowsErr;
+    if (rowsErr) {
+      if (isMissingSavesTable(rowsErr)) return SAVES_MISSING;
+      throw rowsErr;
+    }
     const ids = (rows || []).map((r) => r.post_id);
     if (!ids.length) return [];
     const { data: posts, error: postsErr } = await supabase.from("community_posts")
@@ -673,6 +729,7 @@ async function fetchSavedPosts(userId) {
     // order you will look for them in.
     return ids.map((id) => byId[id]).filter(Boolean);
   });
+  if (outcome.ok && outcome.result === SAVES_MISSING) { markSavesMissing(); return []; }
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
@@ -5523,6 +5580,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // going back to it is a state change and not another round trip.
   const [picked, setPicked] = useState(null);
   const [matchedRooms, setMatchedRooms] = useState([]);
+  // Whether saving works at all. False means the migration has not been run,
+  // and the honest thing is to stop offering a button that cannot work rather
+  // than to let people press it and blame their wifi.
+  const [savesOn, setSavesOn] = useState(true);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -5632,7 +5693,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     let alive = true;
     (async () => {
       const res = await fetchMySaves(userId);
-      if (alive && Array.isArray(res)) setSavedIds(new Set(res));
+      if (!alive) return;
+      if (Array.isArray(res)) setSavedIds(new Set(res));
+      setSavesOn(savesReady());
     })();
     return () => { alive = false; };
   }, [userId]);
@@ -5652,7 +5715,18 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         if (on) next.delete(postId); else next.add(postId);
         return next;
       });
-      emitToast({ kind: "error", message: "Couldn't save that — check your connection.", autoDismissMs: 5000 });
+      if (res.reason === SAVES_MISSING) {
+        setSavesOn(false);
+        emitToast({ kind: "error", autoDismissMs: 9000, message: isCoach
+          ? "Saving isn't set up yet — run supabase-rooms-and-saves.sql in the Supabase SQL editor."
+          : "Saving isn't switched on yet. Kyle has one setup step left." });
+      } else if (res.reason === SAVES_REFUSED) {
+        emitToast({ kind: "error", autoDismissMs: 9000, message: isCoach
+          ? "The database refused that save — check the three community_saves policies in supabase-rooms-and-saves.sql."
+          : "Saving was refused just now. Let Kyle know." });
+      } else {
+        emitToast({ kind: "error", message: "Couldn't save that — check your connection.", autoDismissMs: 5000 });
+      }
       return;
     }
     if (!on) setSavedPosts((prev) => (Array.isArray(prev) ? prev.filter((p) => p.id !== postId) : prev));
@@ -5880,13 +5954,21 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
         {savedPosts === null && <p className="muted" style={{ fontSize: 13 }}>Loading your saved clips…</p>}
 
-        {savedPosts === LOAD_FAILED && (
+        {!savesOn && (
+          <div className="adjust-box" style={{ marginBottom: 12 }}>
+            {isCoach
+              ? "Saving isn't set up in the database yet. Run supabase-rooms-and-saves.sql in the Supabase SQL editor and reload — it creates the community_saves table and its three policies."
+              : "Saving isn't switched on yet. Kyle has one setup step left, and your saved clips will start working as soon as it's done."}
+          </div>
+        )}
+
+        {savesOn && savedPosts === LOAD_FAILED && (
           <p className="muted" style={{ fontSize: 13 }}>
             Couldn't load your saved clips — check your connection and tap Saved again.
           </p>
         )}
 
-        {Array.isArray(savedPosts) && savedPosts.length === 0 && (
+        {savesOn && Array.isArray(savedPosts) && savedPosts.length === 0 && (
           <p className="muted" style={{ fontSize: 13 }}>
             Nothing saved yet. Tap Save under any post and it lands here, so a clip you
             want to drill on Thursday is not something you have to go looking for again.
@@ -6200,7 +6282,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                 onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
                 reportedReplyIds={reportedIds}
                 reactedBy={reactedBy[p.id] || []} onReact={react}
-                saved={savedIds.has(p.id)} onSave={toggleSave}
+                saved={savedIds.has(p.id)} onSave={savesOn ? toggleSave : null}
                 onReply={(parentId, text, vid) => send(text, vid, parentId)}
                 onHide={(post) => setConfirmHide(post)}
                 replyOpen={replyOpen === p.id}
@@ -6233,7 +6315,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
             reportedReplyIds={reportedIds}
             reactedBy={reactedBy[p.id] || []} onReact={react}
-            saved={savedIds.has(p.id)} onSave={toggleSave}
+            saved={savedIds.has(p.id)} onSave={savesOn ? toggleSave : null}
             onReply={(parentId, text, vid) => send(text, vid, parentId)}
             onHide={(post) => setConfirmHide(post)}
             replyOpen={replyOpen === p.id}

@@ -705,6 +705,47 @@ check("the list under the search box is clips, and only clips", () => {
   if (A.clipsForPicker([null, undefined]).length !== 0) throw new Error("a hole in the results threw or counted");
 });
 
+check("a save that cannot happen says why, instead of blaming the wifi", () => {
+  // Both of these were reported as "check your connection", which sends
+  // somebody to reset their router over a migration that was never run.
+  const missing = [
+    { code: "42P01", message: 'relation "public.community_saves" does not exist' },
+    { code: "PGRST205", message: "Could not find the table 'public.community_saves' in the schema cache" },
+    // Recognisable by message alone, with no code to go on.
+    { message: "Could not find the table 'public.community_saves' in the schema cache" },
+    // And recognisable by code alone, with no message to go on. Without these
+    // two the code branch is not pinned at all: every case above also matches
+    // on its message, so deleting the code check broke nothing and no test
+    // noticed.
+    { code: "42P01" },
+    { code: "PGRST205", message: "" },
+  ];
+  missing.forEach((e, i) => {
+    if (!A.isMissingSavesTable(e)) throw new Error(`missing-table case ${i} went unrecognised`);
+    if (A.isRefusedSave(e)) throw new Error(`missing-table case ${i} was also read as a refusal`);
+  });
+
+  // A refusal is a different problem with a different fix — the policies need
+  // reading, not the migration re-running — so the two must not collapse.
+  const refused = { code: "42501", message: "new row violates row-level security policy" };
+  if (!A.isRefusedSave(refused)) throw new Error("a refused write went unrecognised");
+  if (A.isMissingSavesTable(refused)) throw new Error("a refused write was read as a missing table");
+
+  // And neither fires on the things that really are the network, on an
+  // expired token, or on another table's problem.
+  const other = [
+    null, undefined, {},
+    { message: "Failed to fetch" },
+    { code: "08006", message: "connection failure" },
+    { code: "PGRST301", message: "JWT expired" },
+    { code: "23514", message: "community_posts_channel_check" },
+  ];
+  other.forEach((e, i) => {
+    if (A.isMissingSavesTable(e)) throw new Error(`case ${i} was wrongly called a missing table`);
+    if (A.isRefusedSave(e)) throw new Error(`case ${i} was wrongly called a refusal`);
+  });
+});
+
 check("a room's own name finds it from whichever room you are standing in", () => {
   // A clip filed under Knee shield is about what the poster did, not about
   // where they filed it, so its body almost never contains "knee shield".
