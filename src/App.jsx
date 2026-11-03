@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { createClient } from "@supabase/supabase-js";
 import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
 import { toLocalDateStr, todayStr, yesterdayStr } from "./dates.js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search, Bookmark } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -275,35 +275,110 @@ function isMissingChannelColumn(error) {
 // constraint listing the allowed channels. supabase-technique-channels.sql
 // widens it, and until that is run a post to a new channel is refused by the
 // database.
+// Twenty-six rooms do not fit any strip, so every room carries the part of the
+// game it belongs to and the strip shows one part at a time. The ids are what
+// the database CHECK constraint and every stored post key on — labels and
+// grouping can change freely, ids cannot.
+const CHANNEL_GROUPS = [
+  { id: "start", label: "General" },
+  { id: "standing", label: "Standing" },
+  { id: "top", label: "Top" },
+  { id: "guards", label: "Guards" },
+  { id: "bottom", label: "Bottom" },
+  { id: "attacking", label: "Attacking" },
+];
 const COMMUNITY_CHANNELS = [
-  { id: "general", label: "General",
+  { id: "general", group: "start", label: "General",
     blurb: "Questions about the app, the program, how to log something, or anything else.",
     placeholder: "Ask anything — about a lift, the app, or the week you are having." },
-  { id: "passing", label: "Passing",
-    blurb: "Getting past the legs — pressure, speed, knee cuts, torreandos, leg drags, stacks.",
-    placeholder: "Name the pass first — knee cut, leg drag, over-under — then the guard you were trying to pass and where it stalled." },
-  { id: "retention", label: "Guard retention",
-    blurb: "Keeping the legs between you and them. Frames, recoveries, inversions, hip movement.",
-    placeholder: "Name the guard and the pass that beat it. \"They knee cut my half guard and I could not get the underhook\" is a question somebody can answer." },
-  { id: "wrestling", label: "Wrestling",
-    blurb: "Takedowns, hand fighting, sprawls and getting back up. Gi and no-gi.",
-    placeholder: "Name the takedown or the position — single, double, snap down, front headlock — then what went wrong." },
-  { id: "footsweeps", label: "Foot sweeps",
-    blurb: "Off-balancing and sweeping from standing — uchi mata, osoto, ko uchi, grip fighting into them.",
-    placeholder: "Name the sweep and the grip you had. Foot sweeps live or die on the grip and the timing, so say both." },
-  { id: "submissions", label: "Submissions",
-    blurb: "Finishing — chokes, armlocks, the details that turn a tight position into a tap.",
-    placeholder: "Name the submission and the position you hit it from, then say what the escape was that beat you." },
-  { id: "escapes", label: "Escapes",
-    blurb: "Getting out — mount, side control, back, and the frames that stop it getting worse.",
-    placeholder: "Name the position you were stuck in and how long you had been there. Escapes are mostly about the moment, so describe it." },
-  { id: "leglocks", label: "Leg locks",
-    blurb: "Entries, positions and finishes below the belt, and defending them.",
-    placeholder: "Name the entanglement — ashi, 50/50, saddle — and the finish or the escape you are chasing." },
-  { id: "technique", label: "Everything else",
+  { id: "technique", group: "start", label: "Everything else",
     blurb: "Instructionals, breakdowns and clips that do not fit a room above.",
     placeholder: "Name the technique first — berimbolo, knee cut, heel hook — then say what you want eyes on. Naming it is how people find your clip later." },
+
+  { id: "wrestling", group: "standing", label: "Wrestling",
+    blurb: "Takedowns, hand fighting, sprawls and getting back up. Gi and no-gi.",
+    placeholder: "Name the takedown or the position — single, double, snap down, front headlock — then what went wrong." },
+  { id: "footsweeps", group: "standing", label: "Foot sweeps (standing)",
+    blurb: "Off-balancing and sweeping on the feet — uchi mata, osoto, ko uchi, grip fighting into them. Sweeps from guard have their own room.",
+    placeholder: "Name the sweep and the grip you had. Foot sweeps live or die on the grip and the timing, so say both." },
+
+  { id: "passing", group: "top", label: "Passing",
+    blurb: "Getting past the legs — pressure, speed, knee cuts, torreandos, leg drags, stacks.",
+    placeholder: "Name the pass first — knee cut, leg drag, over-under — then the guard you were trying to pass and where it stalled." },
+  { id: "topcontrol", group: "top", label: "Top control",
+    blurb: "Staying on top once you are there — mount, side control, knee-on-belly, and the pressure that keeps somebody flat.",
+    placeholder: "Name the position you were holding and how they got out. \"I had mount and lost it to a bridge and roll\" is something somebody can fix." },
+
+  { id: "closedguard", group: "guards", label: "Closed guard",
+    blurb: "Legs locked behind them — breaking posture, grips, the attacks that come off it and stopping the opening.",
+    placeholder: "Say whether you are playing it or stuck in it, then name the grip you had. Closed guard is mostly a posture argument, so describe who was winning it." },
+  { id: "halfguard", group: "guards", label: "Half guard",
+    blurb: "One leg trapped — underhooks, the dogfight, coming up, and the flattening that stops it.",
+    placeholder: "Say whether you had the underhook and whether you were flat or on your side. Those two answers decide everything else in half guard." },
+  { id: "kneeshield", group: "guards", label: "Knee shield",
+    blurb: "Half guard with the shin across them — Z-guard, the frames, the sweeps off it, and how people crush it.",
+    placeholder: "Name the shin you had across and what they did to it — walked around it, pinned it, or stepped over. The answer is different for each." },
+  { id: "butterfly", group: "guards", label: "Butterfly",
+    blurb: "Hooks inside, sitting up — elevations, the hip bump, and keeping the chest connection.",
+    placeholder: "Say whether you were sitting up or flat on your back. Butterfly stops working the moment you are flat, so start there." },
+  { id: "dlr", group: "guards", label: "De la Riva",
+    blurb: "The outside hook — berimbolos, back takes, the sweeps, and the leg drags that beat it.",
+    placeholder: "Name the grip you had with the hook — collar, sleeve, ankle — then what they did to clear the hook." },
+  { id: "rdlr", group: "guards", label: "Reverse De la Riva",
+    blurb: "The inside hook — entries to leg entanglements, back exposures, and stopping the knee cut.",
+    placeholder: "Say what they were threatening when you went to RDLR. It is mostly a defensive guard turned offensive, so say which half you are asking about." },
+  { id: "spider", group: "guards", label: "Spider",
+    blurb: "Feet in the biceps — the tension, the sweeps, triangles off it, and the passes that beat the grips.",
+    placeholder: "Spider is a grip fight before it is a guard. Name the sleeve grips you had and which one they broke first." },
+  { id: "lasso", group: "guards", label: "Lasso",
+    blurb: "The leg wrapped around the arm — the control, the sweeps, and the unwinding that kills it.",
+    placeholder: "Say which arm you had lassoed and what their free hand was doing. The free hand is usually the thing that beats it." },
+  { id: "xguard", group: "guards", label: "X-guard",
+    blurb: "Underneath them with the legs crossed — the entries, the technical stand-up, and the sweeps off it.",
+    placeholder: "Name the entry you used to get there. Most X-guard questions are entry questions wearing a sweep costume." },
+  { id: "slx", group: "guards", label: "Single-leg X",
+    blurb: "Ashi — the sweeps, the stand-ups, and the handoff to a leg entanglement or back.",
+    placeholder: "Say whether you want the sweep or the leg. Single-leg X goes both ways and the answer depends which one you are chasing." },
+  { id: "deephalf", group: "guards", label: "Deep half",
+    blurb: "Underneath the hips — the roll through, the waiter sweep, and the whizzer that stops it.",
+    placeholder: "Say how deep you got and what their whizzer was doing. Deep half is a commitment, so say what happened after you committed." },
+  { id: "fiftyfifty", group: "guards", label: "50/50",
+    blurb: "Legs mirrored — the sweeps, the stalemates, and the leg attacks that live there.",
+    placeholder: "Say whether you are trying to sweep, finish or get out. 50/50 is three different problems and they have different answers." },
+  { id: "collarsleeve", group: "guards", label: "Collar sleeve",
+    blurb: "Collar in one hand, sleeve in the other, foot on the hip — the sweeps, the triangles, and breaking the structure.",
+    placeholder: "Name which foot was on the hip or the bicep and what they did about the collar grip. Collar sleeve dies when the collar grip goes." },
+  { id: "wormguard", group: "guards", label: "Worm guard",
+    blurb: "Lapel guards — worm, squid, reverse de la worm. Feeding the lapel, the sweeps, and untangling it.",
+    placeholder: "Say which lapel you fed and where it ended up. Lapel guards are impossible to answer without knowing where the cloth went." },
+
+  { id: "retention", group: "bottom", label: "Guard retention",
+    blurb: "Keeping the legs between you and them. Frames, recoveries, inversions, hip movement.",
+    placeholder: "Name the guard and the pass that beat it. \"They knee cut my half guard and I could not get the underhook\" is a question somebody can answer." },
+  { id: "sweeps", group: "bottom", label: "Sweeps (from guard)",
+    blurb: "Reversing from the bottom — hooks, hip bumps, scissors, butterfly elevations, berimbolos. Standing foot sweeps have their own room.",
+    placeholder: "Name the guard you were in and the sweep you wanted. Most sweeps die on the grip or the angle, so say what you had before it stalled." },
+  { id: "escapes", group: "bottom", label: "Escapes",
+    blurb: "Getting out — mount, side control, back, and the frames that stop it getting worse.",
+    placeholder: "Name the position you were stuck in and how long you had been there. Escapes are mostly about the moment, so describe it." },
+
+  { id: "back", group: "attacking", label: "Back attacks",
+    blurb: "Taking the back and keeping it — hooks, the seatbelt, body triangles, and the finishes from there.",
+    placeholder: "Name how you took the back and where you lost it. Keeping the back is a different problem from finishing from it, so say which one you are asking about." },
+  { id: "submissions", group: "attacking", label: "Submissions",
+    blurb: "Finishing — chokes, armlocks, the details that turn a tight position into a tap.",
+    placeholder: "Name the submission and the position you hit it from, then say what the escape was that beat you." },
+  { id: "leglocks", group: "attacking", label: "Leg locks",
+    blurb: "Entries, positions and finishes below the belt, and defending them.",
+    placeholder: "Name the entanglement — ashi, 50/50, saddle — and the finish or the escape you are chasing." },
 ];
+function channelsInGroup(groupId) {
+  return COMMUNITY_CHANNELS.filter((c) => c.group === groupId);
+}
+function groupOfChannel(id) {
+  const c = COMMUNITY_CHANNELS.find((x) => x.id === id);
+  return (c && c.group) || CHANNEL_GROUPS[0].id;
+}
 const DEFAULT_CHANNEL = "general";
 function channelMeta(id) {
   return COMMUNITY_CHANNELS.find((c) => c.id === id) || COMMUNITY_CHANNELS[0];
@@ -433,6 +508,63 @@ async function fetchCommunityReactions(postIds) {
       .select("post_id, user_id").in("post_id", ids);
     if (error) throw error;
     return data || [];
+  });
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+// A save is private. Nobody is told you kept their clip, there is no count on
+// the post, and the row is readable only by the person who made it — that is
+// enforced by the row-level policy, not by this file. Saves are deliberately
+// not reactions: a like says something to the room, a save says something to
+// you, and conflating them means people stop doing one of them honestly.
+async function fetchMySaves(userId) {
+  if (!supabase || !userId) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("community_saves")
+      .select("post_id").eq("user_id", userId);
+    if (error) throw error;
+    return (data || []).map((r) => r.post_id);
+  });
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function setCommunitySave(postId, userId, on) {
+  if (!supabase || !userId) return { ok: false };
+  const outcome = await withRetry(async () => {
+    if (on) {
+      const { error } = await supabase.from("community_saves")
+        .upsert({ post_id: postId, user_id: userId }, { onConflict: "user_id,post_id" });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("community_saves")
+        .delete().eq("post_id", postId).eq("user_id", userId);
+      if (error) throw error;
+    }
+  });
+  return { ok: outcome.ok };
+}
+
+// Two queries rather than an embedded join, so the saved list does not break
+// the day somebody renames a foreign key. A post that has since been deleted
+// simply does not come back, and the row pointing at it is already gone by
+// then anyway — the foreign key cascades.
+async function fetchSavedPosts(userId) {
+  if (!supabase || !userId) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const { data: rows, error: rowsErr } = await supabase.from("community_saves")
+      .select("post_id, created_at").eq("user_id", userId)
+      .order("created_at", { ascending: false }).limit(300);
+    if (rowsErr) throw rowsErr;
+    const ids = (rows || []).map((r) => r.post_id);
+    if (!ids.length) return [];
+    const { data: posts, error: postsErr } = await supabase.from("community_posts")
+      .select("*").in("id", ids);
+    if (postsErr) throw postsErr;
+    const byId = {};
+    (posts || []).forEach((p) => { byId[p.id] = p; });
+    // Newest save first, not newest post: the order you kept them in is the
+    // order you will look for them in.
+    return ids.map((id) => byId[id]).filter(Boolean);
   });
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
@@ -1072,6 +1204,7 @@ async function purgeCommunityTraces(clientUserId) {
     } catch { /* nothing further available from the browser */ }
   }
   try { await supabase.from("community_reactions").delete().eq("user_id", clientUserId); } catch {}
+  try { await supabase.from("community_saves").delete().eq("user_id", clientUserId); } catch {}
   try { await supabase.from("community_reports").delete().eq("reporter_id", clientUserId); } catch {}
   try { await supabase.from("community_blocks").delete().eq("user_id", clientUserId); } catch {}
 }
@@ -5094,7 +5227,7 @@ function VideoEmbed({ url }) {
 }
 
 const NO_REPORTS = new Set();
-const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged, reportedReplyIds = NO_REPORTS }) {
+const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, reactedBy, onReact, onReply, onHide, replyOpen, onToggleReply, onReport, reported, flagged, saved = false, onSave, reportedReplyIds = NO_REPORTS }) {
   const mine = post.author_id === userId;
   const hearts = reactedBy.length;
   const iReacted = reactedBy.includes(userId);
@@ -5125,6 +5258,14 @@ const PostCard = React.memo(function PostCard({ post, replies, userId, isCoach, 
           <MessageCircle size={15} aria-hidden="true" />
           <span>{replies.length > 0 ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Reply"}</span>
         </button>
+        {onSave && (
+          <button className={`post-act ${saved ? "on" : ""}`} onClick={() => onSave(post.id, !saved)}
+            aria-pressed={saved}
+            aria-label={saved ? "Remove this from your saved list" : "Save this to your own list"}>
+            <Bookmark size={15} aria-hidden="true" />
+            <span>{saved ? "Saved" : "Save"}</span>
+          </button>
+        )}
         {!mine && !isCoach && onReport && (
           <button className="post-act quiet" onClick={() => onReport(post)} disabled={reported}
             aria-label={reported ? "You reported this post" : `Report ${post.author_name}'s post to the coach`}>
@@ -5259,12 +5400,18 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   ));
   const [posts, setPosts] = useState(null);
   const [composerOpen, setComposerOpen] = useState(false);
-  // The strip scrolls, so the room you are in has to be brought into view —
-  // otherwise arriving in a room near the end of nine looks like no room is
-  // selected at all, which is exactly how it looked.
+  // The rooms row scrolls, so the room you are in has to be brought into view —
+  // otherwise arriving in a room near the end of a long part looks like no room
+  // is selected at all, which is exactly how it looked.
   const stripRef = useRef(null);
   const activeChipRef = useRef(null);
   const [reactions, setReactions] = useState([]);
+  // The ids are held for every room at once, because a save has to look saved
+  // wherever you meet it again. The posts themselves are only fetched when the
+  // list is opened — there is no reason to carry them around otherwise.
+  const [savedIds, setSavedIds] = useState(() => new Set());
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedPosts, setSavedPosts] = useState(null);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -5371,6 +5518,42 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   // Leaving a channel abandons the search with it.
   useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await fetchMySaves(userId);
+      if (alive && Array.isArray(res)) setSavedIds(new Set(res));
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+
+  // Optimistic, and rolled back if the write fails. A bookmark that silently
+  // did not stick is worse than one that visibly refused.
+  const toggleSave = async (postId, on) => {
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(postId); else next.delete(postId);
+      return next;
+    });
+    const res = await setCommunitySave(postId, userId, on);
+    if (!res.ok) {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        if (on) next.delete(postId); else next.add(postId);
+        return next;
+      });
+      emitToast({ kind: "error", message: "Couldn't save that — check your connection.", autoDismissMs: 5000 });
+      return;
+    }
+    if (!on) setSavedPosts((prev) => (Array.isArray(prev) ? prev.filter((p) => p.id !== postId) : prev));
+  };
+
+  const openSaved = async () => {
+    setShowSaved(true);
+    setSavedPosts(null);
+    setSavedPosts(await fetchSavedPosts(userId));
+  };
 
   const switchChannel = (next) => {
     if (next === channel) return;
@@ -5564,6 +5747,72 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   }
 
   const canPost = (body.trim().length > 0 || embedFor(videoUrl)) && !uploading;
+  const openGroup = groupOfChannel(channel);
+
+  if (showSaved) {
+    return (
+      <div className="tab-pad">
+        <div className="community-head">
+          <div>
+            <h2 className="program-title" style={{ margin: 0 }}>Saved</h2>
+            <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>
+              Clips you kept. Only you can see this list — nobody is told you saved their post.
+            </p>
+          </div>
+          <button className="btn-ghost sm" onClick={() => setShowSaved(false)}>
+            <ArrowLeft size={14} aria-hidden="true" />
+            <span>Back</span>
+          </button>
+        </div>
+
+        {savedPosts === null && <p className="muted" style={{ fontSize: 13 }}>Loading your saved clips…</p>}
+
+        {savedPosts === LOAD_FAILED && (
+          <p className="muted" style={{ fontSize: 13 }}>
+            Couldn't load your saved clips — check your connection and tap Saved again.
+          </p>
+        )}
+
+        {Array.isArray(savedPosts) && savedPosts.length === 0 && (
+          <p className="muted" style={{ fontSize: 13 }}>
+            Nothing saved yet. Tap Save under any post and it lands here, so a clip you
+            want to drill on Thursday is not something you have to go looking for again.
+          </p>
+        )}
+
+        {Array.isArray(savedPosts) && savedPosts.length > 0 && (
+          <div className="feed">
+            {savedPosts.map((p) => (
+              <article className="post-card" key={p.id}>
+                <header className="post-head">
+                  <BeltEmblem level={p.author_belt} size={26} title={null} />
+                  <div className="post-who">
+                    <span className="post-name">{p.author_name}</span>
+                    <span className="post-time">
+                      {timeAgo(p.created_at)}{p.channel ? ` · ${channelMeta(p.channel).label}` : ""}
+                    </span>
+                  </div>
+                </header>
+                {p.body ? <p className="post-body">{p.body}</p> : null}
+                <VideoEmbed url={p.video_url} />
+                <div className="post-actions">
+                  <button className="post-act on" onClick={() => toggleSave(p.id, false)}
+                    aria-label="Remove this from your saved list">
+                    <Bookmark size={15} aria-hidden="true" /><span>Saved</span>
+                  </button>
+                  {p.channel && (
+                    <button className="post-act" onClick={() => { setShowSaved(false); switchChannel(p.channel); }}>
+                      <span>Go to {channelMeta(p.channel).label}</span>
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="tab-pad">
@@ -5574,6 +5823,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             Everyone training with Kyle.
           </p>
         </div>
+        <button className="btn-ghost sm" onClick={openSaved}>
+          <Bookmark size={14} aria-hidden="true" />
+          <span>Saved{savedIds.size > 0 ? ` (${savedIds.size})` : ""}</span>
+        </button>
       </div>
 
       {isCoach && flaggedPosts.length > 0 && (
@@ -5599,14 +5852,34 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         </div>
       )}
 
-      {/* Nine rooms do not fit a phone, so the strip scrolls. It used to clip a
-          label mid-word against a hard border, which reads as broken rather
-          than as "there is more over there": the fade says scroll, and the
-          selected chip is scrolled into view on arrival so the room you are in
-          is never the one off the edge. */}
+      {/* Twenty-six rooms will not fit one strip at any font size, so the parts
+          of the game are the first row and the rooms inside the open part are
+          the second. Picking a part moves you to its first room, so the strip
+          and the feed can never be showing two different things. A part with
+          something new in a room you cannot currently see carries the dot, or
+          unread posts in a closed part would be invisible.
+
+          The rooms row still scrolls: the fade says there is more over there,
+          and the selected chip is scrolled into view on arrival so the room
+          you are in is never the one off the edge. */}
+      <div className="channel-groups" role="tablist" aria-label="Parts of the game">
+        {CHANNEL_GROUPS.map((g) => {
+          const rooms = channelsInGroup(g.id);
+          const open = openGroup === g.id;
+          const unread = rooms.some((c) => unreadByChannel[c.id]);
+          return (
+            <button key={g.id} role="tab" aria-selected={open}
+              className={`channel-group${open ? " active" : ""}`}
+              onClick={() => { if (!open && rooms[0]) switchChannel(rooms[0].id); }}>
+              {g.label}
+              {unread && !open ? <span className="channel-dot" aria-label="new posts" /> : null}
+            </button>
+          );
+        })}
+      </div>
       <div className="channel-strip">
         <div className="channel-row" role="tablist" aria-label="Rooms" ref={stripRef}>
-          {COMMUNITY_CHANNELS.map((c) => (
+          {channelsInGroup(openGroup).map((c) => (
             <button key={c.id} role="tab" aria-selected={channel === c.id}
               ref={channel === c.id ? activeChipRef : null}
               className={`channel-chip${channel === c.id ? " active" : ""}`}
@@ -5761,6 +6034,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                 onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
                 reportedReplyIds={reportedIds}
                 reactedBy={reactedBy[p.id] || []} onReact={react}
+                saved={savedIds.has(p.id)} onSave={toggleSave}
                 onReply={(parentId, text, vid) => send(text, vid, parentId)}
                 onHide={(post) => setConfirmHide(post)}
                 replyOpen={replyOpen === p.id}
@@ -5793,6 +6067,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
             reportedReplyIds={reportedIds}
             reactedBy={reactedBy[p.id] || []} onReact={react}
+            saved={savedIds.has(p.id)} onSave={toggleSave}
             onReply={(parentId, text, vid) => send(text, vid, parentId)}
             onHide={(post) => setConfirmHide(post)}
             replyOpen={replyOpen === p.id}
@@ -11670,7 +11945,8 @@ function GlobalStyle() {
       .update-banner .btn-primary, .update-banner .btn-ghost { padding: 6px 12px; font-size: 13px; width: auto; }
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
       .tab-pad { padding: 14px 14px 4px; }
-      .community-head { margin-bottom: 12px; }
+      .community-head { margin-bottom: 12px; display: flex; align-items: flex-start;
+        justify-content: space-between; gap: 12px; }
       .community-prefs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
       .pref-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); color: var(--text-dim); border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
       .pref-btn.on { color: var(--accent); border-color: var(--accent); }
@@ -11769,6 +12045,15 @@ function GlobalStyle() {
          chips sit on the page, the strip fades out at the right so the clip is
          obviously an invitation, and the selected chip is filled rather than
          merely a slightly different grey. */
+      .channel-groups { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+      .channel-group { position: relative; appearance: none; border: 1px solid var(--line);
+        background: transparent; color: var(--muted); border-radius: 999px;
+        padding: 6px 12px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.01em;
+        cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+      .channel-group:hover { color: var(--text); border-color: var(--line-strong, var(--line)); }
+      .channel-group.active { background: var(--belt-fill, var(--accent-soft));
+        border-color: var(--belt, var(--accent)); color: var(--text); }
+      .channel-group .channel-dot { top: 3px; right: 3px; }
       .channel-strip { position: relative; margin: 0 -16px 10px; }
       .channel-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
         padding: 2px 16px 2px; scroll-behavior: smooth; }

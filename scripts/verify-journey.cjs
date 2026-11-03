@@ -584,12 +584,23 @@ const mountGroup = (over = {}) => {
 };
 
 check("the room strip marks the room you are in", () => {
-  // Nine rooms scroll sideways, and the selected one used to be a slightly
-  // different grey inside a box that clipped a label mid-word. If nothing on
-  // the strip is marked, nothing tells you where you are.
+  // Twenty-six rooms do not fit one strip, so the parts of the game are one
+  // row and the rooms inside the open part are the next. Exactly one part and
+  // exactly one room are marked, and the rooms on show are that part's rooms
+  // and no others — otherwise nothing tells you where you are.
   mountGroup();
+  const groups = [...host.querySelectorAll(".channel-group")];
+  if (groups.length !== A.CHANNEL_GROUPS.length) {
+    throw new Error(`${groups.length} parts on the row, expected ${A.CHANNEL_GROUPS.length}`);
+  }
+  const onGroup = groups.filter((g) => g.classList.contains("active"));
+  if (onGroup.length !== 1) throw new Error(`${onGroup.length} parts marked as open, expected 1`);
+
+  const expected = A.channelsInGroup(A.groupOfChannel("general"));
   const chips = [...host.querySelectorAll(".channel-chip")];
-  if (chips.length < 8) throw new Error(`${chips.length} rooms on the strip`);
+  if (chips.length !== expected.length) {
+    throw new Error(`${chips.length} rooms on the strip, expected the ${expected.length} in the open part`);
+  }
   const on = chips.filter((c) => c.classList.contains("active"));
   if (on.length !== 1) throw new Error(`${on.length} rooms marked as selected, expected 1`);
   const tabbed = chips.filter((c) => c.getAttribute("aria-selected") === "true");
@@ -598,13 +609,70 @@ check("the room strip marks the room you are in", () => {
   chips.forEach((c) => { if (!c.textContent.trim()) throw new Error("a room chip has no label"); });
 });
 
-check("a room with something new carries a dot, and the rest do not", () => {
+check("unread in a part you are not looking at still shows up", () => {
+  // 'passing' lives under Top and the page opens on General, so its chip is
+  // not on screen at all. When the strip was one flat row this was just a dot
+  // on a chip; now an unread room inside a closed part has to mark the part,
+  // or the only people who find out are the ones who were going to look
+  // anyway.
   mountGroup({ unreadByChannel: { passing: 3 } });
-  const dotted = [...host.querySelectorAll(".channel-chip")].filter((c) => c.querySelector(".channel-dot"));
-  if (dotted.length !== 1) throw new Error(`${dotted.length} rooms show a dot, expected 1`);
-  if (!/passing/i.test(dotted[0].textContent)) throw new Error(`the dot landed on ${dotted[0].textContent.trim()}`);
+  if (host.querySelector(".channel-chip .channel-dot")) {
+    throw new Error("a chip carried the dot for a room that is not on screen");
+  }
+  const dotted = [...host.querySelectorAll(".channel-group")].filter((g) => g.querySelector(".channel-dot"));
+  if (dotted.length !== 1) throw new Error(`${dotted.length} parts show a dot, expected 1`);
+  if (!/top/i.test(dotted[0].textContent)) {
+    throw new Error(`the dot landed on ${dotted[0].textContent.trim()}`);
+  }
+
+  // A room inside the part you are already in marks its own chip, and the
+  // part does not say it twice.
+  mountGroup({ unreadByChannel: { technique: 2 } });
+  const inOpen = [...host.querySelectorAll(".channel-chip")].filter((c) => c.querySelector(".channel-dot"));
+  if (inOpen.length !== 1) throw new Error(`${inOpen.length} rooms show a dot, expected 1`);
+  if (!/everything else/i.test(inOpen[0].textContent)) {
+    throw new Error(`the dot landed on ${inOpen[0].textContent.trim()}`);
+  }
+  if (host.querySelector(".channel-group .channel-dot")) {
+    throw new Error("the open part doubled up the dot its own chip already carries");
+  }
+
   mountGroup();
   if (host.querySelector(".channel-dot")) throw new Error("a dot with nothing unread");
+});
+
+check("every room is reachable from some part of the game", () => {
+  // A room whose group is a typo renders nowhere and can never be opened
+  // again, while the database still happily accepts posts to it. Twenty-six
+  // rooms is too many to check by eye.
+  const groupIds = new Set(A.CHANNEL_GROUPS.map((g) => g.id));
+  const orphans = A.COMMUNITY_CHANNELS.filter((c) => !groupIds.has(c.group));
+  if (orphans.length) throw new Error(`rooms in no part: ${orphans.map((c) => c.id).join(", ")}`);
+  const empty = A.CHANNEL_GROUPS.filter((g) => A.channelsInGroup(g.id).length === 0);
+  if (empty.length) throw new Error(`parts with no rooms: ${empty.map((g) => g.id).join(", ")}`);
+  const ids = A.COMMUNITY_CHANNELS.map((c) => c.id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length) throw new Error(`two rooms share an id: ${dupes.join(", ")}`);
+  const mute = A.COMMUNITY_CHANNELS.filter((c) => !c.label || !c.blurb || !c.placeholder);
+  if (mute.length) throw new Error(`rooms with no label, blurb or prompt: ${mute.map((c) => c.id).join(", ")}`);
+});
+
+check("the two kinds of sweep cannot be mistaken for each other", () => {
+  // 'Sweeps' is reversing from the bottom and 'Foot sweeps' is standing. The
+  // names are one word apart and the techniques are nothing alike, so each
+  // label has to say which it is.
+  const by = (id) => A.COMMUNITY_CHANNELS.find((c) => c.id === id);
+  const guard = by("sweeps"), standing = by("footsweeps");
+  if (!guard || !standing) throw new Error("one of the two sweep rooms is missing");
+  if (!/guard/i.test(guard.label)) throw new Error(`"${guard.label}" does not say it is from guard`);
+  if (!/standing/i.test(standing.label)) throw new Error(`"${standing.label}" does not say it is standing`);
+  if (guard.group === standing.group) throw new Error("both sweep rooms sit in the same part of the game");
+});
+
+check("there is a way into your own saved list, and it is yours alone", () => {
+  mountGroup();
+  const btn = [...host.querySelectorAll("button")].find((b) => /^saved\b/i.test(b.textContent.trim()));
+  if (!btn) throw new Error("no way into the saved list from the group page");
 });
 
 check("the composer is shut until somebody wants it", () => {
