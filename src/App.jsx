@@ -2030,6 +2030,35 @@ const BELT_THEME = {
   Brown:  { belt: "#6d4a2f", bar: "#17191e", fill: "#6d4a2f", inkDark: "#9d6b44", inkLight: "#6d4a2f" },
   Black:  { belt: "#3a3f4d", bar: "#c4172a", fill: "#c81e2c", inkDark: "#df2b39", inkLight: "#c81e2c" },
 };
+// Relative luminance and contrast, WCAG 2.1. These exist so the question "can
+// this text be read on this colour" is measured rather than eyeballed per belt
+// — which is how a white belt ended up with white text on a white pill.
+function relLuminance(hex) {
+  const raw = String(hex || "").trim().replace(/^#/, "");
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
+  const chan = (i) => {
+    const v = parseInt(full.slice(i * 2, i * 2 + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * chan(0) + 0.7152 * chan(1) + 0.0722 * chan(2);
+}
+function contrastRatio(a, b) {
+  const la = relLuminance(a), lb = relLuminance(b);
+  if (la == null || lb == null) return null;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+// The text to put ON a solid colour — whichever of the app's near-black and
+// near-white can actually be read on it. Derived rather than written down per
+// belt, so changing a belt's colour cannot leave its text behind.
+const INK_ON_LIGHT = "#17191e";
+const INK_ON_DARK = "#f5f6f8";
+function inkOn(background) {
+  const dark = contrastRatio(INK_ON_LIGHT, background);
+  const light = contrastRatio(INK_ON_DARK, background);
+  if (dark == null || light == null) return "var(--text)";
+  return dark >= light ? INK_ON_LIGHT : INK_ON_DARK;
+}
 const beltTheme = (level) =>
   (Object.prototype.hasOwnProperty.call(BELT_THEME, level) ? BELT_THEME[level] : BELT_THEME.White);
 // The custom properties the whole app themes off. --belt-glow keeps its old name
@@ -2043,6 +2072,10 @@ function beltVars(level, theme) {
     "--belt-fill": b.fill,
     "--belt-glow": b.fill,
     "--belt-ink": ink || "var(--text)",
+    // Text sitting on top of the belt colour itself, as opposed to --belt-ink,
+    // which is the belt colour used as text on the page background. A white
+    // belt needs black here and white there, and one variable cannot be both.
+    "--belt-on-fill": inkOn(b.fill),
   };
 }
 
@@ -11974,8 +12007,8 @@ function GlobalStyle() {
     <style>{`
       .app-shell { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; position: relative; overflow-x: hidden;
         background: var(--bg); color: var(--text); }
-      .app-shell[data-theme="dark"] { --belt-fill: var(--bg); --belt-ink: var(--text); --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
-      .app-shell[data-theme="light"] { --belt-fill: var(--bg); --belt-ink: var(--text); --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#585c63; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
+      .app-shell[data-theme="dark"] { --belt-fill: var(--bg); --belt-ink: var(--text); --belt-on-fill: var(--text); --bg:#000000; --card:#111214; --border:#262931; --field-border:#616776; --text:#f5f6f8; --text-dim:#83878f; --accent:#00d9b8; --accent-text:#00201a; --cta:#00d9b8; --cta2:#00d9b8; --green:#4f9d5c; --amber:#d9a22b; --red:#c0392b; --info:#4a9eff; --neon-gold:#f5e000; }
+      .app-shell[data-theme="light"] { --belt-fill: var(--bg); --belt-ink: var(--text); --belt-on-fill: var(--text); --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#585c63; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
       .app-shell > * { position: relative; z-index: 1; }
@@ -12383,8 +12416,10 @@ function GlobalStyle() {
         padding: 6px 12px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.01em;
         cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
       .channel-group:hover { color: var(--text); border-color: var(--line-strong, var(--line)); }
+      /* A solid fill needs text matched to the fill, not to the page. This was
+         color: var(--text), which on a white belt is white on white. */
       .channel-group.active { background: var(--belt-fill, var(--accent-soft));
-        border-color: var(--belt, var(--accent)); color: var(--text); }
+        border-color: var(--belt, var(--accent)); color: var(--belt-on-fill, var(--text)); }
       .channel-group .channel-dot { top: 3px; right: 3px; }
       .channel-strip { position: relative; margin: 0 -16px 10px; }
       .channel-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
@@ -12674,7 +12709,8 @@ function GlobalStyle() {
         background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text);
         padding: 10px 13px; cursor: pointer; font: inherit; }
       .clip-hit:last-child { border-bottom: none; }
-      .clip-hit:hover, .clip-hit:focus-visible { background: var(--belt-fill, var(--accent-soft)); outline: none; }
+      .clip-hit:hover, .clip-hit:focus-visible {
+        background: color-mix(in srgb, var(--belt-fill) 14%, var(--card)); outline: none; }
       .clip-hit > svg { flex: none; margin-top: 2px; color: var(--belt, var(--accent)); }
       .clip-hit-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .clip-hit-text { font-size: 13px; line-height: 1.4; }

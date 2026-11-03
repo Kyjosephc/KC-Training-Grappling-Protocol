@@ -1837,5 +1837,60 @@ check("the records screen shows the date and the weight they were at", () => {
   unmount();
 });
 
+
+console.log("\nReadable on your own belt");
+check("the contrast maths is the real thing", () => {
+  const r = A.contrastRatio("#000000", "#ffffff");
+  if (Math.abs(r - 21) > 0.01) throw new Error(`black on white came out ${r}, not 21`);
+  if (Math.abs(A.contrastRatio("#3f9d5a", "#3f9d5a") - 1) > 0.001) throw new Error("a colour on itself is not 1");
+  if (A.contrastRatio("not a colour", "#ffffff") !== null) throw new Error("nonsense did not read as no answer");
+  if (A.relLuminance("#fff") == null) throw new Error("three-digit hex was rejected");
+});
+
+check("text on a belt colour can be read, on every belt", () => {
+  // The white belt is the one that broke: its colour is near-white, so the
+  // selected pill was white text on a white fill. Measured, not eyeballed.
+  const bad = Object.keys(A.BELT_THEME).map((belt) => {
+    const fill = A.BELT_THEME[belt].fill;
+    const ink = A.inkOn(fill);
+    return { belt, fill, ink, ratio: A.contrastRatio(ink, fill) };
+  }).filter((x) => !(x.ratio >= 4.5));
+  if (bad.length) {
+    throw new Error("unreadable on their own belt: " + bad
+      .map((x) => `${x.belt} ${x.ink} on ${x.fill} = ${x.ratio && x.ratio.toFixed(2)}`).join(", "));
+  }
+});
+
+check("a white belt gets black text and a brown belt gets white", () => {
+  const white = A.inkOn(A.BELT_THEME.White.fill);
+  if (A.relLuminance(white) > 0.2) throw new Error(`a white belt was given ${white}, which is not dark`);
+  const brown = A.inkOn(A.BELT_THEME.Brown.fill);
+  if (A.relLuminance(brown) < 0.5) throw new Error(`a brown belt was given ${brown}, which is not light`);
+  // And the variable actually reaches the stylesheet.
+  const vars = A.beltVars("White", "dark");
+  if (!vars["--belt-on-fill"]) throw new Error("no --belt-on-fill in the belt variables");
+  if (A.contrastRatio(vars["--belt-on-fill"], A.BELT_THEME.White.fill) < 4.5) {
+    throw new Error("the variable handed to the page is not the readable one");
+  }
+});
+
+check("nothing paints text straight onto a belt fill again", () => {
+  // The class of bug rather than the instance: a solid belt-coloured
+  // background with the page's ordinary text colour on top is unreadable for
+  // whichever belts happen to be near that end of the scale.
+  const src = require("fs").readFileSync(require("path").join(__dirname, "..", "src", "App.jsx"), "utf8");
+  const offenders = [];
+  let at = 0;
+  for (;;) {
+    const i = src.indexOf("background: var(--belt-fill", at);
+    if (i < 0) break;
+    at = i + 1;
+    const end = src.indexOf("}", i);
+    const body = src.slice(i, end < 0 ? src.length : end);
+    if (/color:\s*var\(--text\)/.test(body)) offenders.push(body.replace(/\s+/g, " ").slice(0, 90));
+  }
+  if (offenders.length) throw new Error("solid belt fill under plain text: " + offenders.join(" | "));
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);
