@@ -1771,5 +1771,71 @@ check("no bike round asks the athlete what weight they used", () => {
   if (asking.length) throw new Error(`conditioning demanding a weight: ${asking.join(", ")}`);
 });
 
+
+console.log("\nWhat you weighed when you set it");
+check("a record carries the weigh-in nearest before it, not the newest one", () => {
+  const c = { bodyweightLog: [
+    { date: dayStr(60), weight: 192 },
+    { date: dayStr(32), weight: 185 },
+    { date: dayStr(10), weight: 178 },
+    { date: dayStr(1), weight: 171 },
+  ] };
+  // The record is 10 days old; the 171 was logged after it and must not be
+  // claimed as what they were at.
+  if (A.bodyweightOn(c, dayStr(10)) !== 178) throw new Error(`got ${A.bodyweightOn(c, dayStr(10))} for the day of the record`);
+  if (A.bodyweightOn(c, dayStr(9)) !== 178) throw new Error("the day after a weigh-in lost it");
+  if (A.bodyweightOn(c, dayStr(40)) !== 192) throw new Error("an older record did not fall back to the older weigh-in");
+  // Nothing within a month of it, so nothing is claimed.
+  if (A.bodyweightOn(c, dayStr(100)) !== null) throw new Error("a weigh-in from after the record was used");
+  if (A.bodyweightOn({ bodyweightLog: [{ date: dayStr(90), weight: 180 }] }, dayStr(10)) !== null) {
+    throw new Error("a weigh-in eighty days stale was presented as what they were at");
+  }
+  if (A.bodyweightOn({}, dayStr(1)) !== null) throw new Error("no log did not read as no answer");
+  if (A.bodyweightOn(c, null) !== null) throw new Error("no date did not read as no answer");
+});
+
+check("a record that stored its own bodyweight keeps it", () => {
+  // Derived is the fallback for records set before this existed. A stored
+  // figure is what they actually weighed and must not move when an old
+  // weigh-in is corrected months later.
+  const c = { bodyweightLog: [{ date: dayStr(10), weight: 178 }] };
+  const pr = { exerciseName: "Back Squat", date: dayStr(10), weight: 315, reps: 1, bodyweight: 168 };
+  if (A.prBodyweight(c, pr) !== 168) throw new Error("the stored bodyweight was overridden by the log");
+  if (A.prBodyweight(c, { ...pr, bodyweight: undefined }) !== 178) throw new Error("no stored figure did not fall back to the log");
+  if (A.prBodyweight(c, { ...pr, bodyweight: 0 }) !== 178) throw new Error("a zero was treated as a real weigh-in");
+});
+
+check("the note says the bodyweight, and the multiple where a bar is involved", () => {
+  const c = { bodyweightLog: [] };
+  const squat = { exerciseName: "Back Squat", date: dayStr(5), weight: 315, reps: 1, bodyweight: 175 };
+  const note = A.prBodyweightNote(c, squat);
+  if (!/175 lb/.test(note)) throw new Error(`no bodyweight in "${note}"`);
+  if (!/1\.80/.test(note)) throw new Error(`no multiple in "${note}" for 315 at 175`);
+  // Bodyweight movements have no multiple to give.
+  const t2b = { exerciseName: "Toes to Bar", date: dayStr(5), weight: 0, reps: 15, bodyweight: 175 };
+  const tn = A.prBodyweightNote(c, t2b);
+  if (!/175 lb/.test(tn)) throw new Error(`no bodyweight on a bodyweight movement: "${tn}"`);
+  if (/×/.test(tn)) throw new Error(`a multiple was invented for a bodyweight movement: "${tn}"`);
+  // And with nothing logged there is no note at all rather than a blank one.
+  if (A.prBodyweightNote(c, { ...squat, bodyweight: undefined }) !== null) {
+    throw new Error("a note was produced with no weigh-in to base it on");
+  }
+});
+
+check("the records screen shows the date and the weight they were at", () => {
+  const c = {
+    bodyweightLog: [{ date: dayStr(20), weight: 181 }, { date: dayStr(5), weight: 176 }],
+    prLog: [
+      { id: "r1", exerciseName: "Back Squat", date: dayStr(5), weight: 315, reps: 1 },
+      { id: "r2", exerciseName: "Back Squat", date: dayStr(20), weight: 295, reps: 1 },
+    ],
+  };
+  mount(React.createElement(A.PRsTab, { client: c }));
+  const seen = host.textContent;
+  if (!/176/.test(seen)) throw new Error("the most recent record does not say what they weighed");
+  if (!/1\.79/.test(seen)) throw new Error("no multiple of bodyweight on the record");
+  unmount();
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

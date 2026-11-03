@@ -1220,6 +1220,49 @@ function latestBodyweight(client) {
   }
   return null;
 }
+// What they weighed when a record was set. Bodyweight is half of what a record
+// means in a weight-class sport: 225 at 155 and 225 at 185 are not the same
+// lift, and a year later nobody can tell which one it was.
+//
+// Records set before this was stored carry no bodyweight of their own, so the
+// weigh-in log is read for the nearest entry on or before that date. A weigh-in
+// more than a month earlier is not what they were at — that gets left out
+// rather than guessed at, because a wrong number here is worse than none.
+function bodyweightOn(client, date, maxAgeDays = 30) {
+  if (!date) return null;
+  const earlier = ((client && client.bodyweightLog) || [])
+    .filter((e) => e && e.date && e.date <= date && Number(e.weight) > 0)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const hit = earlier[0];
+  if (!hit) return null;
+  const gap = (new Date(date + "T00:00:00") - new Date(hit.date + "T00:00:00")) / 86400000;
+  if (!Number.isFinite(gap) || gap > maxAgeDays) return null;
+  return Number(hit.weight);
+}
+
+// The stored figure wins over the derived one: it is what they actually weighed
+// that day, and unlike the derived one it does not move when an old weigh-in is
+// corrected months later.
+function prBodyweight(client, pr) {
+  const stored = Number(pr && pr.bodyweight);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  return bodyweightOn(client, pr && pr.date);
+}
+
+// The note that rides under a record. For anything with a bar on it the
+// multiple goes in too, since relative strength is the number that actually
+// means something to a grappler. Tiny accessory loads make a silly-looking
+// ratio, so they get the bodyweight alone.
+function prBodyweightNote(client, pr) {
+  const bw = prBodyweight(client, pr);
+  if (!bw) return null;
+  const lifted = Number(pr && pr.weight) || 0;
+  const ratio = lifted > 0 && needsWeight(pr && pr.exerciseName) ? lifted / bw : 0;
+  return ratio >= 0.25
+    ? `at ${Math.round(bw)} lb bodyweight · ${ratio.toFixed(2)}× bodyweight`
+    : `at ${Math.round(bw)} lb bodyweight`;
+}
+
 function leaderboardTotalsFor(client) {
   const logs = (client && client.logs) || [];
   const thisWeek = weekStartOf(todayStr());
@@ -7073,7 +7116,11 @@ function MainApp({ userId, onSignOut }) {
             return saved;
           }}
           onRecordPR={async (entry) => {
-            const newRecord = { id: uid(), date: todayStr(), ...entry };
+            // Stamped now rather than worked out later, so the record keeps
+            // what they weighed on the day even if the weigh-in log is edited
+            // or pruned afterwards.
+            const newRecord = { id: uid(), date: todayStr(), ...entry,
+              bodyweight: bodyweightOn(client, todayStr()) };
             // Two taps dispatched before a re-render both closed over the same
             // prLog, so the second overwrote the first and a record vanished.
             // The ref carries the newest list between taps.
@@ -7889,7 +7936,7 @@ function ClientDashboard({ client, onClose }) {
       <div className="card">
         <h3 className="log-exercise-name" style={{ marginBottom: 8 }}>Personal Records</h3>
         {recentPRs.length === 0 ? <p className="muted">No Personal Records flagged yet — check the Personal Record box next to a set on the workout screen to start tracking them here.</p> : recentPRs.map((p) => (
-          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {unitFor(p.reps, p.exerciseName)} — {fmtDate(p.date)}</span></div>
+          <div key={p.id} className="pr-history-row"><span>{p.exerciseName}</span><span>{p.weight ? `${p.weight} pounds × ` : ""}{p.reps} {unitFor(p.reps, p.exerciseName)} — {fmtDate(p.date)}{prBodyweight(client, p) ? ` · at ${Math.round(prBodyweight(client, p))} lb` : ""}</span></div>
         ))}
       </div>
     </ModalShell>
@@ -11764,6 +11811,9 @@ function PRsTab({ client }) {
                 <Trophy size={17} color="var(--accent)" /><span>{mostRecent.weight} lb × {mostRecent.reps} {unitFor(mostRecent.reps, name)}</span>
               </div>
               <div className="pr-side-row"><CalendarDays size={13} color="var(--text-dim)" /><span className="muted">{fmtDate(mostRecent.date)} — most recent</span></div>
+              {prBodyweightNote(client, mostRecent) && (
+                <div className="pr-side-row"><Scale size={13} color="var(--text-dim)" /><span className="muted">{prBodyweightNote(client, mostRecent)}</span></div>
+              )}
               {records.length > 1 && <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{records.length} Personal Records logged — tap to see your progress</div>}
             </button>
             {open && (
@@ -11808,7 +11858,10 @@ function PRsTab({ client }) {
                 {earlier.map((h) => (
                   <div key={h.id} className="pr-history-row-v2">
                     <div className="pr-history-weight">{h.weight} lb <span className="pr-history-x">×</span> {h.reps} {unitFor(h.reps, name)}</div>
-                    <div className="pr-history-date"><CalendarDays size={12} /> {fmtDate(h.date)}</div>
+                    <div className="pr-history-date">
+                      <CalendarDays size={12} /> {fmtDate(h.date)}
+                      {prBodyweight(client, h) ? <span className="pr-history-bw"> · at {Math.round(prBodyweight(client, h))} lb</span> : null}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -12676,6 +12729,7 @@ function GlobalStyle() {
       /* Available everywhere it makes sense, and loud only when the set in
          front of them actually beat their best. */
       .set-pr.beats { border-color: var(--amber); color: var(--amber); }
+      .pr-history-bw { color: var(--text-dim); }
       .sub-row { display: flex; flex-wrap: wrap; margin-top: 8px; gap: 6px; }
       .sub-pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
       .sub-pill { min-height: 44px; display: inline-flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12.5px; padding: 6px 14px; cursor: pointer; }
