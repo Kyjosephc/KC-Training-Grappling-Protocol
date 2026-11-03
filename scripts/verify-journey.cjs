@@ -1702,5 +1702,74 @@ check("corrupt stored JSON reads as nothing rather than crashing the app", () =>
   clearStorage();
 });
 
+
+console.log("\nThe trophy");
+check("somebody with no history can still mark a personal record", () => {
+  // The trophy used to render only when the set beat a previously logged best,
+  // so an athlete who had never logged that lift had no trophy on any row and
+  // no way to mark anything. Every new athlete is in that state on every lift,
+  // which is how the whole feature appeared to vanish.
+  const first = athlete({ id: "pr1", firstName: "Pat", paid: true, sessionsCompleted: 4, logs: [] });
+  mount(React.createElement(A.DaySessionScreen, { client: first, isCoach: false,
+    phaseId: first.program.phases[0].id, dayId: first.program.phases[0].days[0].id,
+    onClose() {}, onSave: async () => ({ ok: true }), onStartMobility() {}, onUpdateProgram() {},
+    onRestartProgram: async () => {}, onRecordPR() {}, onRemovePR() {} }));
+  const trophies = host.querySelectorAll(".set-pr").length;
+  if (trophies === 0) throw new Error("no way to mark a record anywhere on a first session");
+  const labelled = [...host.querySelectorAll(".set-pr")]
+    .filter((b) => /personal record/i.test(b.getAttribute("aria-label") || ""));
+  if (labelled.length !== trophies) throw new Error("a trophy button does not say what it does");
+  unmount();
+});
+
+const everyExercise = () => {
+  const names = new Set();
+  [1, 2, 3, 4].forEach((b) => Object.keys(A.PROGRAM_VARIANT_LABELS).forEach((v) => {
+    const prog = A.buildProgramVariant(v, { blockNumber: b });
+    (prog.phases || []).forEach((ph) => (ph.days || []).forEach((d) =>
+      (d.sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => { if (e && e.name) names.add(e.name); }))));
+  }));
+  return [...names];
+};
+
+check("the trophy reaches every exercise a record is a real idea in", () => {
+  const all = everyExercise();
+  if (all.length < 50) throw new Error(`only ${all.length} exercises found across the programs`);
+
+  // Anything that asks for a weight can hold a record. Asking for a weight and
+  // then refusing the record is the contradiction this catches.
+  const loadedButBlocked = all.filter((n) => A.needsWeight(n) && !A.canMarkPR(n) && !/dynamic effort/i.test(n));
+  if (loadedButBlocked.length) throw new Error(`loaded lifts with no trophy: ${loadedButBlocked.join(", ")}`);
+
+  // And so can the ones measured in distance, reps or time rather than weight.
+  // These are exactly the ones the old gate silently excluded.
+  ["Broad Jump", "Toes to Bar", "Side Plank", "Pogo Hops",
+   "Five-Ten-Five Pro Agility Shuttle", "Acceleration Sprint (10 to 15 yards)"].forEach((n) => {
+    if (!A.canMarkPR(n)) throw new Error(`"${n}" cannot be marked, and it is a thing you set records in`);
+  });
+
+  // What stays out: work where going harder is doing something else, and
+  // conditioning that runs for the time on the card.
+  ["Speed Bench Press — Dynamic Effort", "Trap Bar Jump Squat — Dynamic Effort",
+   "Assault Bike or Treadmill — Easy Aerobic"].forEach((n) => {
+    if (A.canMarkPR(n)) throw new Error(`"${n}" offers a record, and a record there means nothing`);
+  });
+
+  // The automatic detection stays narrower than the trophy on purpose: it runs
+  // an estimated one-rep max, which a jump does not have.
+  if (A.hasMeaningfulMax("Broad Jump")) throw new Error("a broad jump is being run through a one-rep-max formula again");
+  if (!A.hasMeaningfulMax("Back Squat")) throw new Error("a back squat stopped counting as a lift");
+});
+
+check("no bike round asks the athlete what weight they used", () => {
+  // A set with no weight on an exercise that takes load is discarded as "not
+  // performed" when the session saves, so this is not a cosmetic stray box —
+  // it is conditioning work vanishing out of somebody's history.
+  const asking = everyExercise()
+    .filter((n) => /assault bike|treadmill|aerobic|zone 2|vo2|interval|match-duration/i.test(n))
+    .filter((n) => A.needsWeight(n));
+  if (asking.length) throw new Error(`conditioning demanding a weight: ${asking.join(", ")}`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

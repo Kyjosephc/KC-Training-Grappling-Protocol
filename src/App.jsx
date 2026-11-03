@@ -2642,6 +2642,7 @@ const MINUTE_BASED_EXERCISES = new Set([
   "assault bike, treadmill, or outdoor — aerobic base",
   "assault bike or treadmill — aerobic power intervals",
   "assault bike or treadmill — repeated-effort tempo",
+  "assault bike or treadmill — match-duration round",
 ]);
 // Exercises with no external load at all — sprints, shuttles, bodyweight conditioning, band
 // work, and isometric neck holds done without a plate. The Weight input is hidden for these
@@ -2649,6 +2650,12 @@ const MINUTE_BASED_EXERCISES = new Set([
 // noise. Reviewed and confirmed by Kyle on 2026-09-20.
 const NO_WEIGHT_EXERCISES = new Set([
   "6-way isometric neck holds",
+  // Every other round on these machines was already here and this one was not,
+  // so a match-duration round alone asked for a number in pounds. A loaded set
+  // left blank is dropped as "not performed" when the session saves, so an
+  // eight-minute round done properly disappeared out of the athlete's history
+  // for the crime of having no weight to put on a bike.
+  "assault bike or treadmill — match-duration round",
   // Bodyweight. These were demanding a number in the pounds box, and a set with
   // no weight on a loaded exercise is dropped as "not performed" when the
   // session saves — so a broad jump done properly and left blank vanished from
@@ -2740,6 +2747,21 @@ function needsWeight(name) {
 // strength. Personal records, the trophy on a set, and the progress verdict all
 // leaned on needsWeight and so all three said it.
 const NOT_A_MAX = /jump|throw|slam|scoop|sprint|shuttle|bound|\bhop\b|plyo|dynamic effort/i;
+// Whether an athlete can claim a record here by hand — a wider question than
+// hasMeaningfulMax, and the two were being answered by the same predicate.
+// hasMeaningfulMax asks whether an estimated one-rep max means anything, which
+// is right for the automatic detection and wrong as a gate on the trophy: a
+// broad jump has no one-rep max and is obviously a thing you set records in,
+// and so are a hold, a shuttle and a set of toes to bar.
+//
+// What is left out is work where "record" is not an idea at all. Dynamic
+// effort is prescribed at a percentage for bar speed, so going heavier is not
+// doing it better, it is doing something else. Steady-state conditioning runs
+// for the duration on the card.
+const NOT_A_RECORD = /dynamic effort|assault bike|treadmill|aerobic|interval|vo2|zone 2/i;
+function canMarkPR(name) {
+  return !NOT_A_RECORD.test(String(name || ""));
+}
 function hasMeaningfulMax(name) {
   if (!needsWeight(name)) return false;
   return !NOT_A_MAX.test(String(name || ""));
@@ -10315,8 +10337,17 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     const thisSetE1rm = est1RM(Number(s.weight) || 0, Number(s.reps) || 0);
                     // Same rule as the saved record: something to beat, and a
                     // movement where a max is a real idea.
+                    // Two different things, and collapsing them is what broke
+                    // this. beatsBest is the highlight — "that one was a best"
+                    // — and needs something to beat. canMark is whether the
+                    // trophy is there to tap at all, which must not depend on
+                    // having a history: the first time somebody pulls a heavy
+                    // deadlift is exactly when they want to mark it, and the
+                    // gate below meant no athlete could mark anything until
+                    // they had already logged that lift once.
                     const beatsBest = thisSetE1rm > 0 && hasMeaningfulMax(displayName)
                       && !!allTimeBest && thisSetE1rm >= allTimeBest.e1rm;
+                    const canMark = canMarkPR(displayName);
                     const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
                     const targetWeight = effectivePct && priorBestForPct
                       ? Math.round((priorBestForPct.e1rm * effectivePct) / 100)
@@ -10381,8 +10412,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                             <span aria-hidden="true" />
                           )}
                           <input type="text" inputMode="numeric" aria-label={`${exerciseUnitLabel(displayName, en.target.reps)} completed`} placeholder={perSet ? String(perSet.reps) : String(en.target.reps)} value={s.reps} onChange={(e) => updateSet(sec.id, exIdx, setIdx, "reps", e.target.value)} />
-                          {(beatsBest || setFlagged) ? (
-                          <button type="button" className={`set-pr ${setFlagged ? "flagged" : ""}`} aria-pressed={setFlagged} aria-label={`${setFlagged ? "Remove" : "Mark"} set ${setIdx + 1} as a Personal Record`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
+                          {(canMark || setFlagged) ? (
+                          <button type="button" className={`set-pr ${setFlagged ? "flagged" : ""} ${beatsBest && !setFlagged ? "beats" : ""}`} aria-pressed={setFlagged} aria-label={`${setFlagged ? "Remove" : "Mark"} set ${setIdx + 1} as a Personal Record`} onClick={() => { if (!setHasData) { setPrHint(`${en.name} — set ${setIdx + 1}`); return; } togglePRFlag(sec.id, exIdx, setIdx); }} title={setHasData ? "Mark this set as a Personal Record" : "Enter a weight first, then tap to mark a Personal Record"}><Trophy size={15} /></button>
                           ) : <span aria-hidden="true" />}
                         </div>
                       </React.Fragment>
@@ -12642,6 +12673,9 @@ function GlobalStyle() {
       .video-edit-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
       .set-pr { background: var(--card); border: 1px solid var(--border); border-radius: 8px; min-height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .set-pr.flagged { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+      /* Available everywhere it makes sense, and loud only when the set in
+         front of them actually beat their best. */
+      .set-pr.beats { border-color: var(--amber); color: var(--amber); }
       .sub-row { display: flex; flex-wrap: wrap; margin-top: 8px; gap: 6px; }
       .sub-pill-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
       .sub-pill { min-height: 44px; display: inline-flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; color: var(--text); font-size: 12.5px; padding: 6px 14px; cursor: pointer; }
