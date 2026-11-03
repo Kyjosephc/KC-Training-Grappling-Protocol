@@ -2971,9 +2971,9 @@ const conjugateProgram = {
         { id: uid(), label: "2", name: "Max Effort Upper — Deload",
           intent: "Same approach — stay light on purpose, no ego reps.",
           sections: [
-            { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
-              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
-            ]},
+            // Strength first, prehab last — the order every other session in the
+            // catalogue uses, including the week 4 and week 8 deloads. This one day
+            // opened on neck isometrics and put the bench after them.
             { id: uid(), type: "strength", name: "Main Strength — Deload", exercises: [
               ex({ ...meUpperBlock(), sets: 5, rir: 5, quality: "Max Effort (Deload)", reps: "five light sets, building doubles and triples", perSetTargets: meRetestSets(), cues: "Every set stays at 50 to 60 percent of your last known One-Rep Max. No max attempts this week." }),
             ]},
@@ -2982,6 +2982,9 @@ const conjugateProgram = {
                 purpose: "The highest-transfer upper body lift in the program, kept at a maintenance dose through the handover week.",
                 cues: "Full hang at the bottom, chest toward the bar, lower under control. Stop while they are still clean." }),
               ex({ name: "Pull-Up Bar Dead Hang", sets: 2, reps: "moderate time, well short of maximum", load: "bodyweight", rir: 4, rest: "60 seconds", purpose: "Light grip maintenance", quality: "Grip", videoUrl: "https://www.youtube.com/shorts/XPcT3capkyk" }) ]},
+            { id: uid(), type: "durability", name: "Durability & Tendon Health", exercises: [
+              ex({ name: "6-Way Isometric Neck Holds", sets: 2, reps: "15 seconds each direction", load: "your own hand, or a folded towel against a wall, for resistance", rir: 5, rest: "45 seconds", purpose: "A deload is a deload from lifting — you are still rolling this week and still getting choked. This stays in at a maintenance dose.", quality: "Durability", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" }),
+            ]},
           ]},
         { id: uid(), label: "3", name: "Recovery & Easy Conditioning",
           intent: "Light and easy, full stop. The only goal this week is walking into the next block's Week 1 completely recovered. Movement quality and an easy ride, and that genuinely is the session.",
@@ -10044,7 +10047,7 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
   // Same as a training session: the screen stays on while it is open.
   useScreenWakeLock(!done);
 
-  const totalSeconds = segments.reduce((s, seg) => s + seg.seconds, 0);
+  const totalSeconds = segments.reduce((s, seg) => s + (Number(seg.seconds) || 0), 0);
   const elapsedBefore = segments.slice(0, idx).reduce((s, seg) => s + seg.seconds, 0);
 
   useEffect(() => { clearInterval(timerRef.current); setRunning(false); setRemaining(segments[idx]?.seconds || 0); }, [idx]); // eslint-disable-line
@@ -10698,7 +10701,12 @@ function HistoryTab({ client, onPersist }) {
           <div className="program-title" style={{ fontSize: 18, marginTop: 20 }}>Recovery & Mobility</div>
           {mobilityLogs.map((m) => (
             <div key={m.id} className="history-card"><div className="history-body" style={{ borderTop: "none", padding: 14 }}>
-              <div className="history-date">{fmtDate(m.date)} — {Math.round(m.totalSeconds / 60)} minutes</div>
+              <div className="history-date">
+                {fmtDate(m.date)}
+                {Number.isFinite(Number(m.totalSeconds)) && Number(m.totalSeconds) > 0
+                  ? ` — ${Math.round(Number(m.totalSeconds) / 60)} minutes`
+                  : ""}
+              </div>
               {m.notes && <div className="history-notes">"{m.notes}"</div>}
             </div></div>
           ))}

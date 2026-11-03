@@ -875,6 +875,28 @@ check("one movement, one name, across every program", () => {
       if (!names.has(kept)) throw new Error(`"${kept}" has gone missing — the rename lost the movement`);
     });
 });
+check("no session asks for prehab before the heavy work", () => {
+  // Week 12 of Program A opened its upper deload on neck isometrics and put the
+  // bench after them — the only session of 120 that did, against the order
+  // every other session including the week 4 and week 8 deloads already used.
+  const bad = [];
+  ["A", "B", "C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const total = A.totalSessionsIn(p);
+    for (let i = 0; i < total; i++) {
+      const pos = A.positionAtIndex(p, i);
+      if (!pos) continue;
+      const types = A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false,
+        { blockNumber: 1, excludedExercises: [], injuryAreas: [] }).map((sec) => sec.type);
+      const firstLight = types.findIndex((t) => t === "accessory" || t === "durability");
+      if (firstLight === -1) continue;
+      if (types.lastIndexOf("power") > firstLight || types.lastIndexOf("strength") > firstLight) {
+        bad.push(`${v} week ${pos.weekNumber} day ${pos.day.label}: ${types.join(" > ")}`);
+      }
+    }
+  });
+  if (bad.length) throw new Error(`${bad.length} session(s): ${bad.slice(0, 2).join(" | ")}`);
+});
 check("no two-day session runs longer than forty-five minutes", () => {
   ["C", "D"].forEach((v) => {
     const p = A.buildProgramVariant(v);
