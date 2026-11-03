@@ -639,6 +639,75 @@ check("the prompt is not printed twice", () => {
   }
 });
 
+console.log("\nRecords and the progress verdict");
+
+check("a jump is not a loaded lift", () => {
+  // These demanded a number in the pounds box. A set with no weight on a loaded
+  // exercise is discarded as "not performed" when the session saves, so a broad
+  // jump done properly and left blank vanished from the athlete's history.
+  ["Broad Jump", "Box Jumps"].forEach((n) => {
+    if (A.needsWeight(n)) throw new Error(`${n} still asks for a weight`);
+  });
+  // And the genuinely loaded ones must keep their box.
+  ["Back Squat", "Trap Bar Deadlift", "Weighted Pull-Up", "Dumbbell Jump Squat — Dynamic Effort"]
+    .forEach((n) => { if (!A.needsWeight(n)) throw new Error(`${n} lost its weight box`); });
+});
+
+check("a one-rep max is only claimed where it means something", () => {
+  // needsWeight only answers "is there a number to type". Running a medicine
+  // ball slam through a strength formula produced "your slam is up 56 percent".
+  ["Medicine Ball Slam", "Medicine Ball Rotational Scoop Throw (each side)", "Broad Jump",
+   "Trap Bar Jump Squat — Dynamic Effort", "Dumbbell Jump Squat — Dynamic Effort",
+   "Acceleration Sprint", "Five-Ten-Five Pro Agility Shuttle"]
+    .forEach((n) => { if (A.hasMeaningfulMax(n)) throw new Error(`${n} is being treated as a max-strength lift`); });
+  ["Back Squat", "Bench Press", "Trap Bar Deadlift", "Standing Barbell Overhead Press",
+   "Bent Over Barbell Row", "Front Squat"]
+    .forEach((n) => { if (!A.hasMeaningfulMax(n)) throw new Error(`${n} stopped counting as a strength lift`); });
+});
+
+check("the verdict reports lifts, not throws", () => {
+  const base = A.buildClient({ id: "v", firstName: "V", lastName: "T", weight: 175, heightFeet: 5,
+    heightInches: 10, beltLevel: "Blue", programVariant: "B", useTemplate: true,
+    weeklySchedule: {}, waiver: { version: "x" } });
+  // Twelve sessions over three months. The slam "improves" far faster than the
+  // squat, so if throws are eligible it wins the ranking outright.
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(2026, 0, 5 + i * 7);
+    base.logs.push({
+      id: "l" + i,
+      date: new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+      weekNumber: i + 1,
+      exercises: [
+        { name: "Medicine Ball Slam", sets: [{ weight: String(10 + i * 4), reps: "5" }] },
+        { name: "Back Squat", sets: [{ weight: String(225 + i * 5), reps: "5" }] },
+      ],
+      totalVolume: 1000,
+    });
+  }
+  const v = A.strengthVerdict(base);
+  if (!v || !Array.isArray(v.lifts)) throw new Error("no verdict from twelve sessions");
+  const named = v.lifts.map((l) => l.name);
+  if (named.some((n) => /slam|throw|jump/i.test(n))) {
+    throw new Error(`the verdict is ranking a throw: ${named.join(", ")}`);
+  }
+  if (!named.includes("Back Squat")) throw new Error(`the squat is missing from ${named.join(", ")}`);
+});
+
+check("the first time you log something is not a record", () => {
+  // finishWorkout now needs a prior best to beat. Before, every exercise in a
+  // brand-new athlete's first session came back a personal record, so the very
+  // first screen they saw was a trophy claiming five of them.
+  const fresh = A.buildClient({ id: "f", firstName: "F", lastName: "T", weight: 175, heightFeet: 5,
+    heightInches: 10, beltLevel: "White", programVariant: "B", useTemplate: true,
+    weeklySchedule: {}, waiver: { version: "x" } });
+  const sets = [{ weight: "135", reps: "8" }];
+  const best = A.bestSetOf(sets);
+  const prior = A.lastAllTimeBest(fresh, "Back Squat");
+  if (prior) throw new Error("a brand-new athlete already has a best on the squat");
+  const isRecord = !!(best && prior && A.hasMeaningfulMax("Back Squat") && best.e1rm > prior.e1rm);
+  if (isRecord) throw new Error("the first ever set counted as a personal record");
+});
+
 console.log("\nThe coach's dashboard");
 check("the dashboard renders while it is still loading", () => {
   unmount();

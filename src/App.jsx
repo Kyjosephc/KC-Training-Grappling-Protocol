@@ -2352,6 +2352,12 @@ const MINUTE_BASED_EXERCISES = new Set([
 // noise. Reviewed and confirmed by Kyle on 2026-09-20.
 const NO_WEIGHT_EXERCISES = new Set([
   "6-way isometric neck holds",
+  // Bodyweight. These were demanding a number in the pounds box, and a set with
+  // no weight on a loaded exercise is dropped as "not performed" when the
+  // session saves — so a broad jump done properly and left blank vanished from
+  // the athlete's history entirely.
+  "broad jump",
+  "box jumps",
   "ab roll out",
   "acceleration sprint",
   "assault bike or incline treadmill walk — aerobic base",
@@ -2427,6 +2433,19 @@ function exerciseUnitLabel(name, repsText) {
 // and unweighted conditioning drills, so the logging grid can skip the Weight input for them.
 function needsWeight(name) {
   return !NO_WEIGHT_EXERCISES.has(normalizeExerciseKey(name));
+}
+// Whether an estimated one-rep max means anything for this movement.
+//
+// needsWeight only answers "is there a number to type". A medicine ball slam, a
+// scoop throw and a dynamic-effort jump squat all take a load you can write
+// down, but running them through a strength formula produces sentences like
+// "your medicine ball slam is up 56 percent", which is not a fact about
+// strength. Personal records, the trophy on a set, and the progress verdict all
+// leaned on needsWeight and so all three said it.
+const NOT_A_MAX = /jump|throw|slam|scoop|sprint|shuttle|bound|\bhop\b|plyo|dynamic effort/i;
+function hasMeaningfulMax(name) {
+  if (!needsWeight(name)) return false;
+  return !NOT_A_MAX.test(String(name || ""));
 }
 const rpeProgramCues = {
   // Coaching for every exercise that previously opened its notes and showed
@@ -9466,7 +9485,13 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
         validSets.forEach((s) => { totalVolume += (Number(s.weight) || 0) * (Number(s.reps) || 0); });
         const priorBest = lastAllTimeBest(client, en.name);
         const newBest = bestSetOf(validSets);
-        if (newBest && (!priorBest || newBest.e1rm > priorBest.e1rm)) prNameSet.add(en.name);
+        // A record has to beat something. Without the priorBest requirement the
+        // very first session of a new athlete opened on a trophy screen
+        // announcing five personal records before they had trained once, which
+        // is how the feature stopped meaning anything.
+        if (newBest && priorBest && hasMeaningfulMax(en.name) && newBest.e1rm > priorBest.e1rm) {
+          prNameSet.add(en.name);
+        }
         allExercises.push({ exerciseId: en.exerciseId, name: en.name, sets: validSets });
       });
     });
@@ -9762,7 +9787,10 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                     // make forty times a session instead of a moment worth marking.
                     const allTimeBest = lastAllTimeBest(client, displayName);
                     const thisSetE1rm = est1RM(Number(s.weight) || 0, Number(s.reps) || 0);
-                    const beatsBest = thisSetE1rm > 0 && (!allTimeBest || thisSetE1rm >= allTimeBest.e1rm);
+                    // Same rule as the saved record: something to beat, and a
+                    // movement where a max is a real idea.
+                    const beatsBest = thisSetE1rm > 0 && hasMeaningfulMax(displayName)
+                      && !!allTimeBest && thisSetE1rm >= allTimeBest.e1rm;
                     const setHasData = needsWeight(displayName) ? (Number(s.weight) || 0) > 0 : String(s.reps || "").trim() !== "";
                     const targetWeight = effectivePct && priorBestForPct
                       ? Math.round((priorBestForPct.e1rm * effectivePct) / 100)
@@ -9915,7 +9943,7 @@ function strengthVerdict(client) {
   const byLift = new Map();
   logs.forEach((log) => {
     (log.exercises || []).forEach((en) => {
-      if (!needsWeight(en.name)) return;
+      if (!hasMeaningfulMax(en.name)) return;
       const best = bestSetOf(en.sets);
       if (!best) return;
       const arr = byLift.get(en.name) || [];

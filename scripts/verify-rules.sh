@@ -7,7 +7,11 @@ set -e
 cd "$(dirname "$0")/.."
 # Clean up on every exit path. Without the trap, a failing check leaves the
 # temporary copy of the source behind for the next commit to pick up.
-trap 'rm -f .rg.cjs .eng.cjs' EXIT INT TERM
+# The cleanup must never decide the exit code. These files are gitignored and a
+# failure to remove one (a read-only checkout, a locked file, a sandbox that
+# refuses deletes) says nothing about whether the checks passed — but with
+# `set -e` it used to fail the whole run after every check had already passed.
+trap 'rm -f .rg.cjs .eng.cjs || true' EXIT INT TERM
 echo "=== rules data + question bank ==="
 node src/rules/verify.mjs
 echo
