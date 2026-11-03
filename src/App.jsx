@@ -398,20 +398,69 @@ function lastSeenMap(prefs) {
 // loaded — somebody looking for a berimbolo clip from four months ago should
 // not have to tap "load older posts" eleven times to reach it.
 const COMMUNITY_SEARCH_LIMIT = 60;
+// The other names people type for a room. A clip's room is the strongest label
+// it carries, and most posters never write the room's name in the post itself,
+// so the room has to be searchable by every name it goes by.
+const ROOM_ALIASES = {
+  closedguard: ["full guard"],
+  halfguard: ["half"],
+  kneeshield: ["z guard", "shin shield"],
+  butterfly: ["butterfly guard"],
+  dlr: ["de la riva", "dlr"],
+  rdlr: ["reverse de la riva", "rdlr"],
+  spider: ["spider guard"],
+  lasso: ["lasso guard"],
+  xguard: ["x guard"],
+  slx: ["single leg x", "ashi garami", "ashi"],
+  deephalf: ["deep half guard"],
+  fiftyfifty: ["50 50", "fifty fifty"],
+  collarsleeve: ["collar and sleeve"],
+  wormguard: ["lapel guard", "squid guard", "worm"],
+  passing: ["guard pass"],
+  topcontrol: ["mount", "side control", "knee on belly"],
+  retention: ["guard retention"],
+  sweeps: ["sweep"],
+  escapes: ["escape"],
+  back: ["back control", "back take", "seatbelt", "body triangle"],
+  submissions: ["submission"],
+  leglocks: ["leg lock", "heel hook", "saddle", "honey hole"],
+  footsweeps: ["foot sweep", "uchi mata", "osoto"],
+  wrestling: ["takedown", "single leg", "double leg"],
+};
+
+const normTerm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const escRe = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Matched at a word boundary rather than anywhere in the string, so "hield"
+// does not find the knee shield room while "knee" still does. Checked both
+// ways round, so "knee shield sweep" finds it too.
+const nameHit = (a, b) => b.length > 0 && new RegExp(`\\b${escRe(b)}`).test(a);
+
+// The rooms whose own name is what somebody typed. Three characters minimum:
+// below that almost every room matches something and the results are noise.
+function roomsMatchingTerm(term) {
+  const q = normTerm(term);
+  if (q.length < 3) return [];
+  return COMMUNITY_CHANNELS.filter((c) => {
+    const names = [c.label, c.id, ...(ROOM_ALIASES[c.id] || [])].map(normTerm);
+    return names.some((n) => n === q || nameHit(n, q) || nameHit(q, n));
+  }).map((c) => c.id);
+}
+
 async function searchCommunityPosts(term, channel) {
   if (!supabase) return LOAD_FAILED;
   const q = String(term || "").trim();
-  if (q.length < 2) return { posts: [], term: q };
+  if (q.length < 2) return { posts: [], term: q, rooms: [] };
   // PostgREST passes this through to ILIKE, so the wildcards are ours to add
   // and the user's own % and _ have to stop being wildcards.
   const safe = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const wantRooms = channelsAreReady() && !channel ? roomsMatchingTerm(q) : [];
   const outcome = await withRetry(async () => {
+    const base = (withChannel) => supabase.from("community_posts")
+      .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
+      .is("deleted_at", null)
+      .is("parent_id", null);
     const run = async (withChannel) => {
-      let sel = supabase.from("community_posts")
-        .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
-        .is("deleted_at", null)
-        .is("parent_id", null)
-        .ilike("body", `%${safe}%`);
+      let sel = base(withChannel).ilike("body", `%${safe}%`);
       // Null channel means every room. With one technique room, searching the
       // room you were standing in searched everything; with nine, a clip
       // posted in Passing became invisible from Guard retention, which is the
@@ -419,13 +468,34 @@ async function searchCommunityPosts(term, channel) {
       if (withChannel && channel) sel = sel.eq("channel", channel);
       return sel.order("created_at", { ascending: false }).limit(COMMUNITY_SEARCH_LIMIT);
     };
-    let { data, error } = await run(channelsAreReady());
-    if (error && isMissingChannelColumn(error)) { markChannelsMissing(); ({ data, error } = await run(false)); }
+    let ready = channelsAreReady();
+    let { data, error } = await run(ready);
+    if (error && isMissingChannelColumn(error)) { markChannelsMissing(); ready = false; ({ data, error } = await run(false)); }
     if (error) throw error;
-    return data || [];
+    let merged = data || [];
+
+    // A post almost never contains its own room's name — somebody filing a
+    // clip under Knee shield writes about what they did, not where it went.
+    // So when the words typed are a room's name, everything in that room
+    // counts as a match, from whichever room you happened to be standing in.
+    // Two queries rather than one .or(), because the term is user input and
+    // building it into an .or() string means escaping commas and brackets by
+    // hand for no gain.
+    if (ready && wantRooms.length) {
+      const { data: byRoom, error: roomErr } = await base(true)
+        .in("channel", wantRooms)
+        .order("created_at", { ascending: false })
+        .limit(COMMUNITY_SEARCH_LIMIT);
+      if (roomErr) throw roomErr;
+      const seen = new Set(merged.map((p) => p.id));
+      merged = merged.concat((byRoom || []).filter((p) => p && !seen.has(p.id)));
+      merged.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+      merged = merged.slice(0, COMMUNITY_SEARCH_LIMIT * 2);
+    }
+    return merged;
   });
   if (!outcome.ok) return LOAD_FAILED;
-  return { posts: outcome.result, term: q };
+  return { posts: outcome.result, term: q, rooms: wantRooms };
 }
 
 // A result line has to show the word they typed, not the first ninety
@@ -5452,6 +5522,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // One clip chosen out of the matches. The full result set stays put, so
   // going back to it is a state change and not another round trip.
   const [picked, setPicked] = useState(null);
+  const [matchedRooms, setMatchedRooms] = useState([]);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -5546,12 +5617,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     // A slower earlier search must never overwrite a newer one's results.
     if (mine !== searchSeq.current) return;
     setSearching(false);
-    if (res === LOAD_FAILED) { setSearchFailed(true); setResults([]); return; }
+    if (res === LOAD_FAILED) { setSearchFailed(true); setResults([]); setMatchedRooms([]); return; }
     setSearchFailed(false);
+    setMatchedRooms(res.rooms || []);
     setResults(res.posts);
   }, [channel]);
 
-  const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); setPicked(null); };
+  const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); setPicked(null); setMatchedRooms([]); };
 
   // Leaving a channel abandons the search with it.
   useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
@@ -6088,6 +6160,12 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
               : picked
                 ? `One clip out of ${results.length} ${results.length === 1 ? "match" : "matches"} for “${query.trim()}”`
                 : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}” across every room`}</span>
+            {!searching && !picked && matchedRooms.length > 0 && (
+              <span className="search-rooms-note">
+                Including everything in {matchedRooms.map((id) => channelMeta(id).label).slice(0, 3).join(", ")}
+                {matchedRooms.length > 3 ? ` and ${matchedRooms.length - 3} more` : ""}.
+              </span>
+            )}
             <span className="search-results-acts">
               {picked && results.length > 1 && (
                 <button type="button" className="link-btn" onClick={() => setPicked(null)}>
@@ -12436,6 +12514,7 @@ function GlobalStyle() {
       .clip-hit-text { font-size: 13px; line-height: 1.4; }
       .clip-hit-meta { font-size: 11.5px; color: var(--text-dim); }
       .search-results-acts { display: inline-flex; align-items: center; gap: 12px; }
+      .search-rooms-note { flex-basis: 100%; font-size: 11.5px; font-weight: 600; color: var(--text-dim); }
       .tech-suggests { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
       .tech-suggest { background: var(--card); border: 1px solid var(--border); border-radius: 999px;
         padding: 8px 13px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--text);

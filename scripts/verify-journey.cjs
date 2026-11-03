@@ -705,6 +705,43 @@ check("the list under the search box is clips, and only clips", () => {
   if (A.clipsForPicker([null, undefined]).length !== 0) throw new Error("a hole in the results threw or counted");
 });
 
+check("a room's own name finds it from whichever room you are standing in", () => {
+  // A clip filed under Knee shield is about what the poster did, not about
+  // where they filed it, so its body almost never contains "knee shield".
+  // Searching only the body meant that clip was unfindable by name from
+  // anywhere, including from inside the room next door.
+  const hits = A.roomsMatchingTerm("knee shield");
+  if (!hits.includes("kneeshield")) throw new Error(`"knee shield" matched ${JSON.stringify(hits)}`);
+  if (!A.roomsMatchingTerm("z guard").includes("kneeshield")) {
+    throw new Error("the other name for the room finds nothing");
+  }
+  if (!A.roomsMatchingTerm("50/50").includes("fiftyfifty")) throw new Error("50/50 does not find its own room");
+  if (!A.roomsMatchingTerm("x-guard").includes("xguard")) throw new Error("punctuation in a room name defeats it");
+
+  // Matched at a word boundary, not anywhere in the string.
+  if (A.roomsMatchingTerm("hield").length) throw new Error("a fragment inside a word matched a whole room");
+  // Below three characters nearly everything matches and the results are noise.
+  // "ba" is the test and not "ar" on purpose: "ar" starts no room's name, so
+  // it passes whatever the minimum is and pins nothing. "ba" starts "back".
+  if (A.roomsMatchingTerm("ba").length) throw new Error("two characters pulled in whole rooms");
+  if (!A.roomsMatchingTerm("back").includes("back")) throw new Error("three characters stopped working too");
+  if (A.roomsMatchingTerm("").length) throw new Error("an empty search matched rooms");
+});
+
+check("every room can be found by typing its own name", () => {
+  const orphans = A.COMMUNITY_CHANNELS.filter((c) => !A.roomsMatchingTerm(c.label).includes(c.id));
+  if (orphans.length) {
+    throw new Error(`rooms their own name does not find: ${orphans.map((c) => `${c.id} ("${c.label}")`).join(", ")}`);
+  }
+  // And a name must not be so loose that it drags in most of the group.
+  const greedy = A.COMMUNITY_CHANNELS
+    .map((c) => ({ id: c.id, n: A.roomsMatchingTerm(c.label).length }))
+    .filter(({ n }) => n > 4);
+  if (greedy.length) {
+    throw new Error(`names that match too many rooms: ${greedy.map((g) => `${g.id} (${g.n})`).join(", ")}`);
+  }
+});
+
 check("the technique vocabulary reaches every room that needs it", () => {
   // It was once tied to the single Technique room. The split to twenty-six
   // stranded it there, and the only visible symptom was that typing a room's
