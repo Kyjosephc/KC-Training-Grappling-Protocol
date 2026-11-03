@@ -428,6 +428,40 @@ async function searchCommunityPosts(term, channel) {
   return { posts: outcome.result, term: q };
 }
 
+// A result line has to show the word they typed, not the first ninety
+// characters of a post that happens to mention it in the last sentence. The
+// window is centred on the match, with an ellipsis on whichever side was cut.
+function matchSnippet(body, term, len = 90) {
+  const text = String(body || "").replace(/\s+/g, " ").trim();
+  if (!text) return "No description — just the clip.";
+  if (text.length <= len) return text;
+  const q = String(term || "").trim().toLowerCase();
+  const at = q ? text.toLowerCase().indexOf(q) : -1;
+  if (at < 0) return text.slice(0, len).trimEnd() + "…";
+  const start = Math.max(0, Math.min(at - Math.floor((len - q.length) / 2), text.length - len));
+  const end = start + len;
+  return (start > 0 ? "…" : "") + text.slice(start, end).trim() + (end < text.length ? "…" : "");
+}
+
+// The clips out of a set of search results, in the order the search returned
+// them, capped so the list under the box stays a list and not a second feed.
+// Order is the search's order — newest first — because a kept clip is usually
+// one somebody posted recently.
+function clipsForPicker(results, limit = 8) {
+  if (!Array.isArray(results)) return [];
+  return results.filter((p) => p && p.video_url).slice(0, limit);
+}
+
+// Which rooms get the technique vocabulary. It used to be tied to the single
+// Technique room; once the group split into twenty-six that stranded it in
+// "Everything else", so typing "de la" in the De la Riva room offered nothing
+// at all. Every room is a jiu jitsu room now except General, which is the one
+// place the vocabulary really is noise — typing "ar" there was offering
+// armbar, arm drag and arm triangle to somebody asking about the app.
+function vocabForChannel(channel) {
+  return channel === "general" ? [] : TECHNIQUE_TERMS;
+}
+
 // Suggestions come from two places: the techniques people actually post about,
 // which is this list, and whatever words already exist in the channel. The list
 // exists so the search is useful on day one, when there is nothing to mine.
@@ -436,6 +470,8 @@ const TECHNIQUE_TERMS = [
   "closed guard", "open guard", "half guard", "deep half", "butterfly guard", "spider guard",
   "de la riva", "reverse de la riva", "lasso guard", "x guard", "single leg x", "k guard",
   "shin to shin", "collar sleeve", "rubber guard", "z guard", "knee shield", "worm guard",
+  "50/50", "fifty fifty", "ashi garami", "outside ashi", "saddle", "honey hole",
+  "lapel guard", "squid guard", "reverse de la worm", "half butterfly",
   // Passing
   "guard pass", "torreando", "knee cut", "knee slice", "over under pass", "double under",
   "leg drag", "smash pass", "stack pass", "body lock pass", "long step", "folding pass",
@@ -444,7 +480,8 @@ const TECHNIQUE_TERMS = [
   "scissor sweep", "hip bump", "flower sweep", "butterfly sweep", "berimbolo", "kiss of the dragon",
   "single leg", "double leg", "high crotch", "blast double", "ankle pick", "arm drag",
   "snap down", "duck under", "fireman's carry", "uchi mata", "osoto gari", "seoi nage",
-  "harai goshi", "tani otoshi", "foot sweep", "sumi gaeshi",
+  "harai goshi", "tani otoshi", "foot sweep", "sumi gaeshi", "waiter sweep",
+  "john wayne sweep", "old school sweep", "elevator sweep", "lumberjack sweep",
   // Top and control
   "mount", "side control", "north south", "knee on belly", "back control", "back take",
   "turtle", "crucifix", "kesa gatame", "body triangle", "seatbelt", "truck",
@@ -5412,6 +5449,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [savedIds, setSavedIds] = useState(() => new Set());
   const [showSaved, setShowSaved] = useState(false);
   const [savedPosts, setSavedPosts] = useState(null);
+  // One clip chosen out of the matches. The full result set stays put, so
+  // going back to it is a state change and not another round trip.
+  const [picked, setPicked] = useState(null);
   const [failed, setFailed] = useState(false);
   const [body, setBody] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -5486,10 +5526,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
-    // The technique vocabulary belongs to the Technique channel. In General,
-    // typing "ar" was offering armbar, arm drag and arm triangle to someone
-    // asking a question about the app.
-    const vocab = channel === "technique" ? TECHNIQUE_TERMS : [];
+    const vocab = vocabForChannel(channel);
     const starts = vocab.filter((t) => t.startsWith(q));
     const contains = vocab.filter((t) => !t.startsWith(q) && t.includes(q));
     const fromPosts = postedWords.filter((w) => w.includes(q)
@@ -5514,7 +5551,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setResults(res.posts);
   }, [channel]);
 
-  const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); };
+  const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); setPicked(null); };
 
   // Leaving a channel abandons the search with it.
   useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
@@ -5748,6 +5785,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   const canPost = (body.trim().length > 0 || embedFor(videoUrl)) && !uploading;
   const openGroup = groupOfChannel(channel);
+  const clipHits = clipsForPicker(results);
+  const shownResults = Array.isArray(results) && picked
+    ? results.filter((p) => p.id === picked)
+    : results;
 
   if (showSaved) {
     return (
@@ -5903,6 +5944,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           onChange={(e) => {
             const v = e.target.value;
             setQuery(v);
+            setPicked(null);
             if (v.trim().length < 2) { searchSeq.current++; setResults(null); setSearchFailed(false); setSearching(false); return; }
             setSearching(true);
             if (debounce.current) clearTimeout(debounce.current);
@@ -5917,7 +5959,42 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         )}
       </div>
 
-      {suggestions.length > 0 && results === null && (
+      {/* The clips that match what has been typed so far, right under the box.
+          The full results are still below — this is an index into them, so
+          picking one is a filter rather than a fresh search. It only lists
+          posts that actually have a clip, because "find me the video" is what
+          the box is for. */}
+      {query.trim().length >= 2 && !picked && (
+        <div className="clip-picker">
+          {searching && <div className="clip-picker-head">Looking for clips…</div>}
+          {!searching && clipHits.length > 0 && (
+            <>
+              <div className="clip-picker-head">
+                {clipHits.length}{Array.isArray(results) && results.filter((p) => p.video_url).length > clipHits.length ? "+" : ""}
+                {clipHits.length === 1 ? " clip" : " clips"} matching “{query.trim()}”
+              </div>
+              {clipHits.map((p) => (
+                <button key={p.id} type="button" className="clip-hit" onClick={() => setPicked(p.id)}>
+                  <Video size={15} aria-hidden="true" />
+                  <span className="clip-hit-main">
+                    <span className="clip-hit-text">{matchSnippet(p.body, query)}</span>
+                    <span className="clip-hit-meta">
+                      {p.author_name || "Athlete"}{p.channel ? ` · ${channelMeta(p.channel).label}` : ""}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+          {!searching && clipHits.length === 0 && Array.isArray(results) && results.length > 0 && (
+            <div className="clip-picker-head">
+              No clips for “{query.trim()}” yet — {results.length} {results.length === 1 ? "post" : "posts"} mention it below.
+            </div>
+          )}
+        </div>
+      )}
+
+      {suggestions.length > 0 && !picked && !searching && clipHits.length === 0 && (
         <div className="tech-suggests" role="listbox" aria-label="Suggestions">
           {suggestions.map((sug) => (
             <button key={sug} type="button" role="option" aria-selected={false}
@@ -6006,8 +6083,19 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
       {results !== null && (
         <div className="search-results">
           <div className="search-results-head">
-            <span>{searching ? "Searching…" : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}” across every room`}</span>
-            <button type="button" className="link-btn" onClick={clearSearch}>Back to the feed</button>
+            <span>{searching
+              ? "Searching…"
+              : picked
+                ? `One clip out of ${results.length} ${results.length === 1 ? "match" : "matches"} for “${query.trim()}”`
+                : `${results.length} ${results.length === 1 ? "post" : "posts"} matching “${query.trim()}” across every room`}</span>
+            <span className="search-results-acts">
+              {picked && results.length > 1 && (
+                <button type="button" className="link-btn" onClick={() => setPicked(null)}>
+                  All {results.length} matches
+                </button>
+              )}
+              <button type="button" className="link-btn" onClick={clearSearch}>Back to the feed</button>
+            </span>
           </div>
           {searchFailed && (
             <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -6022,7 +6110,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             </Card>
           )}
           <div className="feed" aria-live="polite">
-            {results.map((p) => (
+            {(shownResults || []).map((p) => (
               <div key={p.id}>
               {p.channel && p.channel !== channel && (
                 <button type="button" className="search-result-room"
@@ -12333,6 +12421,21 @@ function GlobalStyle() {
       .tech-search-input:focus { outline: none; border-color: var(--accent); }
       .tech-search-clear { position: absolute; right: 6px; background: none; border: none; color: var(--text-dim);
         cursor: pointer; padding: 10px; display: inline-flex; align-items: center; }
+      .clip-picker { border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+        overflow: hidden; margin: -2px 0 12px; }
+      .clip-picker-head { padding: 9px 13px; font-size: 12px; font-weight: 700; color: var(--text-dim);
+        letter-spacing: 0.01em; border-bottom: 1px solid var(--border); }
+      .clip-picker-head:only-child { border-bottom: none; }
+      .clip-hit { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+        background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text);
+        padding: 10px 13px; cursor: pointer; font: inherit; }
+      .clip-hit:last-child { border-bottom: none; }
+      .clip-hit:hover, .clip-hit:focus-visible { background: var(--belt-fill, var(--accent-soft)); outline: none; }
+      .clip-hit > svg { flex: none; margin-top: 2px; color: var(--belt, var(--accent)); }
+      .clip-hit-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .clip-hit-text { font-size: 13px; line-height: 1.4; }
+      .clip-hit-meta { font-size: 11.5px; color: var(--text-dim); }
+      .search-results-acts { display: inline-flex; align-items: center; gap: 12px; }
       .tech-suggests { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
       .tech-suggest { background: var(--card); border: 1px solid var(--border); border-radius: 999px;
         padding: 8px 13px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--text);

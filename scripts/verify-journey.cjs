@@ -669,6 +669,75 @@ check("the two kinds of sweep cannot be mistaken for each other", () => {
   if (guard.group === standing.group) throw new Error("both sweep rooms sit in the same part of the game");
 });
 
+check("a search hit shows the word you typed, not the start of the post", () => {
+  // A clip line that cuts off ninety characters from the front shows the word
+  // you searched for only when the poster happened to open with it.
+  const long = "Started from standing and worked grips for a while before anything happened, "
+    + "then finally got the leg drag I have been drilling all month and finished in side control.";
+  const snip = A.matchSnippet(long, "leg drag");
+  if (!/leg drag/i.test(snip)) throw new Error(`the match is not in the snippet: ${snip}`);
+  if (snip.length > 120) throw new Error(`snippet is ${snip.length} characters`);
+  if (!snip.startsWith("…")) throw new Error("text was cut from the front without saying so");
+
+  const short = "Knee cut from half guard.";
+  if (A.matchSnippet(short, "knee") !== short) throw new Error("a short post was trimmed");
+  if (/…/.test(A.matchSnippet(short, "knee"))) throw new Error("a short post got an ellipsis");
+
+  if (!A.matchSnippet("", "knee")) throw new Error("a clip with no description got a blank line");
+  const noMatch = A.matchSnippet(long, "berimbolo");
+  if (noMatch.startsWith("…")) throw new Error("a miss should read from the start, not the middle");
+});
+
+check("the list under the search box is clips, and only clips", () => {
+  const rows = [
+    { id: "a", video_url: "https://youtu.be/1", body: "one" },
+    { id: "b", video_url: "", body: "a question with no clip" },
+    { id: "c", body: "also no clip" },
+    { id: "d", video_url: "https://youtu.be/2", body: "two" },
+  ];
+  const hits = A.clipsForPicker(rows);
+  if (hits.length !== 2) throw new Error(`${hits.length} hits, expected the 2 with a clip`);
+  if (hits[0].id !== "a" || hits[1].id !== "d") throw new Error("the search's own order was not kept");
+
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: `v${i}`, video_url: "https://youtu.be/x" }));
+  if (A.clipsForPicker(many).length !== 8) throw new Error("the list is not capped and becomes a second feed");
+  if (A.clipsForPicker(null).length !== 0) throw new Error("no results should mean no list");
+  if (A.clipsForPicker([null, undefined]).length !== 0) throw new Error("a hole in the results threw or counted");
+});
+
+check("the technique vocabulary reaches every room that needs it", () => {
+  // It was once tied to the single Technique room. The split to twenty-six
+  // stranded it there, and the only visible symptom was that typing a room's
+  // own name in that room suggested nothing — easy to miss, so it is pinned.
+  if (A.vocabForChannel("general").length !== 0) {
+    throw new Error("General is offering technique terms to people asking about the app");
+  }
+  const starved = A.COMMUNITY_CHANNELS
+    .filter((c) => c.id !== "general")
+    .filter((c) => A.vocabForChannel(c.id).length === 0);
+  if (starved.length) {
+    throw new Error(`rooms with no vocabulary: ${starved.map((c) => c.id).join(", ")}`);
+  }
+  if (!A.vocabForChannel("dlr").some((t) => /de la riva/i.test(t))) {
+    throw new Error("the De la Riva room cannot suggest de la riva");
+  }
+});
+
+check("every guard room is a word the search already knows", () => {
+  // The suggestion vocabulary is what makes the box useful before there is
+  // anything posted to mine. A room whose own name is not in it offers
+  // nothing while you type its name, which is the one search certain to be
+  // tried in that room.
+  const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const vocab = A.TECHNIQUE_TERMS.map(norm);
+  const missing = A.channelsInGroup("guards")
+    .map((c) => ({ id: c.id, key: norm(c.label.replace(/\(.*\)/, "")) }))
+    .filter(({ key }) => !vocab.some((t) => t.includes(key)));
+  if (missing.length) {
+    throw new Error(`rooms the vocabulary has never heard of: ${missing.map((m) => `${m.id} ("${m.key}")`).join(", ")}`);
+  }
+});
+
 check("there is a way into your own saved list, and it is yours alone", () => {
   mountGroup();
   const btn = [...host.querySelectorAll("button")].find((b) => /^saved\b/i.test(b.textContent.trim()));
