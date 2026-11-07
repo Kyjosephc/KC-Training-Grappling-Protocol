@@ -1960,5 +1960,127 @@ check("and it is still in settings for anyone who wants it later", () => {
   unmount();
 });
 
+
+console.log("\nWeek one, with no max to work from");
+const openDayOne = (variant, logs, dayIdx = 0) => {
+  const c = athlete({ id: "w1" + variant + dayIdx + (logs ? "h" : ""), firstName: "Pat", paid: true,
+    sessionsCompleted: 0, logs: logs || [] });
+  c.program = A.buildProgramVariant(variant, { blockNumber: 1 });
+  unmount();
+  mount(React.createElement(A.DaySessionScreen, { client: c, isCoach: false,
+    phaseId: c.program.phases[0].id, dayId: c.program.phases[0].days[dayIdx].id,
+    onClose() {}, onSave: async () => ({ ok: true }), onStartMobility() {}, onUpdateProgram() {},
+    onRestartProgram: async () => {}, onRecordPR() {}, onRemovePR() {} }));
+  return [...host.querySelectorAll(".pct-1rm-row")]
+    .map((d) => d.textContent.replace(/\s+/g, " ").trim()).filter((r) => /%/.test(r));
+};
+
+check("a percentage never stands alone for somebody with no max", () => {
+  // Three of the four programs put week one straight into percentages of a
+  // one-rep max the athlete has not got. Every run of percentage sets has to
+  // carry something they can actually act on.
+  ["A", "B", "C"].forEach((v) => {
+    const rows = openDayOne(v);
+    if (!rows.length) throw new Error(`program ${v} week 1 showed no percentage rows at all`);
+    if (!rows.some((r) => /no max on this lift yet/i.test(r))) {
+      throw new Error(`program ${v} week 1 shows percentages with no guidance`);
+    }
+  });
+  unmount();
+});
+
+check("speed work is never described as something to push", () => {
+  // This one was doing harm rather than just being unhelpful: the old line
+  // told a new athlete to add weight each set until the last rep was hard,
+  // on eight sets of dynamic effort. Followed literally it turns the speed
+  // day into a grind.
+  const de = openDayOne("A").filter((r) => /50% of your One-Rep Max/.test(r));
+  if (!de.length) throw new Error("no dynamic effort row on program A week 1");
+  de.forEach((r) => {
+    if (/add weight (each|every) set/i.test(r)) throw new Error(`speed work told to add weight: ${r.slice(0, 120)}`);
+    if (/until the last rep is hard/i.test(r)) throw new Error(`speed work told to grind: ${r.slice(0, 120)}`);
+    if (!/bar .*move.*fast|moves fast/i.test(r)) throw new Error(`speed work does not mention bar speed: ${r.slice(0, 120)}`);
+  });
+  unmount();
+});
+
+check("a ramp says build up, and straight sets say hold the weight", () => {
+  // Program A climbs to one top single, so adding weight every set is right.
+  // Program B is two warm-ups then four sets at the same percentage, where
+  // the same instruction would have them climbing through work meant to sit
+  // at one weight.
+  const ramp = openDayOne("A").find((r) => /no max on this lift yet/.test(r) && /100%|build-up/i.test(r))
+    || openDayOne("A").find((r) => /no max on this lift yet/.test(r) && /Warm-up/.test(r));
+  if (!ramp || !/add weight every set/i.test(ramp)) throw new Error(`the max effort ramp does not say to build up: ${ramp}`);
+
+  const straight = openDayOne("B").find((r) => /no max on this lift yet/.test(r));
+  if (!straight) throw new Error("program B week 1 gave no guidance");
+  if (/add weight every set/i.test(straight)) throw new Error(`program B told to ramp through its straight sets: ${straight}`);
+  if (!/keep it the same across them/i.test(straight)) throw new Error(`program B does not say to hold one weight: ${straight}`);
+  if (!/warm-ups/i.test(straight)) throw new Error(`program B does not name its warm-up sets: ${straight}`);
+  unmount();
+});
+
+check("once the lift is logged, nobody is told they have no max", () => {
+  // Read the lifts off the screen first and log those. An earlier version of
+  // this logged a lift that was not on the screen and so proved nothing.
+  //
+  // Program B day two is the case that actually exercises the check. On a
+  // main lift a logged history produces a suggested weight, which answers the
+  // question before "has this ever been logged" is asked. The accessories
+  // carrying a flat percentage have no suggested weight either way, so they
+  // are the only place the wrong answer is visible — and the first version of
+  // this test used program A, where there are none, and so passed with the
+  // check disabled.
+  [["A", 0], ["B", 1]].forEach(([v, day]) => {
+    // Names come from the resolved program, not from scraping the screen.
+    // Scraping picked up section headings and ran them together with the
+    // exercise names, so the sessions it logged were for lifts that do not
+    // exist and the check quietly tested nothing.
+    const prog = A.buildProgramVariant(v, { blockNumber: 1 });
+    const phase = prog.phases[0];
+    const names = [];
+    A.resolveDaySections(phase.days[day], 1, prog, phase, false, {})
+      .forEach((sec) => (sec.exercises || []).forEach((e) => { if (e && e.name) names.push(e.name); }));
+    if (!names.length) throw new Error(`no exercises on program ${v} day ${day + 1}`);
+    const rows = openDayOne(v, names.map((n, i) => sessionLog(20 + i, 185, n)), day);
+    const left = rows.filter((r) => /no max on this lift yet/i.test(r));
+    if (left.length) {
+      throw new Error(`program ${v} day ${day + 1}: ${left.length} lifts still claim no max after being logged: ${left[0].slice(0, 90)}`);
+    }
+  });
+  unmount();
+});
+
+check("the guidance matches the shape of the prescription", () => {
+  const de = A.noMaxGuidance("Speed Bench Press — Dynamic Effort",
+    { perSetTargets: [{ pct1rm: 50, reps: 3, rir: 4 }, { pct1rm: 50, reps: 3, rir: 4 }] });
+  if (!/speed/i.test(de) || /add weight/i.test(de)) throw new Error(`dynamic effort guidance is wrong: ${de}`);
+
+  const ramp = A.noMaxGuidance("Box Squat", { perSetTargets: [
+    { pct1rm: 70, reps: 3, rir: 4 }, { pct1rm: 85, reps: 2, rir: 2 }, { pct1rm: 100, reps: 1, rir: 0 }] });
+  if (!/add weight every set/i.test(ramp)) throw new Error(`ramp guidance is wrong: ${ramp}`);
+  if (!/nothing left in reserve/i.test(ramp)) throw new Error(`a top single at zero in reserve was not described as one: ${ramp}`);
+
+  // Not every ramp ends in a single. The lifts flagged as triple-capped stop
+  // at a heavy three, and calling that a single would have somebody taking a
+  // barbell good morning to a one-rep max, which is the exact thing the cap
+  // exists to prevent.
+  const tripleCap = A.noMaxGuidance("Barbell Good Morning", { perSetTargets: [
+    { pct1rm: 65, reps: 3, rir: 4 }, { pct1rm: 75, reps: 3, rir: 3 }, { pct1rm: 88, reps: 3, rir: 1 }] });
+  if (!/set of 3/i.test(tripleCap)) throw new Error(`a top triple was not described as one: ${tripleCap}`);
+  if (/\bsingle\b/i.test(tripleCap)) throw new Error(`a triple-capped lift was called a single: ${tripleCap}`);
+  if (!/about 1 left in reserve/i.test(tripleCap)) throw new Error(`the top triple's reserve is wrong: ${tripleCap}`);
+
+  const straight = A.noMaxGuidance("Back Squat", { perSetTargets: [
+    { pct1rm: 45, reps: 5, rir: 6 }, { pct1rm: 80, reps: 6, rir: 2 }, { pct1rm: 80, reps: 6, rir: 2 }] });
+  if (/add weight every set/i.test(straight)) throw new Error(`straight sets described as a ramp: ${straight}`);
+  if (!/the first set is a warm-up/i.test(straight)) throw new Error(`one warm-up set was not described in the singular: ${straight}`);
+
+  // Nothing to go on at all still has to say something useful.
+  const bare = A.noMaxGuidance("Cable Lat Row", { perSetTargets: [{ pct1rm: 65, reps: 10 }] });
+  if (!bare || /undefined|NaN/.test(bare)) throw new Error(`a target with no reps in reserve produced: ${bare}`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

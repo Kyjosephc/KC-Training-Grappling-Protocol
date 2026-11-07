@@ -2937,6 +2937,56 @@ function deUpperPull() {
     cues: "Set the bar or rings so the hardest version you can still control has you near horizontal — feet on the floor to make it easier, feet raised to make it harder. Pull the chest to the bar, not the chin. Hold the top for a beat with the shoulder blades pulled together and down, then take two seconds to lower. If your hips sag, raise the bar until they do not.",
   });
 }
+// A percentage of a one-rep max is not an instruction to somebody who has
+// never lifted the thing, and week one of three of the four programs is
+// entirely percentages. The prescription already carries what a new athlete
+// can actually follow — the reps, and how many should be left in reserve — so
+// when there is no max on file that becomes the instruction and the
+// percentage waits until there is a number behind it.
+function noMaxGuidance(name, target) {
+  const sets = (target && target.perSetTargets) || [];
+  const pcts = sets.map((t) => t && t.pct1rm).filter(Boolean);
+  const last = sets.length ? sets[sets.length - 1] : null;
+
+  // Dynamic effort is the exception, and the one that was doing actual harm.
+  // Speed work is governed by how fast the bar moves, not by how close the
+  // set is to failure, and the old line told people to add weight each set
+  // until the last rep was hard. Followed literally that turns eight speed
+  // sets into a grind, which is the opposite of what the day is for.
+  if (/dynamic effort|speed /i.test(String(name || ""))) {
+    return "no max on this lift yet, so load it by speed instead. Pick a weight light enough that the bar genuinely moves fast, keep every set at that same weight, and end the set the moment it slows down. This is a speed day, not a weight to push.";
+  }
+
+  const top = pcts.length ? Math.max(...pcts) : 0;
+  const topCount = pcts.filter((p) => p === top).length;
+  const warmCount = pcts.filter((p) => p < top).length;
+  const rir = last && last.rir !== undefined && last.rir !== null
+    ? Number(last.rir)
+    : (target && target.rir !== undefined && target.rir !== null ? Number(target.rir) : null);
+  const haveRir = rir !== null && !Number.isNaN(rir);
+
+  // A true ramp climbs to one top set, and running it is how the max gets
+  // established in the first place, so it needs no max to begin with. Warm-ups
+  // followed by four sets at the same percentage are not that, and telling
+  // somebody to add weight every set through those would have them climbing
+  // through work that is meant to be one steady weight — which is why this
+  // counts the sets at the top rather than just noticing the numbers differ.
+  if (pcts.length > 1 && topCount === 1 && last) {
+    const reps = Number(last.reps) || 1;
+    const topRir = haveRir ? rir : 0;
+    const topSet = reps === 1 ? "single" : `set of ${reps}`;
+    return `no max on this lift yet, and finding it is what this build-up is for. Start light and add weight every set, so the last one is a genuine ${topSet}${topRir > 0 ? ` with about ${topRir} left in reserve` : " with nothing left in reserve"}. Whatever you hit today is the number the later weeks are worked out from.`;
+  }
+
+  if (!haveRir) {
+    return "no max on this lift yet, so pick a weight that suits the reps and log it, and the app will suggest one from here on.";
+  }
+  const warmBit = warmCount === 1 ? "the first set is a warm-up, then "
+    : warmCount > 1 ? `the first ${warmCount} sets are warm-ups, then `
+    : "";
+  return `no max on this lift yet, so ${warmBit}pick one weight for the working sets where the last rep leaves about ${rir} in reserve, and keep it the same across them. Log it and the app suggests a weight from here on.`;
+}
+
 function meWorkingSets() {
   // Ramps from lighter warm-up triples down to a true heavy single, so no two sets are identical.
   // Percentages are standard estimates for the given rep and reps-in-reserve combination (a 3-rep set with
@@ -10415,6 +10465,14 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   // The fallback for everything the percentages do not cover.
                   const isDeloadWeek = /deload/i.test(phase?.name || "") || /deload/i.test(en.target.quality || "");
                   const hist = suggestFromHistory(client, displayName, en.target, isDeloadWeek);
+                  // Shown whenever there is no number to show, which is the only
+                  // thing that matters here. A guard on "has this ever been logged"
+                  // was tried and removed: once a lift is logged the history
+                  // supplies a weight and this branch is never reached, and in the
+                  // one case where it would be — a lift logged only at rep counts
+                  // the suggester will not use — it suppressed the guidance without
+                  // putting a number in its place, which is the worst of both.
+                  const noMaxNote = noMaxGuidance(displayName, en.target);
                   const pctForSet = (i) => {
                     if (i < 0 || i >= en.sets.length) return null;
                     const ps = en.target.perSetTargets ? en.target.perSetTargets[i] : null;
@@ -10491,11 +10549,9 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                             {runEnd > setIdx ? `Sets ${setIdx + 1}\u2013${runEnd + 1}` : `Set ${setIdx + 1}`}{runNote ? ` \u00b7 ${runNote}` : ""}: {effectivePct}% of your One-Rep Max{runEffort ? ` \u00b7 effort ${runEffort}` : ""}
                             {targetWeight
                               ? ` \u2014 try about ${targetWeight} lb, based on ${loggedSessions === 1 ? "the one session you have logged on this lift, so treat it as a starting point" : "your heaviest logged set so far"}`
-                              : !isFirstRun
-                                ? ""
-                                : loggedSessions === 0
-                                  ? " \u2014 first time on this lift: start light and add weight each set until the last rep is hard but you could still manage the reps-in-reserve above. Log it and you will get a suggested weight from here on."
-                                  : ""}
+                              : isFirstRun
+                                ? ` \u2014 ${noMaxNote}`
+                                : ""}
                           </div>
                         )}
                         <div className="set-grid-row">
