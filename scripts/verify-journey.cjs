@@ -1892,5 +1892,73 @@ check("nothing paints text straight onto a belt fill again", () => {
   if (offenders.length) throw new Error("solid belt fill under plain text: " + offenders.join(" | "));
 });
 
+
+console.log("\nGetting the app onto a phone");
+const firstGuidePage = (variant, firstRun) => {
+  unmount();
+  mount(React.createElement(A.TutorialModal, { variant, firstRun, onClose() {} }));
+  const t = host.querySelector(".card-title").textContent.trim();
+  return t;
+};
+
+check("the first thing a new athlete reads is how to install it", () => {
+  // Somebody who never installs it reaches the app through a browser tab they
+  // will have lost by Thursday, and every other page of the guide assumes
+  // they still have the app.
+  const a = firstGuidePage("A", true);
+  if (!/home screen/i.test(a)) throw new Error(`program A opened on "${a}"`);
+  const b = firstGuidePage("B", true);
+  if (!/home screen/i.test(b)) throw new Error(`program B opened on "${b}"`);
+
+  // Reopened later from the help button it goes back to its normal place,
+  // because by then they have either done it or decided not to.
+  const a2 = firstGuidePage("A", false);
+  if (!/welcome/i.test(a2)) throw new Error(`a later open still led with "${a2}"`);
+  const b2 = firstGuidePage("B", false);
+  if (!/welcome/i.test(b2)) throw new Error(`a later open on program B led with "${b2}"`);
+  unmount();
+});
+
+check("the install page is in the guide once, not twice", () => {
+  // Putting it first by copying rather than moving would show the same page
+  // again further in, which reads as a bug to the person paging through.
+  unmount();
+  mount(React.createElement(A.TutorialModal, { variant: "A", firstRun: true, onClose() {} }));
+  const titles = [];
+  for (let i = 0; i < 40; i++) {
+    titles.push(host.querySelector(".card-title").textContent.trim());
+    if (!byText(/^next$/i)) break;
+    click(/^next$/i);
+  }
+  if (titles.length < 5) throw new Error(`the guide paged through only ${titles.length} screens`);
+  const installs = titles.filter((t) => /home screen/i.test(t));
+  if (installs.length !== 1) throw new Error(`${installs.length} install pages across ${titles.length} screens`);
+  unmount();
+});
+
+check("and it is still in settings for anyone who wants it later", () => {
+  // It used to be the last thing inside "Your program". Nobody looking for how
+  // to get the app onto their phone opens a section about their training block.
+  mount(React.createElement(A.SettingsModal, { client: marcusPaid, isCoach: false,
+    onPersist: async () => ({ ok: true }), theme: "dark", onChangeTheme() {}, onClose() {},
+    onResetApp() {}, onRefreshProgram() {}, onOpenCoachDashboard() {}, onOpenTerms() {}, onSignOut() {} }));
+  // Settings sections are details/summary, not buttons, so this reads the
+  // sections directly. The steps have to be inside the section whose own
+  // heading says what it is, which is what fails if the guide ever gets
+  // tucked back inside an unrelated section.
+  const sections = [...host.querySelectorAll("details.settings-section")];
+  const section = sections.find((d) => /put this app on your home screen/i.test(
+    (d.querySelector("summary") || {}).textContent || ""));
+  if (!section) {
+    throw new Error("no install section in settings; sections were: " + sections
+      .map((d) => ((d.querySelector("summary") || {}).textContent || "").trim()).join(" | "));
+  }
+  const seen = section.textContent;
+  if (!/safari/i.test(seen)) throw new Error("the iPhone steps are not inside that section");
+  if (!/chrome/i.test(seen)) throw new Error("the Android steps are not inside that section");
+  if (!/add to home screen/i.test(seen)) throw new Error("the actual instruction is missing");
+  unmount();
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

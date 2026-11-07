@@ -7121,7 +7121,7 @@ function MainApp({ userId, onSignOut }) {
         }} />
       )}
       {showTutorial && (
-        <TutorialModal variant={client?.program?.variant} onClose={async () => {
+        <TutorialModal variant={client?.program?.variant} firstRun={!client?.hasSeenTutorial} onClose={async () => {
           setShowTutorial(false);
           if (!client.hasSeenTutorial) await persistClient({ ...client, hasSeenTutorial: true });
         }} />
@@ -7712,7 +7712,9 @@ function ShareModal({ onClose }) {
     </ModalShell>
   );
 }
-function TutorialModal({ onClose, variant }) {
+const HOME_SCREEN_PAGE = "Put It On Your Home Screen";
+
+function TutorialModal({ onClose, variant, firstRun = false }) {
   const [page, setPage] = useState(0);
   // Pages tied to one program are shown only to athletes on it. Teaching Max
   // Effort to somebody whose program says "no max-effort singles anywhere" was
@@ -7720,11 +7722,19 @@ function TutorialModal({ onClose, variant }) {
   const pages = useMemo(() => {
     const v = variant === "A" ? "A" : "B";
     const kept = TUTORIAL_PAGES.filter((p) => !p.variant || p.variant === v);
-    return v === "A" ? kept : [{
+    const ordered = v === "A" ? kept : [{
       title: "Welcome",
       body: "Your program is a twelve-week offseason strength build, written specifically for grapplers. Every set is prescribed by how hard it should feel rather than by a percentage of a max, so you never need a tested one-rep max to run it. A handful of terms show up throughout — here is what they actually mean, in plain language, before you dive in.",
     }, ...kept.filter((p) => p.title !== "Welcome")];
-  }, [variant]);
+    // The very first thing somebody sees, once. An athlete who never installs
+    // it reaches the app through a browser tab they will lose by Thursday, and
+    // every other page in this guide assumes they still have the app. Reopened
+    // later from the help button it sits back in its normal place, because by
+    // then they have either done it or decided not to.
+    if (!firstRun) return ordered;
+    const install = ordered.find((p) => p.title === HOME_SCREEN_PAGE);
+    return install ? [install, ...ordered.filter((p) => p !== install)] : ordered;
+  }, [variant, firstRun]);
   const isLast = page === pages.length - 1;
   const current = pages[page];
   return (
@@ -8078,7 +8088,6 @@ function InstallGuide() {
   );
   return (
     <>
-      <h3 className="log-exercise-name" style={{ marginTop: 24, marginBottom: 6 }}>Put This App On Your Home Screen</h3>
       <p className="muted" style={{ marginBottom: 12 }}>
         Takes about fifteen seconds and you only do it once. Afterwards the app has its own icon on your home screen and opens full screen with no browser bar — the same as any app you would download from a store. Nothing to install, and it takes no real space on your phone.
       </p>
@@ -8395,8 +8404,6 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </button>
       {client?.veteranMode && <div className="adjust-box" style={{ marginTop: 8, borderColor: "var(--green)" }}>Veteran Deload is on — your next deload week will be deeper than standard.</div>}
 
-      <InstallGuide />
-
       </SettingsSection>
 
       <SettingsGroup label="PRIVACY AND DATA" />
@@ -8482,6 +8489,13 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
       </SettingsSection>
 
       <SettingsGroup label="THE APP" />
+      {/* Its own section rather than the last thing inside "Your program",
+          which is where it used to live. Nobody looking for how to get the app
+          onto their phone opens a section about their training block. */}
+      <SettingsSection title="Put this app on your home screen" icon={Share2}
+        hint="Its own icon, no browser bar">
+        <InstallGuide />
+      </SettingsSection>
       <SettingsSection title="Appearance" icon={Sun} hint="Light or dark">
       <div className="radio-group">
         <label className={`radio-pill ${theme === "dark" ? "active" : ""}`} onClick={() => onChangeTheme("dark")}>
