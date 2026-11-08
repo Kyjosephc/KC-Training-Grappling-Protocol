@@ -6,7 +6,7 @@ const PATTERNS = [
   ["Horizontal pull",  /row|renegade|scarecrow|face pull|band pull-apart|y,? ?t,? ?w|zottman/i],
   ["Vertical pull",    /pull-?up|chin-?up|lat pulldown|toes to bar|dead hang/i],
   ["Squat",            /squat|leg press|step-?up|lunge|terminal knee extension/i],
-  ["Hinge",            /deadlift|romanian|rdl|good morning|hip thrust|glute bridge|hamstring curl|valslide/i],
+  ["Hinge",            /deadlift|romanian|rdl|good morning|rack pull|hip thrust|glute bridge|hamstring curl|valslide/i],
   ["Carry / grip",     /carry|pinch|farmer|bear-?hug|bar hold|kettlebell hold|static hold/i],
   ["Neck",             /neck/i],
   ["Adductor / groin", /copenhagen|adduction|clamshell/i],

@@ -2198,7 +2198,16 @@ function resolveExercise(e, weekNumber, program, phase, opts = {}) {
     const rotW = isConditioningPool ? 1 : Math.max(1, Math.floor(Number(program.conjugate.meRotationWeeks)) || 2);
     // Deload weeks carry their own fixed easy session, so counting them would
     // silently eat a slot in the rotation. This counts training weeks only.
-    const rotWeek = isConditioningPool ? weekNumber - Math.floor(weekNumber / 4) : weekNumber;
+    //
+    // Dynamic effort is counted the same way, because deload weeks are
+    // deliberately dynamic-effort-free. On calendar weeks the fourth lift in a
+    // four-lift pool landed on weeks 7 and 8, week 8 is a deload, and so it
+    // got exactly one hard week in a block while the first lift got four.
+    // Measured across Program A: the Dumbbell Jump Squat and the Medicine Ball
+    // Chest Pass were each prescribed once in twelve weeks, which is not long
+    // enough to learn a lift, let alone progress one.
+    const skipsDeloadWeeks = isConditioningPool || poolKey === "deLowerPool" || poolKey === "deUpperPool";
+    const rotWeek = skipsDeloadWeeks ? weekNumber - Math.floor(weekNumber / 4) : weekNumber;
     // Folding blockNumber into the offset means block 2 doesn't start the rotation at the
     // exact same spot as block 1 — without this, every restart replayed an identical sequence.
     let idx = (Math.floor((rotWeek - 1) / rotW) + (blockNumber - 1)) % pool.length;
@@ -2564,6 +2573,7 @@ const VIDEO_LIBRARY = {
   "upright shoulder overhead press": "https://www.youtube.com/watch?v=cGnhixvC8uA",
   "half-kneeling landmine press hold": "https://www.youtube.com/watch?v=fx6lSVNvu-4",
   "trap bar high pull": "https://www.youtube.com/watch?v=_reAqpSF-m0",
+  "rack pull": "https://www.youtube.com/shorts/qFqbJqboCHU",
   "trap bar deadlift": "https://www.youtube.com/shorts/kpyCkyVIxjI",
   "heavy dumbbell swing": "https://www.youtube.com/watch?v=QEMGYrebtxE",
   "back squat": "https://www.youtube.com/shorts/PPmvh7gBTi0",
@@ -3075,13 +3085,21 @@ const deUpperPool = [
 
 const meLowerPool = [
   { name: "Box Squat (bench set to box height)", notes: "Sit back to the bench at parallel, pause, drive up. Rotated to avoid staleness.", videoUrl: "" },
-  { name: "Front Squat", notes: "Upright torso, quad and trunk-bracing emphasis", videoUrl: "" },
-  { name: "Anderson Squat (from pins)", notes: "Dead-stop squat starting from safety pins set just below parallel — builds strength without any stretch-reflex assistance, a genuine Westside staple", videoUrl: "" },
   // Order matters: with a two-week rotation an athlete in their first block only
   // ever reaches index 5, and indices 4 and 5 land on weeks 9 to 11. That used to
   // be trap bar then good morning, which left the whole peak block hinge-only and
   // put a true good-morning single seven days out from competing.
+  //
+  // Three squats and three hinges now, alternating. It used to be four squats
+  // to two, which is where the better-than-two-to-one squat-over-hinge split
+  // in both conjugate programs came from — hip extension is bridging, standing
+  // up and finishing a takedown, and it was getting half the max-effort
+  // exposure squatting got. The Anderson squat came out to make room: of the
+  // four squats it was the one whose reason was a general strength argument
+  // rather than a grappling one.
   { name: "Barbell Good Morning", notes: "Posterior chain and hip-hinge strength", maxTriple: true, videoUrl: "" },
+  { name: "Front Squat", notes: "Upright torso, quad and trunk-bracing emphasis", videoUrl: "" },
+  { name: "Rack Pull (pins just below the knee)", notes: "Heavy hinge over a short range — the one pull in here you can express a genuine max on without the technical risk of a deficit, and it loads the upper back and the grip at the same time, which is where a gi grip gives out first", videoUrl: "" },
   { name: "Zercher Squat", notes: "Heavy anterior-loaded trunk bracing — carries over to grappling posture under load", videoUrl: "" },
   { name: "Trap Bar Deadlift", maxTriple: true, notes: "Neutral grip, lower technical demand heavy pull — the safest heavy pull to push on your own, which is why it stops at a triple rather than a single", videoUrl: "https://www.youtube.com/shorts/kpyCkyVIxjI" },
 ];
@@ -3753,7 +3771,7 @@ function buildProgramCContent() {
       { name: "Day 2 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
         { id: uid(), type: "strength", name: "Working Sets — Deload", exercises: [
           ...ssPair(1, weekNum === 4 ? "Zercher Squat" : "Front Squat", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 6 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "2/2/2", rpe: 6 }),
-          ssSingle(2, weekNum === 4 ? "Standing Barbell Overhead Press" : weekNum === 8 ? "Incline Bench Press" : "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 6 }, "Strength"),
+          ssSingle(2, weekNum === 4 ? "Standing Barbell Overhead Press" : "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 6 }, "Strength"),
         ]},
       ]},
       { name: "Day 3 — Deload", intent: "Same pattern as the block you just finished, at RPE 6.", sections: [
@@ -3778,14 +3796,14 @@ function buildProgramCContent() {
 // Raise, Activate, Mobilise, Potentiate — so each phase feeds the next rather
 // than being a pile of drills. Bumping WARMUP_VERSION replaces it for athletes
 // who already have the old one saved against their program.
-const WARMUP_VERSION = 4;
+const WARMUP_VERSION = 5;
 // Bumped whenever the built program changes: exercises, sets, reps, weekly
 // floors, pools or phase text. An athlete's program is copied into their account
 // at sign-up and is what they train from, so a change here does not reach anyone
 // already running the old copy until they take it. Unlike the warm-up this is
 // never applied silently — their copy can carry their own swaps and anything
 // their coach adjusted for them, so the athlete is asked rather than overwritten.
-const PROGRAM_VERSION = 2;
+const PROGRAM_VERSION = 3;
 // Conditioning pools are driven by a fixed per-week plan that ignores
 // blockNumber, so they look like rotation and are not.
 const BLOCK_STATIC_POOLS = new Set(["conditioningIntervalPool", "matchSpecificPool"]);
@@ -3825,7 +3843,7 @@ function defaultWarmup() {
     ]},
     { id: uid(), block: "Durability", duration: "4 minutes", items: [
       { id: uid(), name: "6-Way Isometric Neck Holds", detail: "15 seconds in each of six directions — forehead, back of the head, each side, then a hand on each temple as if turning to look over that shoulder, resisting the turn. The two rotation holds matter most: scrambles, head-position fights and getting your head pushed across your body all load the neck in rotation, and nothing else in here trains that direction. Push hard enough that your head does not move. Build the pressure over the first two seconds rather than jerking into it. If anything pinches, or any sensation travels down an arm, stop and note it in your check-in.", videoUrl: "https://www.youtube.com/shorts/fhLCBABZTUQ" },
-      { id: uid(), name: "90/90 Hip Rotation Lift-Off", detail: "5 per side with a 3 second hold. Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range — if your torso has to rock to make it happen, you have gone past what you own. This is strength at the end of hip rotation, which is guard retention, a knee shield, and every hip escape.", videoUrl: "" },
+      { id: uid(), name: "90/90 Hip Rotation Lift-Off", detail: "5 per side with a 3 second hold. Sit with one leg bent in front at ninety degrees and the other out to the side at ninety. Without leaning back, lift the back knee off the floor and hold, then the front. Small range — if your torso has to rock to make it happen, you have gone past what you own. This is strength at the end of hip rotation, which is guard retention, a knee shield, and every hip escape.", videoUrl: "https://www.youtube.com/shorts/-jipWmgofww" },
       { id: uid(), name: "Tibialis Raise", detail: "15 reps. Heels on the floor, toes pulled up toward the shin, slow down. Ankle and shin durability under guard-retention and scrambling loads — two minutes a session is the whole dose.", videoUrl: "https://www.youtube.com/shorts/HliiXSj2aIE" },
     ]},
     { id: uid(), block: "Mobilise", duration: "3 minutes", items: [
@@ -3891,7 +3909,7 @@ function defaultMobility() {
     { id: uid(), name: "Couch Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Rear knee down, hips squared forward, glute of the back leg engaged. The hip flexor and quad take a beating from squatting and from playing guard.", videoUrl: "https://www.youtube.com/watch?v=QiKl5UoiG5c" },
     { id: uid(), name: "90/90 Hip Switch Flow", seconds: 60, type: "stretch", detail: "Flow slowly side to side, feeling both hips through internal and external rotation. Internal rotation is the range most grapplers lose first and miss the most.", videoUrl: "https://www.youtube.com/shorts/-3khv0Chrhg" },
     { id: uid(), name: "Figure-4 / Pigeon Stretch (each side)", seconds: 120, type: "stretch", detail: "60 seconds per side. Sit into the hip, keep the spine tall, breathe out into the stretch rather than forcing it down.", videoUrl: "https://www.youtube.com/shorts/4CqSgEx5q_g" },
-    { id: uid(), name: "Deep Squat Hold", seconds: 60, type: "stretch", detail: "Heels down if possible, hands inside the knees gently pressing them out. Ankles, hips and lower back in one position — and the position you want to be comfortable in on the mat.", videoUrl: "" },
+    { id: uid(), name: "Deep Squat Hold", seconds: 60, type: "stretch", detail: "Heels down if possible, hands inside the knees gently pressing them out. Ankles, hips and lower back in one position — and the position you want to be comfortable in on the mat.", videoUrl: "https://www.youtube.com/shorts/LPa3LKlQ7eU" },
     { id: uid(), name: "Straddle Hamstring and Adductor Hold", seconds: 90, type: "stretch", detail: "Long hold. Hinge from the hips and relax a little deeper on each exhale. Adductor strain is one of the most common injuries in grappling, so this range is worth keeping.", videoUrl: "https://www.youtube.com/shorts/BRTWEvuW8e4" },
     { id: uid(), name: "Open Book Thoracic Rotation (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, slow controlled rotation, follow the top hand with your eyes. Rotation you don't have in the mid-back gets taken from the lower back instead.", videoUrl: "https://www.youtube.com/shorts/cncdlzYmbxg" },
     { id: uid(), name: "Overhead Lat and Shoulder Stretch (each side)", seconds: 60, type: "stretch", detail: "30 seconds per side, hand on the rack or a bar, side-bend away to lengthen the lat.", videoUrl: "https://www.youtube.com/shorts/1L0PB5KrIt8" },
@@ -4136,7 +4154,14 @@ const WEEKLY_FLOORS = [
       rest: "60 seconds", tempo: "1/1/2", quality: "Prehab",
       purpose: "Rear delts and the muscles that hold the shoulder blade down and back. Grappling spends all day pulling the shoulders forward — gripping, framing, posting — and this is the cheapest insurance against that there is.",
       cues: "Pull to your forehead with the elbows high and finish with the knuckles facing behind you. Light enough that the shoulder blades do the work rather than the arms." }) },
-  { key: "adductor", min: 2, deloadMin: 0, match: /copenhagen|adduction|adductor/i,
+  // Three, not two. Measured across the four programs, two left Program A on
+  // exactly the floor at 2.0 sets a week while C and D sat at 4.0 and B at
+  // 3.0 — and A is the program for somebody training five nights a week, so it
+  // carries the most mat exposure and was getting the least direct groin work.
+  // Groin strain is the most common soft-tissue injury in the sport. The sets
+  // in make() below are overwritten by the floor pass, so this number is the
+  // only one that decides the dose.
+  { key: "adductor", min: 3, deloadMin: 0, match: /copenhagen|adduction|adductor/i,
     make: () => ex({ name: "Copenhagen Plank (each side)", sets: 2, reps: "20 to 30 seconds per side", load: "bodyweight", rir: 3,
       rest: "45 seconds", quality: "Durability",
       purpose: "Adductor strain is the most common soft-tissue injury in grappling, and the adductor is loaded every time you retain guard or defend a pass. The hip pool rotates, so without a floor here a whole block could go by with abduction work and no adductor work at all.",
@@ -4145,7 +4170,7 @@ const WEEKLY_FLOORS = [
   // sprinting every week. In the peak block the sprinting is already reduced and
   // the point of the block is freshness, so two maintenance sets is the honest
   // dose — which is exactly what that phase's own text promises.
-  { key: "post", min: 3, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i,
+  { key: "post", min: 3, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|rack pull|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
       purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
@@ -4255,9 +4280,18 @@ function trimAccessoryVolume(program) {
 function finishProgram(program) {
   if (program) program.warmupVersion = WARMUP_VERSION;
   if (program) program.programVersion = PROGRAM_VERSION;
-  const floored = weeklyFloorPass(program);
-  const balanced = program.variant === "B" ? addExplosivePrimer(trimAccessoryVolume(floored)) : floored;
-  return backfillVideos(balanced);
+  // Trim first, floors last. These used to run the other way round, and the
+  // trim drops any durability or prehab lift from three sets to two — so the
+  // floor would raise the Copenhagen plank to three and the trim would take it
+  // straight back to two, leaving Program B a set under its own adductor
+  // floor. The neck carries a hand-written exemption inside the trim for
+  // exactly this reason, which fixed the one case somebody noticed at the
+  // time. A floor that something later undoes is not a floor, so the floor
+  // pass gets the last word instead.
+  const trimmed = program && program.variant === "B"
+    ? addExplosivePrimer(trimAccessoryVolume(program))
+    : program;
+  return backfillVideos(weeklyFloorPass(trimmed));
 }
 
 function backfillVideos(program) {
@@ -4318,8 +4352,9 @@ const TWO_DAY_COPENHAGEN = (tier) => ex({
 // pass is too central to the sport to leave out. Each day gets one isometric
 // item, taken in the same round as the plank so it costs about a minute:
 // anti-rotation on the first day, anti-extension on the second.
-const TWO_DAY_ANTI_ROTATION = (tier) => ex({
+const TWO_DAY_ANTI_ROTATION = (tier, rotating) => ex({
   name: "Heavy Pallof Press Hold (each side)", sets: 2,
+  ...(rotating ? { rotatingPool: "coreAntiPool" } : {}),
   reps: tier === "deload" ? "15 seconds per side" : "20 to 25 seconds per side",
   load: "a cable or band, heavy enough that holding still is the hard part",
   rir: tier === "deload" ? 4 : 3, rest: "0 seconds — done in the same round as the plank above",
@@ -4509,7 +4544,13 @@ function offseasonTwoDayOne(tier) {
           purpose: "Grip for the time you were going to spend putting the bar down. Thumbs around the bar, no straps — the point is the hand.",
           cues: "Finish the last rep standing and hold. Let go deliberately rather than waiting for the hands to open. Build to forty seconds before adding weight." }) ]},
       { id: uid(), type: "durability", name: "The Work That Stays", exercises: [
-        TWO_DAY_COPENHAGEN(tier), TWO_DAY_ANTI_ROTATION(tier), TWO_DAY_NECK(tier) ]},
+        // The one slot in this program that rotates. Program D's own
+        // methodology argues for the sameness — "variety was the three-day
+        // program's luxury and intensity is its engine" — and that argument is
+        // about the main lifts, which is why they are untouched. It does not
+        // extend to the trunk slot, where running the identical Pallof hold
+        // for four straight weeks buys nothing the rotation would not.
+        TWO_DAY_COPENHAGEN(tier), TWO_DAY_ANTI_ROTATION(tier, true), TWO_DAY_NECK(tier) ]},
     ],
   };
 }
@@ -4571,6 +4612,9 @@ function buildOffseasonTwoDay() {
     sport: "Brazilian Jiu-Jitsu / Wrestling",
     sessionsPerWeek: 2,
     variant: "D",
+    // Only the trunk slot reads from this. Everything else in D is fixed
+    // within a block on purpose, which the methodology below explains.
+    conjugate: { coreAntiPool, meRotationWeeks: 2 },
     objective: "Program B's method on two days instead of three. No percentages and no maximal singles — every working set is prescribed by how hard it should feel, the lifts are paired, and the load climbs inside a block while the sets and reps hold still.",
     methodology:
       "Nothing here is calculated off a one-rep max. Every working set carries a reps-in-reserve number, and the load is whatever hits that number for you on the day. The lifts are paired so two patterns are underway before you have rested twice, tempo is prescribed on the main lifts because the slow half of the rep is where the tissue adaptation lives, and the progression inside a block is load going up while the sets and the reps stay exactly where they are.\n\nWhat changes going from three days to two is pattern frequency, not method. Each pattern now gets one exposure a week instead of two or three, so the sessions split by pattern rather than by variation: squat, horizontal press and vertical pull on the first day; hinge, overhead press and horizontal pull on the second. Both days own a hinge of their own, so a missed session never costs you the pattern.\n\nWhat comes off is variety. Three squat variations a week became one, six press variations became two, six pulls became two. That is the right thing to lose — variety was the three-day program's luxury and intensity is its engine — but it should be said plainly: weekly volume per pattern is down roughly forty percent against Program B. Expect this to build strength and to hold the muscle you have. If putting on size is the actual goal of your offseason, two days a week will not do what three does, and you should know that in week one rather than week ten.",
@@ -10917,7 +10961,7 @@ function Prose({ text }) {
 // sane week look like an overreaching one.
 const VOLUME_PATTERNS = [
   ["Squat", /box squat|back squat|front squat|zercher|bulgarian|front-foot-elevated|quarter squat/i],
-  ["Hinge", /romanian deadlift|trap bar deadlift|valslide|hip thrust|supine hamstring|glute ham/i],
+  ["Hinge", /romanian deadlift|trap bar deadlift|rack pull|valslide|hip thrust|supine hamstring|glute ham/i],
   ["Press", /bench press|push-ups|floor press|overhead press|punch press|offset single arm/i],
   ["Pull", /pull-up|row\b|lat row|pulldown/i],
   ["Scap / rear delt", /face pull|pull-apart|y, t, w|scarecrow|scapular/i],

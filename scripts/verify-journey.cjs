@@ -2082,5 +2082,98 @@ check("the guidance matches the shape of the prescription", () => {
   if (!bare || /undefined|NaN/.test(bare)) throw new Error(`a target with no reps in reserve produced: ${bare}`);
 });
 
+
+console.log("\nWhat the programs actually ask for");
+const eachHardWeek = (v, fn) => {
+  const p = A.buildProgramVariant(v);
+  const perWeek = p.sessionsPerWeek || 3;
+  for (let w = 1; w <= 12; w++) {
+    const first = A.positionAtIndex(p, (w - 1) * perWeek);
+    if (/deload/i.test(first.phase.name)) continue;
+    const exes = [];
+    for (let d = 0; d < perWeek; d++) {
+      const pos = A.positionAtIndex(p, (w - 1) * perWeek + d);
+      A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, {})
+        .forEach((sec) => (sec.exercises || []).forEach((e) => { if (e && e.name) exes.push(e); }));
+    }
+    fn(w, exes);
+  }
+};
+
+check("no program gives less than three adductor sets a week", () => {
+  // Program A sat on exactly the floor at two while C and D gave four, and A
+  // is the program for somebody on the mat five nights a week. Groin strain is
+  // the most common soft-tissue injury in the sport. This is the floor's own
+  // matcher, so it fails if the floor is lowered as well as if a program drops
+  // the work.
+  const low = [];
+  ["A", "B", "C", "D"].forEach((v) => eachHardWeek(v, (w, exes) => {
+    const sets = exes.filter((e) => /copenhagen|adduction|adductor/i.test(e.name))
+      .reduce((n, e) => n + (Number(e.sets) || 0), 0);
+    if (sets < 3) low.push(`${v} wk${w}: ${sets}`);
+  }));
+  if (low.length) throw new Error(`weeks under three adductor sets: ${low.slice(0, 6).join(", ")}`);
+});
+
+check("the conjugate programs do not squat twice as much as they hinge", () => {
+  // The max effort lower pool was four squats to two hinges, so two thirds of
+  // every rotation was a squat and both conjugate programs came out past two
+  // to one. Hip extension is bridging, standing up and finishing a takedown.
+  // Any squat, not a hand-listed set of them. The first version of this check
+  // listed the variations by name, missed "Trap Bar Jump Squat", and so
+  // computed a lower ratio than the measurement it was meant to pin — it
+  // passed with the pool put back the way it was.
+  const SQUAT = /squat|leg press|step-?up|lunge/i;
+  const HINGE = /deadlift|romanian|rdl|good morning|rack pull|hip thrust|glute bridge|hamstring curl|valslide/i;
+  ["A", "C"].forEach((v) => {
+    let squat = 0, hinge = 0;
+    eachHardWeek(v, (w, exes) => exes.forEach((e) => {
+      const n = String(e.name).replace(/\([^)]*\)/g, " ");
+      if (SQUAT.test(n)) squat += Number(e.sets) || 0;
+      if (HINGE.test(n)) hinge += Number(e.sets) || 0;
+    }));
+    if (!hinge) throw new Error(`program ${v} has no hinge volume at all`);
+    const ratio = squat / hinge;
+    if (ratio > 2) throw new Error(`program ${v} squats ${ratio.toFixed(2)} times what it hinges`);
+  });
+});
+
+check("every dynamic effort lift gets more than one hard week", () => {
+  // The fourth lift in a four-lift pool landed on weeks 7 and 8, week 8 is a
+  // deload and deloads are dynamic-effort-free, so it was prescribed exactly
+  // once in twelve weeks while the first lift got four. One week is not long
+  // enough to learn a lift, let alone progress one.
+  const weeksFor = new Map();
+  eachHardWeek("A", (w, exes) => exes.forEach((e) => {
+    if (!/dynamic effort/i.test(e.name)) return;
+    const set = weeksFor.get(e.name) || new Set();
+    set.add(w); weeksFor.set(e.name, set);
+  }));
+  if (weeksFor.size < 3) throw new Error(`only ${weeksFor.size} dynamic effort lifts found across program A`);
+  const once = [...weeksFor.entries()].filter(([, ws]) => ws.size < 2);
+  if (once.length) throw new Error(`prescribed in only one hard week: ${once.map(([n]) => n).join(", ")}`);
+});
+
+check("program D is not the same session four weeks running", () => {
+  // D's methodology defends the sameness of the main lifts, and they are left
+  // alone. It does not defend running the identical trunk exercise for four
+  // straight weeks, which is what the one rotating slot fixes.
+  const p = A.buildProgramVariant("D");
+  const perWeek = p.sessionsPerWeek || 2;
+  const sigs = [];
+  for (let w = 1; w <= 12; w++) {
+    const parts = [];
+    for (let d = 0; d < perWeek; d++) {
+      const pos = A.positionAtIndex(p, (w - 1) * perWeek + d);
+      A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, {})
+        .forEach((sec) => (sec.exercises || []).forEach((e) => parts.push(`${e.name}|${e.sets}|${e.reps}`)));
+    }
+    sigs.push(parts.join("~"));
+  }
+  const distinct = new Set(sigs).size;
+  if (distinct < 6) throw new Error(`only ${distinct} distinct weeks in twelve`);
+  if (sigs[0] === sigs[2]) throw new Error("week 1 and week 3 are the identical session");
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);
