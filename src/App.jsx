@@ -226,6 +226,17 @@ function embedFor(url) {
   return { kind: "link", href: u, host };
 }
 
+// A still for the grid. YouTube serves one off the video id, which covers
+// almost everything posted here. An uploaded clip has no still anywhere, so
+// the tile falls back to the first frame the browser decodes — preload is
+// metadata only, because a wall of tiles that each pull a whole video is how
+// a phone on gym wifi stops responding.
+function clipThumb(url) {
+  const e = embedFor(url);
+  return e && e.kind === "youtube" ? `https://img.youtube.com/vi/${e.id}/hqdefault.jpg` : null;
+}
+const isClip = (p) => !!(p && p.video_url && embedFor(p.video_url));
+
 const COMMUNITY_BASE_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
 const COMMUNITY_COLS = `${COMMUNITY_BASE_COLS}, channel`;
 // Set to false the first time the database tells us the column is not there, so
@@ -309,47 +320,30 @@ const COMMUNITY_CHANNELS = [
     blurb: "Staying on top once you are there — mount, side control, knee-on-belly, and the pressure that keeps somebody flat.",
     placeholder: "Name the position you were holding and how they got out. \"I had mount and lost it to a bridge and roll\" is something somebody can fix." },
 
+  // Seven guard rooms, down from fourteen. The pairs that came together were
+  // one conversation held in two places — nobody discusses de la Riva without
+  // reverse de la Riva — and a room nobody posts in reads as a dead app far
+  // louder than a missing room reads as a gap.
   { id: "closedguard", group: "guards", label: "Closed guard",
     blurb: "Legs locked behind them — breaking posture, grips, the attacks that come off it and stopping the opening.",
     placeholder: "Say whether you are playing it or stuck in it, then name the grip you had. Closed guard is mostly a posture argument, so describe who was winning it." },
   { id: "halfguard", group: "guards", label: "Half guard",
-    blurb: "One leg trapped — underhooks, the dogfight, coming up, and the flattening that stops it.",
-    placeholder: "Say whether you had the underhook and whether you were flat or on your side. Those two answers decide everything else in half guard." },
-  { id: "kneeshield", group: "guards", label: "Knee shield",
-    blurb: "Half guard with the shin across them — Z-guard, the frames, the sweeps off it, and how people crush it.",
-    placeholder: "Name the shin you had across and what they did to it — walked around it, pinned it, or stepped over. The answer is different for each." },
+    blurb: "One leg trapped, at every depth — the underhook and the dogfight, the knee shield and Z-guard, and deep half underneath the hips.",
+    placeholder: "Say whether you had the underhook, and whether you were flat, on your side behind a knee shield, or underneath them in deep half. Those answers decide everything else." },
   { id: "butterfly", group: "guards", label: "Butterfly",
     blurb: "Hooks inside, sitting up — elevations, the hip bump, and keeping the chest connection.",
     placeholder: "Say whether you were sitting up or flat on your back. Butterfly stops working the moment you are flat, so start there." },
   { id: "dlr", group: "guards", label: "De la Riva",
-    blurb: "The outside hook — berimbolos, back takes, the sweeps, and the leg drags that beat it.",
-    placeholder: "Name the grip you had with the hook — collar, sleeve, ankle — then what they did to clear the hook." },
-  { id: "rdlr", group: "guards", label: "Reverse De la Riva",
-    blurb: "The inside hook — entries to leg entanglements, back exposures, and stopping the knee cut.",
-    placeholder: "Say what they were threatening when you went to RDLR. It is mostly a defensive guard turned offensive, so say which half you are asking about." },
-  { id: "spider", group: "guards", label: "Spider",
-    blurb: "Feet in the biceps — the tension, the sweeps, triangles off it, and the passes that beat the grips.",
-    placeholder: "Spider is a grip fight before it is a guard. Name the sleeve grips you had and which one they broke first." },
-  { id: "lasso", group: "guards", label: "Lasso",
-    blurb: "The leg wrapped around the arm — the control, the sweeps, and the unwinding that kills it.",
-    placeholder: "Say which arm you had lassoed and what their free hand was doing. The free hand is usually the thing that beats it." },
-  { id: "xguard", group: "guards", label: "X-guard",
-    blurb: "Underneath them with the legs crossed — the entries, the technical stand-up, and the sweeps off it.",
-    placeholder: "Name the entry you used to get there. Most X-guard questions are entry questions wearing a sweep costume." },
-  { id: "slx", group: "guards", label: "Single-leg X",
-    blurb: "Ashi — the sweeps, the stand-ups, and the handoff to a leg entanglement or back.",
-    placeholder: "Say whether you want the sweep or the leg. Single-leg X goes both ways and the answer depends which one you are chasing." },
-  { id: "deephalf", group: "guards", label: "Deep half",
-    blurb: "Underneath the hips — the roll through, the waiter sweep, and the whizzer that stops it.",
-    placeholder: "Say how deep you got and what their whizzer was doing. Deep half is a commitment, so say what happened after you committed." },
-  { id: "fiftyfifty", group: "guards", label: "50/50",
-    blurb: "Legs mirrored — the sweeps, the stalemates, and the leg attacks that live there.",
-    placeholder: "Say whether you are trying to sweep, finish or get out. 50/50 is three different problems and they have different answers." },
-  { id: "collarsleeve", group: "guards", label: "Collar sleeve",
-    blurb: "Collar in one hand, sleeve in the other, foot on the hip — the sweeps, the triangles, and breaking the structure.",
-    placeholder: "Name which foot was on the hip or the bicep and what they did about the collar grip. Collar sleeve dies when the collar grip goes." },
-  { id: "wormguard", group: "guards", label: "Worm guard",
-    blurb: "Lapel guards — worm, squid, reverse de la worm. Feeding the lapel, the sweeps, and untangling it.",
+    blurb: "The outside hook and the inside one — berimbolos, back takes, the sweeps, reverse de la Riva, and the leg drags that beat both.",
+    placeholder: "Say whether the hook was outside or inside, then the grip you had with it — collar, sleeve, ankle — and what they did to clear it." },
+  { id: "spider", group: "guards", label: "Spider & lasso",
+    blurb: "Feet in the biceps and the leg wrapped around the arm — the tension, the sweeps, triangles off them, and the passes that beat the grips.",
+    placeholder: "Both of these are a grip fight before they are a guard. Name the sleeve grips you had and which one they broke first." },
+  { id: "xguard", group: "guards", label: "X-guard & single-leg X",
+    blurb: "Underneath them with the legs crossed or on one leg — entries, the technical stand-up, the sweeps, and the handoff to a leg entanglement.",
+    placeholder: "Name the entry you used to get there. Most questions about these are entry questions wearing a sweep costume." },
+  { id: "lapel", group: "guards", label: "Lapel guards",
+    blurb: "Gi only — worm, squid, reverse de la worm, collar sleeve. Feeding the lapel, the sweeps off it, and untangling yourself.",
     placeholder: "Say which lapel you fed and where it ended up. Lapel guards are impossible to answer without knowing where the cloth went." },
 
   { id: "retention", group: "bottom", label: "Guard retention",
@@ -374,13 +368,17 @@ const COMMUNITY_CHANNELS = [
   { id: "attackside", group: "attacking", label: "Attacking from side control",
     blurb: "Finishing from side control and from underneath it — kimuras, arm triangles, americanas, and the attacks that come off their escape.",
     placeholder: "Say whether you were on top or underneath, then name the attack. Side control submissions usually appear because they moved, so say what they did first." },
-  { id: "submissions", group: "attacking", label: "Submissions",
-    blurb: "Finishing — chokes, armlocks, the details that turn a tight position into a tap.",
-    placeholder: "Name the submission and the position you hit it from, then say what the escape was that beat you." },
-  { id: "leglocks", group: "attacking", label: "Leg locks",
-    blurb: "Entries, positions and finishes below the belt, and defending them.",
-    placeholder: "Name the entanglement — ashi, 50/50, saddle — and the finish or the escape you are chasing." },
+  // Two rooms, not one. Getting to the position and finishing from it are
+  // different problems with different answers, and lumping them together is
+  // why "leg locks" conversations go in circles.
+  { id: "legentries", group: "attacking", label: "Leg entanglements",
+    blurb: "Getting there and staying there — ashi, outside ashi, 50/50, the saddle, and switching between them. The position, not the finish.",
+    placeholder: "Name the entanglement you were in and the one you wanted. Say what their free leg was doing, because that is usually what decides whether the switch is there." },
+  { id: "leglocks", group: "attacking", label: "Leg lock finishes",
+    blurb: "The submissions themselves — heel hooks inside and out, kneebars, toe holds, straight ankle locks, and defending them.",
+    placeholder: "Name the finish and the entanglement you had it from. Say whether their knee line was controlled, because a heel hook without it is just a grip." },
 ];
+
 function channelsInGroup(groupId) {
   return COMMUNITY_CHANNELS.filter((c) => c.group === groupId);
 }
@@ -416,19 +414,12 @@ const COMMUNITY_SEARCH_LIMIT = 60;
 // so the room has to be searchable by every name it goes by.
 const ROOM_ALIASES = {
   closedguard: ["full guard"],
-  halfguard: ["half"],
-  kneeshield: ["z guard", "shin shield"],
+  halfguard: ["half", "knee shield", "z guard", "shin shield", "deep half", "deep half guard"],
   butterfly: ["butterfly guard"],
-  dlr: ["de la riva", "dlr"],
-  rdlr: ["reverse de la riva", "rdlr"],
-  spider: ["spider guard"],
-  lasso: ["lasso guard"],
-  xguard: ["x guard"],
-  slx: ["single leg x", "ashi garami", "ashi"],
-  deephalf: ["deep half guard"],
-  fiftyfifty: ["50 50", "fifty fifty"],
-  collarsleeve: ["collar and sleeve"],
-  wormguard: ["lapel guard", "squid guard", "worm"],
+  dlr: ["de la riva", "dlr", "reverse de la riva", "rdlr"],
+  spider: ["spider guard", "lasso", "lasso guard"],
+  xguard: ["x guard", "single leg x", "slx"],
+  lapel: ["lapel guard", "worm guard", "squid guard", "collar sleeve", "collar and sleeve", "worm"],
   passing: ["guard pass"],
   topcontrol: ["mount", "side control", "knee on belly"],
   retention: ["guard retention"],
@@ -436,10 +427,10 @@ const ROOM_ALIASES = {
   escapes: ["escape"],
   back: ["back control", "back take", "seatbelt", "body triangle"],
   attacktop: ["attacking from the top", "top attacks", "finishing from the top", "mount attacks"],
-  attackbottom: ["attacking from the bottom", "bottom attacks", "guard attacks", "submissions from guard"],
+  attackbottom: ["attacking from the bottom", "bottom attacks", "guard attacks", "submissions from guard", "submissions"],
   attackside: ["attacking from side", "side control attacks", "kimura", "arm triangle", "americana"],
-  submissions: ["submission"],
-  leglocks: ["leg lock", "heel hook", "saddle", "honey hole"],
+  legentries: ["ashi", "ashi garami", "outside ashi", "saddle", "honey hole", "50 50", "fifty fifty", "entanglement", "leg entry"],
+  leglocks: ["leg lock", "heel hook", "kneebar", "toe hold", "ankle lock", "straight ankle lock"],
   footsweeps: ["foot sweep", "uchi mata", "osoto"],
   wrestling: ["takedown", "single leg", "double leg"],
 };
@@ -5842,6 +5833,12 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [picked, setPicked] = useState(null);
   const [matchedRooms, setMatchedRooms] = useState([]);
   const [roomPickerOpen, setRoomPickerOpen] = useState(false);
+  // The room opens as a wall of clips rather than a column of text, because
+  // that is what the rooms are for. General is the exception — it is the room
+  // for asking things, and a grid of nothing would be the first thing a new
+  // athlete saw.
+  const [view, setView] = useState("clips");
+  const [openClipId, setOpenClipId] = useState(null);
   // Whether saving works at all. False means the migration has not been run,
   // and the honest thing is to stop offering a button that cannot work rather
   // than to let people press it and blame their wifi.
@@ -5937,6 +5934,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   // Leaving a channel abandons the search with it.
   useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
+  useEffect(() => { setOpenClipId(null); setView(channel === "general" ? "feed" : "clips"); }, [channel]);
 
   useEffect(() => {
     let alive = true;
@@ -6564,8 +6562,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         </div>
       )}
 
-      <div className="feed" aria-live="polite" hidden={results !== null}>
-        {results === null && roots.map((p) => (
+      {results === null && (() => {
+        const clips = roots.filter(isClip);
+        const card = (p) => (
           <PostCard key={p.id} post={p} replies={repliesFor[p.id] || []} userId={userId} isCoach={isCoach}
             onReport={report} reported={reportedIds.has(p.id)} flagged={isCoach && reportedIds.has(p.id)}
             reportedReplyIds={reportedIds}
@@ -6575,8 +6574,74 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             onHide={(post) => setConfirmHide(post)}
             replyOpen={replyOpen === p.id}
             onToggleReply={(id) => setReplyOpen((cur) => (cur === id ? null : id))} />
-        ))}
-      </div>
+        );
+        const open = openClipId ? roots.find((p) => p.id === openClipId) : null;
+
+        return (
+          <>
+            {/* Only worth offering when there is something on both sides of
+                it. A toggle between an empty grid and three posts is a
+                decision nobody wants to be asked to make. */}
+            {roots.length > 0 && clips.length > 0 && clips.length < roots.length && (
+              <div className="view-toggle" role="group" aria-label="How to show this room">
+                <button type="button" className={view === "clips" ? "on" : ""}
+                  aria-pressed={view === "clips"} onClick={() => { setView("clips"); setOpenClipId(null); }}>
+                  {clips.length} {clips.length === 1 ? "clip" : "clips"}
+                </button>
+                <button type="button" className={view === "feed" ? "on" : ""}
+                  aria-pressed={view === "feed"} onClick={() => { setView("feed"); setOpenClipId(null); }}>
+                  All {roots.length}
+                </button>
+              </div>
+            )}
+
+            {view === "clips" && clips.length > 0 && !open && (
+              <div className="clip-grid" aria-label="Clips in this room">
+                {clips.map((p) => {
+                  const thumb = clipThumb(p.video_url);
+                  return (
+                    <button key={p.id} type="button" className="clip-tile"
+                      onClick={() => setOpenClipId(p.id)}
+                      aria-label={`Open the clip ${p.author_name || "an athlete"} posted${p.body ? `: ${matchSnippet(p.body, "", 60)}` : ""}`}>
+                      <span className="clip-tile-shot">
+                        {thumb
+                          ? <img src={thumb} alt="" loading="lazy" />
+                          : <video src={p.video_url} preload="metadata" muted playsInline tabIndex={-1} aria-hidden="true" />}
+                        <span className="clip-tile-play" aria-hidden="true"><Video size={16} /></span>
+                        {savedIds.has(p.id) ? <span className="clip-tile-saved" aria-hidden="true"><Bookmark size={13} /></span> : null}
+                      </span>
+                      <span className="clip-tile-text">{p.body ? matchSnippet(p.body, "", 58) : "No description"}</span>
+                      <span className="clip-tile-who">{p.author_name || "Athlete"} · {timeAgo(p.created_at)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {view === "clips" && clips.length === 0 && roots.length > 0 && (
+              <div className="adjust-box" style={{ marginBottom: 12 }}>
+                No clips in {channelMeta(channel).label} yet — {roots.length} {roots.length === 1 ? "post" : "posts"} without one.
+                {" "}
+                <button type="button" className="link-btn" onClick={() => setView("feed")}>Read them instead</button>
+              </div>
+            )}
+
+            {open && (
+              <>
+                <button type="button" className="link-btn" style={{ marginBottom: 10 }}
+                  onClick={() => setOpenClipId(null)}>
+                  ← Back to the {clips.length} {clips.length === 1 ? "clip" : "clips"}
+                </button>
+                <div className="feed" aria-live="polite">{card(open)}</div>
+              </>
+            )}
+
+            {view === "feed" && !open && (
+              <div className="feed" aria-live="polite">{roots.map(card)}</div>
+            )}
+          </>
+        );
+      })()}
 
       {hasMore && (
         <button className="btn-ghost wide" style={{ marginTop: 4 }} onClick={loadOlder} disabled={loadingMore}>
@@ -12596,6 +12661,25 @@ function GlobalStyle() {
          chips sit on the page, the strip fades out at the right so the clip is
          obviously an invitation, and the selected chip is filled rather than
          merely a slightly different grey. */
+      .view-toggle { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1px solid var(--border);
+        border-radius: 999px; overflow: hidden; }
+      .view-toggle button { appearance: none; border: none; background: transparent; color: var(--text-dim);
+        font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 14px; cursor: pointer; min-height: 38px; }
+      .view-toggle button.on { background: var(--belt-fill, var(--accent)); color: var(--belt-on-fill, var(--accent-text)); }
+      .clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+      .clip-tile { display: flex; flex-direction: column; gap: 5px; text-align: left; padding: 0;
+        background: none; border: none; color: var(--text); cursor: pointer; font: inherit; }
+      .clip-tile-shot { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 11px;
+        overflow: hidden; background: var(--card); border: 1px solid var(--border); }
+      .clip-tile-shot img, .clip-tile-shot video { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .clip-tile:hover .clip-tile-shot, .clip-tile:focus-visible .clip-tile-shot { border-color: var(--belt, var(--accent)); outline: none; }
+      .clip-tile-play { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center;
+        justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.62); color: #fff; }
+      .clip-tile-saved { position: absolute; right: 8px; top: 8px; display: inline-flex; align-items: center;
+        justify-content: center; width: 24px; height: 24px; border-radius: 50%;
+        background: var(--belt-fill, var(--accent)); color: var(--belt-on-fill, var(--accent-text)); }
+      .clip-tile-text { font-size: 12.5px; line-height: 1.35; }
+      .clip-tile-who { font-size: 11.5px; color: var(--text-dim); }
       .room-bar { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 12px;
         padding: 11px 14px; border-radius: 13px; border: 1px solid var(--border);
         background: var(--card); color: var(--text); cursor: pointer; text-align: left; font: inherit; }

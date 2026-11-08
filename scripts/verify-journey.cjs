@@ -739,12 +739,26 @@ check("a room's own name finds it from whichever room you are standing in", () =
   // where they filed it, so its body almost never contains "knee shield".
   // Searching only the body meant that clip was unfindable by name from
   // anywhere, including from inside the room next door.
-  const hits = A.roomsMatchingTerm("knee shield");
-  if (!hits.includes("kneeshield")) throw new Error(`"knee shield" matched ${JSON.stringify(hits)}`);
-  if (!A.roomsMatchingTerm("z guard").includes("kneeshield")) {
+  const hits = A.roomsMatchingTerm("closed guard");
+  if (!hits.includes("closedguard")) throw new Error(`"closed guard" matched ${JSON.stringify(hits)}`);
+  // Knee shield folded into Half guard, so its old name has to land there
+  // rather than nowhere — the people who type it did not read the changelog.
+  if (!A.roomsMatchingTerm("knee shield").includes("halfguard")) {
+    throw new Error("the old name for a merged room finds nothing");
+  }
+  if (!A.roomsMatchingTerm("z guard").includes("halfguard")) {
     throw new Error("the other name for the room finds nothing");
   }
-  if (!A.roomsMatchingTerm("50/50").includes("fiftyfifty")) throw new Error("50/50 does not find its own room");
+  if (!A.roomsMatchingTerm("reverse de la riva").includes("dlr")) {
+    throw new Error("reverse de la riva does not reach the de la Riva room");
+  }
+  if (!A.roomsMatchingTerm("single leg x").includes("xguard")) {
+    throw new Error("single leg x does not reach the X-guard room");
+  }
+  if (!A.roomsMatchingTerm("worm guard").includes("lapel")) {
+    throw new Error("worm guard does not reach the lapel room");
+  }
+  if (!A.roomsMatchingTerm("50/50").includes("legentries")) throw new Error("50/50 does not reach the entanglements room");
   if (!A.roomsMatchingTerm("x-guard").includes("xguard")) throw new Error("punctuation in a room name defeats it");
 
   // Matched at a word boundary, not anywhere in the string.
@@ -796,9 +810,12 @@ check("every guard room is a word the search already knows", () => {
   // tried in that room.
   const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const vocab = A.TECHNIQUE_TERMS.map(norm);
+  // A merged room's label names two techniques — "Spider & lasso" — so each
+  // side is checked on its own, and the match runs both ways so a plural
+  // label still finds the singular term the vocabulary stores.
   const missing = A.channelsInGroup("guards")
-    .map((c) => ({ id: c.id, key: norm(c.label.replace(/\(.*\)/, "")) }))
-    .filter(({ key }) => !vocab.some((t) => t.includes(key)));
+    .flatMap((c) => c.label.replace(/\(.*\)/, "").split("&").map((part) => ({ id: c.id, key: norm(part) })))
+    .filter(({ key }) => key && !vocab.some((t) => t.includes(key) || key.includes(t)));
   if (missing.length) {
     throw new Error(`rooms the vocabulary has never heard of: ${missing.map((m) => `${m.id} ("${m.key}")`).join(", ")}`);
   }
@@ -2466,6 +2483,44 @@ check("some migration in the repo knows about every room", () => {
       + (missing.length ? `, missing ${missing.join(", ")}` : "")
       + (extra.length ? `, and listing ${extra.join(", ")} which no longer exists` : ""));
   }
+});
+
+
+console.log("\nThe clip wall");
+check("a clip tile knows where to get its picture", () => {
+  // The grid is only a grid if the tiles have stills. YouTube serves one off
+  // the video id and an uploaded clip has none anywhere, so the tile has to
+  // know which case it is in rather than rendering a broken image.
+  const shots = [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+  ];
+  shots.forEach((u) => {
+    const t = A.clipThumb(u);
+    if (!t || !/img\.youtube\.com\/vi\/dQw4w9WgXcQ\//.test(t)) throw new Error(`${u} gave ${t}`);
+  });
+  // An uploaded file has no still to fetch, and guessing a URL for one would
+  // put a broken image on the wall.
+  if (A.clipThumb("https://x.supabase.co/storage/v1/object/public/community-clips/a.mp4") !== null) {
+    throw new Error("an uploaded clip was given a YouTube thumbnail");
+  }
+  if (A.clipThumb("") !== null || A.clipThumb(null) !== null) throw new Error("nothing produced a thumbnail");
+});
+
+check("only posts with a playable clip reach the wall", () => {
+  const yes = [
+    { video_url: "https://youtu.be/dQw4w9WgXcQ" },
+    { video_url: "https://x.supabase.co/storage/v1/object/public/community-clips/a.mp4" },
+  ];
+  const no = [
+    { body: "a question with no clip" },
+    { video_url: "" },
+    { video_url: "not a url at all" },
+    null, undefined,
+  ];
+  yes.forEach((p, i) => { if (!A.isClip(p)) throw new Error(`clip ${i} was left off the wall`); });
+  no.forEach((p, i) => { if (A.isClip(p)) throw new Error(`non-clip ${i} was put on the wall`); });
 });
 
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
