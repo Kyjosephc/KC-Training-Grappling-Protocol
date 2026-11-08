@@ -521,11 +521,48 @@ function requirementQuestions(rsId) {
 }
 
 // --- The bank ----------------------------------------------------------------
+// --- 7. Submissions: the moment the score stops mattering -------------------
+// Asked from three places on purpose, because the most expensive thing a first
+// competitor believes is that a lead has to be nursed to the buzzer. A tap
+// ends it from underneath a six-point deficit exactly as it does from mount,
+// and it ends it before the referee has finished counting a position.
+//
+// These are questions rather than sequences deliberately. A submission is not
+// a scoring position — three of the four rulesets give a near miss no points
+// at all — so it has no place in the cumulative arithmetic the sequences test.
+const SUB_SPOTS = [
+  { key: "bottom", difficulty: 2,
+    scene: "You are losing 6 to 0 with a minute left. From your closed guard you catch a triangle and they tap." },
+  { key: "top", difficulty: 1,
+    scene: "You are in mount and take the arm. They tap before the referee has finished counting the three seconds for the mount." },
+  { key: "side", difficulty: 2,
+    scene: "You have had side control for about two seconds, nowhere near the three the position needs, when you catch a kimura and they tap." },
+];
+function submissionQuestions(rsId) {
+  const rs = RULESETS[rsId];
+  const WIN = "The match is over and you have won";
+  return SUB_SPOTS.map((sp) => ({
+    id: `${rsId}:sub:${sp.key}`,
+    ruleset: rsId, topic: "submission", difficulty: sp.difficulty,
+    prompt: `${rs.name} rules. ${sp.scene} What is the result?`,
+    options: [WIN, "You win only because you were ahead on points", "The points stand and the match carries on", "An advantage"],
+    answer: WIN,
+    why: `A tap ends the match under every ruleset here, ${rs.name} included. Points, advantages and penalties all stop mattering the moment it is accepted — they exist to decide matches that go the distance, and this one did not.`,
+    wrong: {
+      "You win only because you were ahead on points": "A submission is a finish, not a tiebreak. The score on the board is irrelevant once they tap — which is the whole reason being behind is survivable.",
+      "The points stand and the match carries on": "It does not carry on. The tap ends the match where it happened.",
+      "An advantage": `An advantage is for a submission that came close and did not finish. This one finished, and ${rs.name} does not pay a finish in advantages.`,
+    },
+    cite: `${rs.name} ${rs.version}`,
+  }));
+}
+
 export function buildQuestionBank() {
   const all = [];
   RULESET_IDS.forEach((id) => {
     all.push(...positionQuestions(id), ...sequenceQuestions(id), ...specialQuestions(id),
-             ...systemQuestions(id), ...holdQuestions(id), ...requirementQuestions(id));
+             ...systemQuestions(id), ...holdQuestions(id), ...requirementQuestions(id),
+             ...submissionQuestions(id));
   });
   all.push(...comparisonQuestions());
   return all;

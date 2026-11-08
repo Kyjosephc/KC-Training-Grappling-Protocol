@@ -2384,5 +2384,67 @@ check("a corrupt set never crashes or suggests nonsense", () => {
   if (problems.length) throw new Error(problems.slice(0, 5).join(" | "));
 });
 
+
+check("a worse morning never buys you a harder session", () => {
+  // The readiness check-in silently rewrites the day, which makes it the one
+  // piece of logic nobody would notice going wrong. Its own copy promises
+  // yellow runs a notch back and red runs half, so sets must never climb as
+  // the morning gets worse and no lift may leave fewer reps in reserve.
+  const bad = [];
+  ["A", "B", "C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const per = p.sessionsPerWeek || 3;
+    for (let d = 0; d < per; d++) {
+      const pos = A.positionAtIndex(p, d);
+      const base = A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, {});
+      const run = (c) => A.adjustSectionsForReadiness(base, { color: c }, null).sections;
+      const sets = (secs) => secs.reduce((t, s) => t + (s.exercises || []).reduce((n, e) => n + (Number(e.sets) || 0), 0), 0);
+      const g = sets(run("GREEN")), y = sets(run("YELLOW")), r = sets(run("RED"));
+      if (!(g >= y && y >= r)) bad.push(`${v} day${d + 1}: green ${g}, yellow ${y}, red ${r}`);
+      if (r >= g) bad.push(`${v} day${d + 1}: a red day is not lighter than a green one (${r} vs ${g})`);
+
+      // Reps in reserve compared lift by lift, not summed: a red day drops
+      // whole exercises, so its total falls for a reason that has nothing to
+      // do with how hard the remaining sets are.
+      const byName = (secs) => {
+        const m = new Map();
+        secs.forEach((s) => (s.exercises || []).forEach((e) => { if (e && e.name) m.set(e.name, Number(e.rir)); }));
+        return m;
+      };
+      const gm = byName(run("GREEN")), ym = byName(run("YELLOW"));
+      gm.forEach((gr, name) => {
+        const yr = ym.get(name);
+        if (Number.isFinite(gr) && Number.isFinite(yr) && yr < gr) {
+          bad.push(`${v} day${d + 1}: ${name} leaves fewer reps in reserve on a rough morning (${yr} vs ${gr})`);
+        }
+      });
+    }
+  });
+  if (bad.length) throw new Error(bad.slice(0, 4).join(" | "));
+});
+
+check("a rough morning actually changes the session", () => {
+  // The check above only proves yellow is never harder, which an adjustment
+  // that does nothing at all also satisfies — disabling the whole yellow
+  // branch passed it. The copy promises "a notch back: 5% lighter, one extra
+  // rep in reserve, less arm and core filler", so every day has to differ
+  // from its green version somewhere.
+  const unchanged = [];
+  ["A", "B", "C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const per = p.sessionsPerWeek || 3;
+    for (let d = 0; d < per; d++) {
+      const pos = A.positionAtIndex(p, d);
+      const base = A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, {});
+      const run = (c) => A.adjustSectionsForReadiness(base, { color: c }, null).sections;
+      const shape = (secs) => secs.map((s) => (s.exercises || [])
+        .map((e) => `${e.name}:${e.sets}:${e.rir}`).join(",")).join("|");
+      if (shape(run("GREEN")) === shape(run("YELLOW"))) unchanged.push(`${v} day${d + 1}`);
+      if (shape(run("GREEN")) === shape(run("RED"))) unchanged.push(`${v} day${d + 1} (red)`);
+    }
+  });
+  if (unchanged.length) throw new Error(`a rough morning left these days exactly as written: ${unchanged.join(", ")}`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);
