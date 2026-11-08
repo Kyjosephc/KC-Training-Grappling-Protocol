@@ -45,9 +45,12 @@ alter table community_posts drop constraint if exists community_posts_channel_ch
 -- room and a public post cannot sit in a team one.
 alter table community_posts add constraint community_posts_team_channel_check check ((team_id is null) = (channel not like 't\_%'));
 
--- The room list, once. A team room is the open name with t_ in front, so
--- stripping that prefix leaves exactly one list to keep up to date.
-alter table community_posts add constraint community_posts_channel_check check (replace(channel, 't_', '') in ('thisweek', 'general', 'technique', 'wrestling', 'footsweeps', 'passing', 'topcontrol', 'closedguard', 'halfguard', 'butterfly', 'dlr', 'spider', 'xguard', 'lapel', 'retention', 'sweeps', 'escapes', 'back', 'attacktop', 'attackbottom', 'attackside', 'legentries', 'leglocks'));
+-- Every room spelled out. An earlier version derived the team half with
+-- replace(channel, 't_', ''), which is correct for all forty-six ids — and the
+-- database rejected a row it should have accepted anyway. Rather than keep
+-- arguing with it, the list says what it means. It is longer and it is dull,
+-- and neither of those has ever broken anything.
+alter table community_posts add constraint community_posts_channel_check check (channel in ('thisweek', 'general', 'technique', 'wrestling', 'footsweeps', 'passing', 'topcontrol', 'closedguard', 'halfguard', 'butterfly', 'dlr', 'spider', 'xguard', 'lapel', 'retention', 'sweeps', 'escapes', 'back', 'attacktop', 'attackbottom', 'attackside', 'legentries', 'leglocks', 't_thisweek', 't_general', 't_technique', 't_wrestling', 't_footsweeps', 't_passing', 't_topcontrol', 't_closedguard', 't_halfguard', 't_butterfly', 't_dlr', 't_spider', 't_xguard', 't_lapel', 't_retention', 't_sweeps', 't_escapes', 't_back', 't_attacktop', 't_attackbottom', 't_attackside', 't_legentries', 't_leglocks'));
 
 select channel,
        count(*) filter (where team_id is null)     as open_posts,

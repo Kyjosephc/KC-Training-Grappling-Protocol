@@ -3058,8 +3058,15 @@ check("some migration in the repo knows about every room", () => {
   const teamsFile = lists.find((l) => l.f === NEWEST);
   if (!teamsFile) throw new Error(`${NEWEST} no longer sets the channel constraint`);
   const roomsSrc = fs.readFileSync(path.join(root, NEWEST), "utf8");
-  // Written once and the team half derived, or written out twice in full.
-  const derived = /replace\s*\(\s*channel\s*,\s*'t_'\s*,\s*''\s*\)/.test(roomsSrc);
+  // Either shape is allowed: every id spelled out, or the open ids with the
+  // team half worked out by stripping the prefix. Read from the statement and
+  // not from the file — a comment describing the other shape is prose, and
+  // reading prose as if it were the constraint is how this decided the file
+  // was still doing something it had stopped doing.
+  const addAt = roomsSrc.search(/add constraint\s+community_posts_channel_check/);
+  const addEnd = roomsSrc.indexOf(";", addAt);
+  const addStmt = addAt < 0 ? "" : roomsSrc.slice(addAt, addEnd < 0 ? roomsSrc.length : addEnd);
+  const derived = /replace\s*\(\s*channel\s*,\s*'t_'\s*,\s*''\s*\)/.test(addStmt);
   const want = derived
     ? new Set(appIds)
     : new Set([...appIds, ...A.TEAM_CHANNELS.map((c) => c.id)]);
