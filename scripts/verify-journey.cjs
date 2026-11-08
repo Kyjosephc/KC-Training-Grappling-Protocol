@@ -2190,6 +2190,127 @@ check("program D is not the same session four weeks running", () => {
 
 
 console.log("\nThe name");
+check("the wording somebody signed is stored with their signature", () => {
+  // A version string says WHICH wording was agreed to, but only while that
+  // wording is still in the build. Edit the text, bump the version, and the
+  // words a past athlete signed are gone — and a waiver that cannot be
+  // produced is not much of a waiver.
+  const doc = A.waiverDocument();
+  if (!doc || !Array.isArray(doc.sections)) throw new Error("no document is stored at all");
+  if (doc.sections.length !== A.WAIVER_SECTIONS.length) {
+    throw new Error(`${doc.sections.length} sections stored for ${A.WAIVER_SECTIONS.length} in the agreement`);
+  }
+  if (doc.version !== A.WAIVER_VERSION) throw new Error(`stored as version ${doc.version}`);
+  if (doc.title !== A.WAIVER_TITLE) throw new Error("the title is not stored with it");
+  doc.sections.forEach((sec, i) => {
+    if (!sec.heading || !sec.body) throw new Error(`section ${i} stored empty`);
+    if (sec.body !== A.WAIVER_SECTIONS[i].body) throw new Error(`section ${i} is not the wording on the screen`);
+  });
+  // The release and the signing clause are the two that matter most. If a
+  // refactor ever stores headings without bodies this is what notices.
+  const all = doc.sections.map((x) => x.body).join(" ");
+  if (!/release/i.test(all) || !/signature/i.test(all)) {
+    throw new Error("the stored copy does not contain the release or the signature clause");
+  }
+});
+
+check("a stored copy outranks whatever the app says today", () => {
+  // The whole point. An athlete who signed older wording must keep seeing the
+  // wording they signed, however many times the text is revised afterwards.
+  const old = {
+    at: "2026-03-01T10:00:00.000Z", version: "2026-01-01", signature: "Marcus Hale", name: "Marcus Hale",
+    document: { provider: "Old Name", title: "Old Title", version: "2026-01-01",
+                sections: [{ heading: "Release", body: "The wording as it stood in January." }] },
+  };
+  const got = A.waiverDocumentFor(old);
+  if (!got) throw new Error("a signature with its wording attached produced nothing");
+  if (got.source !== "signed") throw new Error(`reported as "${got.source}" rather than the stored copy`);
+  if (got.sections[0].body !== "The wording as it stood in January.") {
+    throw new Error("today's wording was served over an older signature");
+  }
+  if (got.title !== "Old Title" || got.provider !== "Old Name") {
+    throw new Error("the stored copy was rewritten with today's title or provider");
+  }
+});
+
+check("no stored copy and a stale version produces nothing, not today's text", () => {
+  // Printing the current agreement over a signature given against different
+  // wording is inventing a document. Better to say the words are not on file:
+  // the signature, its date and its version still stand on their own.
+  const stale = { at: "2026-03-01T10:00:00.000Z", version: "2019-01-01", signature: "Dani Reyes", name: "Dani Reyes" };
+  if (A.waiverDocumentFor(stale) !== null) throw new Error("an old signature was given the current wording");
+  const lines = A.waiverCopyLines("Dani Reyes", stale).join("\n");
+  if (!/NOT ON FILE/i.test(lines)) throw new Error("the copy does not say the wording is missing");
+  if (lines.includes(A.WAIVER_SECTIONS[1].body)) throw new Error("it printed the current wording anyway");
+  // What is on file is still on file.
+  ["Dani Reyes", "2019-01-01", "2026-03-01T10:00:00.000Z"].forEach((bit) => {
+    if (!lines.includes(bit)) throw new Error(`the copy drops ${bit}`);
+  });
+
+  // A signature from before the copy existed, but against the version still in
+  // use, can be reproduced exactly — and says that is what happened.
+  const current = { at: "2026-11-01T10:00:00.000Z", version: A.WAIVER_VERSION, signature: "Ana Diaz", name: "Ana Diaz" };
+  const got = A.waiverDocumentFor(current);
+  if (!got || got.source !== "current") throw new Error("a signature against the current version could not be reproduced");
+  if (got.sections[0].body !== A.WAIVER_SECTIONS[0].body) throw new Error("it reproduced the wrong wording");
+});
+
+check("one athlete's copy is a document, not a line in a list", () => {
+  const w = {
+    at: "2026-11-02T18:30:00.000Z", version: A.WAIVER_VERSION, signature: "Marcus J. Hale", name: "Marcus Hale",
+    document: A.waiverDocument(),
+  };
+  const lines = A.waiverCopyLines("Marcus Hale", w);
+  const text = lines.join("\n");
+  if (!text.includes("Marcus J. Hale")) throw new Error("the signature is missing");
+  if (!text.includes("2026-11-02T18:30:00.000Z")) throw new Error("the exact timestamp is missing");
+  if (!text.includes(A.WAIVER_VERSION)) throw new Error("the version is missing");
+  // Every clause, not a summary of them.
+  A.WAIVER_SECTIONS.forEach((sec, i) => {
+    if (!text.includes(sec.body)) throw new Error(`clause ${i} ("${sec.heading}") is not in the copy`);
+  });
+  // Signed under one name against another is the thing a record has to flag.
+  if (!/signed as/i.test(text)) throw new Error("a signature that differs from the profile name is not flagged");
+  const same = A.waiverCopyLines("Ana Diaz", { ...w, signature: "Ana Diaz", name: "Ana Diaz" }).join("\n");
+  if (/signed as/i.test(same)) throw new Error("a matching name was flagged as a mismatch");
+  if (!/not on file/i.test(text) === false) throw new Error("a complete copy claimed the wording was missing");
+});
+
+check("the signed waiver reads as a document on screen", () => {
+  const w = { at: "2026-11-02T18:30:00.000Z", version: A.WAIVER_VERSION,
+              signature: "Marcus J. Hale", name: "Marcus Hale", document: A.waiverDocument() };
+  unmount();
+  mount(React.createElement(A.WaiverCopy, { name: "Marcus Hale", waiver: w }));
+  const text = txt();
+  // The signature block itself, not the page. The mismatch note below repeats
+  // the signed name, so searching the whole screen for it passed happily with
+  // the signature blanked out.
+  const sig = host.querySelector(".waiver-copy-sig");
+  if (!sig) throw new Error("there is no signature block");
+  if (!sig.textContent.includes("Marcus J. Hale")) {
+    throw new Error(`the signature block reads "${sig.textContent.trim()}"`);
+  }
+  A.WAIVER_SECTIONS.forEach((sec) => {
+    if (!text.includes(sec.heading)) throw new Error(`the clause "${sec.heading}" is not shown`);
+  });
+  if (!text.includes(A.WAIVER_SECTIONS[4].body.slice(0, 40))) throw new Error("the release clause is only a heading");
+  if (!/signed as/i.test(text)) throw new Error("signing under a different name is not flagged on screen");
+
+  // And the case that must not quietly show today's agreement.
+  unmount();
+  mount(React.createElement(A.WaiverCopy, {
+    name: "Dani Reyes",
+    waiver: { at: "2026-03-01T10:00:00.000Z", version: "2019-01-01", signature: "Dani Reyes", name: "Dani Reyes" },
+  }));
+  const stale = txt();
+  if (!/not on file/i.test(stale)) throw new Error("a signature with no wording on file does not say so");
+  if (stale.includes(A.WAIVER_SECTIONS[4].body.slice(0, 40))) {
+    throw new Error("the current release clause was shown over an older signature");
+  }
+  if (!stale.includes("2019-01-01")) throw new Error("the version signed is not shown");
+  unmount();
+});
+
 check("the app has one name and it is the same everywhere", () => {
   // The name lives in the browser title, the home screen title, the web
   // manifest, the service worker, the share sheet, the waiver and two separate

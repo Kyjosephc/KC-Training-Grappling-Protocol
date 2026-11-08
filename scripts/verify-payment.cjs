@@ -36,6 +36,28 @@ console.log("\nWhat it costs");
     .filter((n) => Number(n) >= 5 && Number(n) <= 500);
   check("the price is never written into a sentence",
     hardcoded.length ? hardcoded.join(", ") : "none", "none");
+  // Nothing should be able to claim a discount that is not already on a
+  // profile: the box is gone from sign-up and the codes are honoured, not
+  // offered. A source check rather than a render, because this screen cannot
+  // be mounted without an auth client — but it pins the thing that matters,
+  // which is that nowhere asks for a code.
+  // Asking is a label and a field. Reading one off an account that already
+  // carries it is not asking, and that path has to keep working — so this
+  // looks for the box, not for every mention of the word.
+  check("sign-up does not ask for a promo code",
+    /setPromoCode\(|Promo Code/.test(src) ? "it still asks" : "it does not", "it does not");
+  // The box is gone, but a discount already attached to somebody is a promise
+  // that was already made to them. Taking it back off quietly, because the
+  // feature behind it was retired, is not a thing to do to a person.
+  const held = buildClient({ id: "p1", firstName: "Ana", lastName: "Diaz", weight: 150,
+    heightFeet: 5, heightInches: 4, beltLevel: "Blue", programVariant: "B",
+    weeklySchedule: {}, waiver: { version: "x" }, promoDiscount: 5 });
+  check("a discount already on a profile is still honoured",
+    PROGRAM_PRICE - (held.promoDiscount || 0), PROGRAM_PRICE - 5);
+  check("an athlete with no discount pays the flat price",
+    PROGRAM_PRICE - (buildClient({ id: "p2", firstName: "Bo", lastName: "Li", weight: 150,
+      heightFeet: 5, heightInches: 4, beltLevel: "White", programVariant: "B",
+      weeklySchedule: {}, waiver: { version: "x" } }).promoDiscount || 0), PROGRAM_PRICE);
   check("the price is a positive whole number of dollars",
     Number.isInteger(PROGRAM_PRICE) && PROGRAM_PRICE > 0, true);
   // A discount that meets or beats the price leaves an athlete looking at a

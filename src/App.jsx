@@ -69,7 +69,11 @@ const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
 // trained at the same gym. Set VITE_SUPPORT_EMAIL and it becomes a real path.
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "";
 const PROGRAM_PRICE = 10;
-// Promo codes map to a dollar amount off PROGRAM_PRICE. Add more codes here as needed.
+// A closed door, not a deleted feature. The code box is gone from sign-up and
+// nothing new can claim one — but anyone who already signed up carrying a code
+// still has it honoured, here and from whatever is stored on their profile,
+// because taking a discount back off somebody who was given one is not a thing
+// to do quietly. Empty this map to stop honouring them entirely.
 const PROMO_CODES = { INFINITI: 5 };
 
 /* ============================== STORAGE HELPERS ============================== */
@@ -7612,7 +7616,7 @@ function MainApp({ userId, onSignOut }) {
           onAccept={async ({ signature }) => {
             // A signed release that only exists in local state is not a record.
             // If the write fails the gate stays shut and the modal stays open.
-            const signed = { ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "" } };
+            const signed = { ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "", document: waiverDocument() } };
             const saved = await setClient(userId, signed.id, signed);
             if (!saved || saved.ok === false) {
               emitToast({ kind: "error", message: "Couldn't save your signature — check your connection and try again.", autoDismissMs: 7000 });
@@ -7975,7 +7979,7 @@ function OnboardingScreen({ onSubmit }) {
           onClose={() => setShowWaiver(false)}
           accepted={waiver}
           defaultName={`${firstName.trim()} ${lastName.trim()}`.trim()}
-          onAccept={({ signature }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: `${firstName.trim()} ${lastName.trim()}`.trim() }); setShowWaiver(false); }}
+          onAccept={({ signature }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: `${firstName.trim()} ${lastName.trim()}`.trim(), document: waiverDocument() }); setShowWaiver(false); }}
         />
       )}
     </div>
@@ -8113,6 +8117,103 @@ const WAIVER_SECTIONS = [
   { heading: "Signing it",
     body: `Typing your full legal name in the signature field below is your signature on this agreement, and you intend it to have the same effect as signing it by hand. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your signature, the date and time you sign, and the version of this wording are recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
 ];
+
+// The wording itself, as an object that can be stored. A version string says
+// WHICH wording somebody agreed to, but only for as long as that wording is
+// still in the build — edit the text, bump the version, and the words a past
+// athlete actually signed are gone from the world. So the words go with the
+// signature. A waiver you cannot produce is not much of a waiver.
+function waiverDocument() {
+  return {
+    provider: PROVIDER,
+    title: WAIVER_TITLE,
+    version: WAIVER_VERSION,
+    sections: WAIVER_SECTIONS.map((x) => ({ heading: x.heading, body: x.body })),
+  };
+}
+
+// What can honestly be produced for a given signature.
+//
+//   signed   the wording stored with the signature. The real thing.
+//   current  no stored copy, but the version they signed is the one still in
+//            the build, so the text can be reproduced exactly.
+//   null     no stored copy and the wording has moved on. The signature, its
+//            date and its version are still on file and still stand; the words
+//            are not, and printing today's text over an old signature would be
+//            inventing a document.
+function waiverDocumentFor(waiver) {
+  if (!waiver || !waiver.at) return null;
+  const doc = waiver.document;
+  if (doc && Array.isArray(doc.sections) && doc.sections.length) return { ...doc, source: "signed" };
+  if (String(waiver.version || "") === WAIVER_VERSION) return { ...waiverDocument(), source: "current" };
+  return null;
+}
+
+// One athlete's copy, as a document rather than a row in a list. The bulk
+// record says who signed and when across everybody; this is the thing to hand
+// over when somebody asks what one person agreed to.
+function waiverCopyLines(name, waiver) {
+  const doc = waiverDocumentFor(waiver);
+  const lines = [];
+  const who = (name || waiver.name || "Athlete").trim();
+  lines.push(((doc && doc.provider) || PROVIDER).toUpperCase() + " — SIGNED LIABILITY WAIVER");
+  lines.push("");
+  lines.push("Athlete:   " + who);
+  lines.push("Signed:    " + (waiver.signature || "(no signature on file)"));
+  lines.push("Dated:     " + new Date(waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
+  lines.push("Timestamp: " + waiver.at);
+  lines.push("Version:   " + (waiver.version || "unversioned"));
+  if (waiver.signature && waiver.name && waiver.signature.trim().toLowerCase() !== waiver.name.trim().toLowerCase()) {
+    lines.push("Note:      signed as \"" + waiver.signature + "\" against the profile name \"" + waiver.name + "\"");
+  }
+  lines.push("");
+  lines.push("-".repeat(66));
+  if (!doc) {
+    lines.push("");
+    lines.push("THE WORDING OF THIS AGREEMENT IS NOT ON FILE.");
+    lines.push("");
+    lines.push("This signature predates the app storing a copy of the wording with it,");
+    lines.push("and version " + (waiver.version || "unversioned") + " is no longer the version in use. The");
+    lines.push("signature above, its date and its version are a complete record that this");
+    lines.push("athlete accepted that version; the text of it is not reproduced here,");
+    lines.push("because printing the current wording over an older signature would be");
+    lines.push("representing it as something it is not.");
+    return lines;
+  }
+  lines.push("");
+  lines.push(doc.title.toUpperCase());
+  doc.sections.forEach((sec) => {
+    lines.push("");
+    lines.push(sec.heading.toUpperCase());
+    lines.push(sec.body);
+  });
+  lines.push("");
+  lines.push("-".repeat(66));
+  lines.push("");
+  if (doc.source === "signed") {
+    lines.push("The wording above is the copy stored with this signature at the moment it");
+    lines.push("was given. It is not regenerated from the current version of the app.");
+  } else {
+    lines.push("This signature was given before the app stored the wording alongside it.");
+    lines.push("The text above is version " + doc.version + ", which is the version recorded");
+    lines.push("against the signature and is still the version in use, so it is the wording");
+    lines.push("that was agreed to.");
+  }
+  return lines;
+}
+
+function downloadWaiverCopy(name, waiver) {
+  const blob = new Blob([waiverCopyLines(name, waiver).join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const slug = String(name || waiver.name || "athlete").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  a.download = "waiver-" + (slug || "athlete") + "-" + toLocalDateStr(new Date(waiver.at)) + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // The signature block. Typing your own name into it is the act of signing — so it
 // is rendered in a hand it would be signed in, over a rule, with the date beside
@@ -9240,6 +9341,8 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
   const [loadFailed, setLoadFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(null);
+  // Whose signed waiver is being read. { name, waiver }.
+  const [waiverCopy, setWaiverCopy] = useState(null);
   const [removingId, setRemovingId] = useState(null);
 
   useEffect(() => {
@@ -9494,6 +9597,11 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
                     {full?.waiver?.at && (
                       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
                         Waiver signed <strong style={{ color: "var(--text)", fontWeight: 600 }}>{full.waiver.signature || full.waiver.name || "electronically"}</strong> · {fmtDateTime(full.waiver.at)}
+                        {" · "}
+                        <button type="button" className="link-btn" style={{ fontSize: 12 }}
+                          onClick={() => setWaiverCopy({ name: r.name, waiver: full.waiver })}>
+                          Read the signed copy
+                        </button>
                       </div>
                     )}
                     {full?.injuryAreas?.length > 0 && (
@@ -9557,7 +9665,66 @@ function CoachDashboard({ userId, clients, activeId, onPersistActive, onSignupsR
           })}
         </>
       )}
+
+      {waiverCopy && (
+        <ModalShell title="Signed waiver" onClose={() => setWaiverCopy(null)}>
+          <WaiverCopy name={waiverCopy.name} waiver={waiverCopy.waiver} />
+          <button className="btn-primary wide" style={{ marginTop: 14 }}
+            onClick={() => downloadWaiverCopy(waiverCopy.name, waiverCopy.waiver)}>
+            <Download size={15} aria-hidden="true" />Download this copy
+          </button>
+        </ModalShell>
+      )}
     </ModalShell>
+  );
+}
+
+// One athlete's signed waiver, on screen. Deliberately plain: this is a record
+// to be read and handed over, not a page to be designed.
+function WaiverCopy({ name, waiver }) {
+  const doc = waiverDocumentFor(waiver);
+  return (
+    <div className="waiver-copy">
+      <dl className="waiver-copy-head">
+        <div><dt>Athlete</dt><dd>{(name || waiver.name || "Athlete").trim()}</dd></div>
+        <div><dt>Signed</dt><dd className="waiver-copy-sig">{waiver.signature || "(no signature on file)"}</dd></div>
+        <div><dt>Dated</dt><dd>{fmtDateTime(waiver.at)}</dd></div>
+        <div><dt>Version</dt><dd>{waiver.version || "unversioned"}</dd></div>
+      </dl>
+      {waiver.signature && waiver.name
+        && waiver.signature.trim().toLowerCase() !== waiver.name.trim().toLowerCase() && (
+        <div className="adjust-box" style={{ marginBottom: 12 }}>
+          Signed as <strong>{waiver.signature}</strong> against the profile name <strong>{waiver.name}</strong>.
+        </div>
+      )}
+      {!doc ? (
+        <div className="adjust-box" style={{ borderColor: "var(--amber)" }}>
+          <strong>The wording of this agreement is not on file.</strong>
+          <p style={{ margin: "6px 0 0" }}>
+            This signature predates the app keeping a copy of the wording with it, and version
+            {" "}{waiver.version || "unversioned"} is no longer the one in use. The signature, its date
+            and its version above are a complete record that this athlete accepted that version —
+            but showing today's wording over an older signature would be representing it as
+            something it is not, so it is not shown.
+          </p>
+        </div>
+      ) : (
+        <>
+          <h3 className="waiver-copy-title">{doc.title}</h3>
+          {doc.sections.map((sec) => (
+            <div key={sec.heading} className="waiver-copy-section">
+              <h4>{sec.heading}</h4>
+              <p>{sec.body}</p>
+            </div>
+          ))}
+          <p className="waiver-copy-note">
+            {doc.source === "signed"
+              ? "This is the copy stored with the signature at the moment it was given. It is not regenerated from the current version of the app."
+              : `This signature was given before the app stored the wording alongside it. The text above is version ${doc.version}, which is the version recorded against the signature and is still the version in use, so it is the wording that was agreed to.`}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -13041,6 +13208,20 @@ function GlobalStyle() {
       .room-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
       .room-row-name { position: relative; display: inline-flex; align-items: center; gap: 7px;
         font-size: 14px; font-weight: 700; }
+      .waiver-copy-head { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0 0 14px; padding: 0 0 12px;
+        border-bottom: 1px solid var(--border); }
+      .waiver-copy-head > div { display: flex; gap: 10px; align-items: baseline; }
+      .waiver-copy-head dt { flex: none; width: 66px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--text-dim); margin: 0; }
+      .waiver-copy-head dd { margin: 0; font-size: 13px; color: var(--text); }
+      .waiver-copy-sig { font-family: 'Caveat', cursive; font-size: 21px; line-height: 1.1; }
+      .waiver-copy-title { font-size: 15px; margin: 0 0 10px; }
+      .waiver-copy-section { margin-bottom: 12px; }
+      .waiver-copy-section h4 { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+        color: var(--text-dim); margin: 0 0 4px; }
+      .waiver-copy-section p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); }
+      .waiver-copy-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border);
+        font-size: 12px; line-height: 1.5; color: var(--text-dim); }
       .room-row-blurb { font-size: 12px; line-height: 1.45; color: var(--text-dim); }
       /* THE COMPOSER, CLOSED
          One line until somebody wants it, so the room's posts are what the
@@ -13552,9 +13733,7 @@ function AuthScreen() {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [qrOk, setQrOk] = useState(true);
-  const [promoCode, setPromoCode] = useState("");
-  const promoDiscount = PROMO_CODES[promoCode.trim().toUpperCase()] || 0;
-  const duePrice = PROGRAM_PRICE - promoDiscount;
+  const duePrice = PROGRAM_PRICE;
   const hasPaymentInfo = coachVenmo || coachCashApp || coachPaymentLink;
 
   const submit = async (e) => {
@@ -13562,7 +13741,7 @@ function AuthScreen() {
     setError(""); setInfo(""); setBusy(true);
     try {
       if (mode === "signup") {
-        const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { promoCode: promoCode.trim().toUpperCase() } } });
+        const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
         if (err) setError(friendlyAuthError(err.message));
         else {
           const newUserId = signUpData?.user?.id;
@@ -13610,11 +13789,6 @@ function AuthScreen() {
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
             <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>{`Your First Week Of Sessions Free / One-Time $${duePrice} Fee After That For Unlimited Access`}</p>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment today — your first week of sessions is on the house. Once you've finished them, you'll be asked for the fee here before the next session unlocks. It's a one-time fee, not a subscription: you're never charged again, on this block or any future one.</p>
-            <label className="labeled-input" style={{ marginBottom: 10, textAlign: "left" }}>
-              <span>Promo Code (optional)</span>
-              <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="Enter code" style={{ textTransform: "uppercase" }} />
-            </label>
-            {promoDiscount > 0 && <p style={{ color: "var(--green)", fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>{`✓ Promo code applied — $${promoDiscount} off, $${duePrice} due at Week 2`}</p>}
             {qrOk && (
               coachPaymentLink ? (
                 <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
