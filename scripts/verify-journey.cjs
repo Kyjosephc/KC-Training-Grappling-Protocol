@@ -2491,6 +2491,29 @@ check("the database is what keeps one gym out of another", () => {
   }
 });
 
+check("somebody holding a code can see where it goes", () => {
+  // The bar said where you were standing and nothing else, so a person handed
+  // an invite code had no reason to tap the one control that takes it. What it
+  // says has to change with what you can actually do from there.
+  if (A.teamBarHint([], null) !== "join a team") {
+    throw new Error(`with no team it says "${A.teamBarHint([], null)}"`);
+  }
+  const waiting = [{ id: "t1", status: "pending" }];
+  if (A.teamBarHint(waiting, null) !== "waiting") throw new Error("a request in flight is not shown");
+  const inOne = [{ id: "t1", status: "approved" }];
+  if (A.teamBarHint(inOne, null) !== "switch team") throw new Error("being in a team is not shown");
+  if (A.teamBarHint(inOne, { id: "t1" }) !== "private") {
+    throw new Error("standing inside a team does not say it is private");
+  }
+  // A refusal is not a reason to stop offering the way in.
+  if (A.teamBarHint([{ id: "t1", status: "denied" }], null) !== "join a team") {
+    throw new Error("somebody turned down once is never offered the box again");
+  }
+  [null, undefined].forEach((v) => {
+    if (A.teamBarHint(v, null) !== "join a team") throw new Error("no team list at all says nothing");
+  });
+});
+
 check("a room that is a conversation opens as one", () => {
   // A team's Team room is where "who is training Thursday" goes. It opened as
   // a grid of clips, which for that room is a grid of nothing.

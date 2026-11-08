@@ -517,6 +517,18 @@ function restorableTeam(teams, teamId) {
 // out of a team you have since left is still yours to look at — it was saved —
 // but its room is not somewhere you can go, and offering to take you there
 // lands in a room that is empty by definition.
+// What the bar at the top of the Group tab says about teams, beyond where you
+// are standing. Somebody handed a code has to be able to see where it goes:
+// the bar used to say "Open Mat — everyone" and nothing else, which tells a
+// person with a code in their hand nothing at all.
+function teamBarHint(teams, activeTeam) {
+  if (activeTeam) return "private";
+  const list = teams || [];
+  if (list.some((t) => t.status === "pending")) return "waiting";
+  if (list.some((t) => t.status === "approved")) return "switch team";
+  return "join a team";
+}
+
 function savedPostHome(post, teams) {
   if (!post || !post.team_id) return { team: null, reachable: true };
   const team = restorableTeam(teams, post.team_id);
@@ -7071,8 +7083,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // Latest there is no elsewhere — every room is already on the screen.
   const unreadElsewhere = !inLatest && COMMUNITY_CHANNELS.some((c) => c.id !== channel && unreadByChannel[c.id]);
   const barPart = activeTeam ? activeTeam.name : inLatest ? "Every room" : groupLabel(openGroup);
-  const pendingTeams = teams.filter((t) => t.status === "pending").length;
-  const toApprove = teams.filter((t) => t.status === "approved" && t.leaderId === userId).length;
   const clipHits = clipsForPicker(results);
   const shownResults = Array.isArray(results) && picked
     ? results.filter((p) => p.id === picked)
@@ -7218,8 +7228,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             : "Posting in the rooms everyone shares. Change team."}>
           <Users size={15} aria-hidden="true" className="team-bar-icon" />
           <span className="team-bar-name">{activeTeam ? activeTeam.name : "Open Mat — everyone"}</span>
-          {activeTeam ? <span className="team-bar-pill">private</span> : null}
-          {pendingTeams > 0 ? <span className="team-bar-pill">waiting</span> : null}
+          <span className="team-bar-pill">{teamBarHint(teams, activeTeam)}</span>
           <ChevronRight size={15} className="room-bar-chev" aria-hidden="true" />
         </button>
       )}
