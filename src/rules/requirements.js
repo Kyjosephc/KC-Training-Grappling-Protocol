@@ -63,7 +63,7 @@ export const SCENES = {
     mount: "You climb to mount and hold it for 3 unbroken seconds.",
     backMount: "You take back mount and hold it for 3 unbroken seconds.",
     backControl: "You take their back — hooks in, or simply a back grab with your arms around them from behind — and hold it for 3 unbroken seconds.",
-    sideControl: "You pass and settle into side mount, chest to chest across them, and hold it for 3 unbroken seconds. You never climb to mount.",
+    sideControl: "You pass and settle chest to chest across them in side control, and hold it for 3 unbroken seconds. You never climb to mount and you never take a knee on their belly.",
     sweep: "From the bottom you reverse the position and hold top for 3 unbroken seconds.",
     submissionAttempt: "You have a tight submission locked and they escape before the referee stops anything.",
   },
@@ -244,11 +244,20 @@ export const REQUIREMENTS = {
       cite: "Scoring",
     },
     sideControl: {
-      must: ["Establish side mount or technical mount", "3 seconds of continuous control"],
+      // Side control is not a scoring position here. The four-point list is
+      // front mount, back mount, side/technical mount and a back grab with
+      // hooks — "side mount" there is the mount variation, not side control.
+      must: [
+        "Nothing — side control is not a scoring position",
+        "The four-point list is front mount, back mount, side/technical mount and a back grab with hooks. Side/technical mount is the mount variation you land in coming off mount onto your side, not side control",
+      ],
       notPoints: [
-        { scene: "You arrive in side mount and they bridge you off after roughly 2 seconds.",
-          verdict: "advantage",
-          why: "Side mount scores under The Revolution, but only with 3 seconds of continuous control. Short of that it is an advantage." },
+        { scene: "You pass the guard and settle chest to chest in side control for ten seconds.",
+          verdict: "nothing",
+          why: "The pass itself scored 3. Holding side control afterwards adds nothing — it is not on the points list, the same as under IBJJF." },
+        { scene: "You hold side control for most of the round, working for mount without ever getting there.",
+          verdict: "nothing",
+          why: "Side control is not a position that scores or earns an advantage here. Staying in it without progressing is what the stalling rule is aimed at." },
       ],
       cite: "Scoring",
     },

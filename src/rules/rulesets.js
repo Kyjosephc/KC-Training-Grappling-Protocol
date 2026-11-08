@@ -29,7 +29,7 @@ export const RULESETS = {
     version: "Rule Book v6.1",
     effective: "June 2024",
     source: "ibjjf.com — official Rule Book PDF (2024JUN_IBJJF_Rules_EN.pdf)",
-    checked: "2026-10-05",
+    checked: "2026-11-08",
     gi: true,
     blurb: "Points, advantages and penalties. The most widely used ruleset in gi competition.",
     control: "3 seconds of stabilised control before points are awarded (Art. 3.1).",
@@ -72,9 +72,9 @@ export const RULESETS = {
     durationCite: "General Competition Guidelines, Art. 1.3",
     tiebreak: [
       "Most points",
-      "Then most advantages (Art. 2.5.3)",
-      "Then fewest penalties (Art. 2.5.4)",
-      "Then referee decision — who was more offensive and came closest to scoring (Art. 2.6.2)",
+      "Then most advantages (Art. 2.5.2)",
+      "Then fewest penalties (Art. 2.5.3)",
+      "Then referee decision — who was more offensive and came closest to scoring (Art. 2.5.4)",
     ],
     tiebreakSummary: "Advantages are counted first, then fewest penalties, then a referee decision.",
     specials: [
@@ -94,8 +94,8 @@ export const RULESETS = {
     longName: "Abu Dhabi Combat Club",
     version: "Rules & Regulations, current published edition",
     effective: "Checked October 2026",
-    source: "adcombat.com — official Rules & Regulations, cross-checked against the ADCC rules update PDF",
-    checked: "2026-10-05",
+    source: "Official ADCC Rules & Regulations PDF, edition dated 24 September 2026",
+    checked: "2026-11-08",
     gi: false,
     blurb: "No-gi submission wrestling. Scoreless first half, negative points, and takedowns worth more than mount.",
     control: "3 seconds of control before points are awarded.",
@@ -115,7 +115,8 @@ export const RULESETS = {
     penalties: {
       ladder: [
         "Negative point for voluntarily pulling guard and staying down 3+ seconds during the scoring period",
-        "Negative point for disengaging and avoiding re-engagement, or fleeing the mat",
+        "Negative point for disengaging, backing up and avoiding re-engagement",
+        "Negative point for a flying submission attempt that ends with the attacker on their back",
         "Passivity — warned twice, then a negative point",
       ],
       stalling: "Passivity is warned twice before a minus point is given.",
@@ -125,21 +126,24 @@ export const RULESETS = {
       { division: "World Championship, qualifying", time: "10 min — first 5 scoreless, second 5 with points" },
       { division: "World Championship, finals & superfights", time: "20 min — first 10 scoreless, then points; up to two overtimes" },
       { division: "Trials, qualifying", time: "6 min — first 3 scoreless, second 3 with points" },
+      { division: "Trials, finals", time: "8 min — first 4 scoreless, second 4 with points" },
       { division: "Opens, adult", time: "6 min — first 3 scoreless, second 3 with points" },
       { division: "Opens, masters", time: "5 min — first 2:30 scoreless, second 2:30 with points" },
     ],
     durationCite: "Match structure",
     tiebreak: [
       "Most points",
-      "Then referee decision based on who was more dominant and aggressive",
+      "Then overtime — half the regulation length, with points and negatives live throughout",
+      "Then referee decision. The published judging criterion is who was the aggressor and initiated the action",
       "No advantages exist to separate a tie",
     ],
-    tiebreakSummary: "A referee decision, straight away — there are no advantages to count.",
+    tiebreakSummary: "Overtime, then a referee decision — there are no advantages to count.",
     specials: [
       { k: "The scoreless period", v: "In the first half of a match no positive points are awarded. Negative points still apply. This is the single biggest difference from every other ruleset here.", cite: "Match structure" },
       { k: "Clean vs regular", v: "A takedown or sweep that lands past the guard is worth 4, not 2. Landing in guard or half guard is 2.", cite: "Scoring" },
       { k: "Mount is cheap", v: "Mount is 2 and back mount is 3 — the opposite emphasis to IBJJF, where both are 4.", cite: "Scoring" },
       { k: "Guard pulling", v: "Pulling guard and staying there during the scoring period is a negative point.", cite: "Negative points" },
+      { k: "Points do not chain", v: "The rules say points are not combined or chained. A sweep straight into a pass is counted as the positions it is, not added up the way IBJJF adds a sequence together — this is the opposite of IBJJF's cumulative scoring.", cite: "Scoring" },
     ],
   },
 
@@ -149,8 +153,8 @@ export const RULESETS = {
     longName: "Grappling Industries",
     version: "G.I Rulebook",
     effective: "9 February 2026",
-    source: "grapplingindustries.com — official rules page and rulebook PDF dated 2026-02-09",
-    checked: "2026-10-05",
+    source: "grapplingindustries.com — official G.I Rulebook PDF dated 2026-02-09",
+    checked: "2026-11-08",
     gi: true,
     blurb: "Round-robin format, no advantages, and points for a submission attempt stopped out of bounds.",
     control: "Control must be established before points are awarded.",
@@ -162,7 +166,7 @@ export const RULESETS = {
       backMount:  P(4, "Established control", "Scoring"),
       backControl:P(4, "Established control", "Scoring"),
       sweep:      P(2, "Established control", "Scoring"),
-      submissionAttempt: P(2, "A solid submission attempt stopped because the athletes went out of bounds", "Scoring"),
+      submissionAttempt: P(2, "A strong submission attempt stopped because the athletes went out of bounds — unless the defender was the one forcing it off the mat to escape", "Rule 6.12"),
     },
     advantages: { used: false, rule: "There is no advantage scoring.", cite: "Scoring" },
     penalties: {
@@ -182,13 +186,13 @@ export const RULESETS = {
     ],
     durationCite: "Match duration",
     tiebreak: [
-      "Within a match: fewest penalties, then referee decision",
+      "Within a match: fewest penalties, then referee decision — judged on submission threat, then positional dominance, then aggression",
       "Within a round-robin division: most wins, then most submissions, then head-to-head, then most points scored, then fewest points conceded",
     ],
     tiebreakSummary: "Fewest penalties, then a referee decision. There are no advantages in this ruleset.",
     specials: [
       { k: "No advantages", v: "A near-miss is worth nothing. A position either scores or it does not.", cite: "Scoring" },
-      { k: "Submission attempt scores", v: "A solid submission attempt stopped by going out of bounds is worth 2 points — unique among these four rule sets.", cite: "Scoring" },
+      { k: "Submission attempt scores", v: "A strong submission attempt stopped by going out of bounds is worth 2 points — unique among these four rule sets. Not if the defender was the one driving it off the mat to escape, and doing that deliberately during a submission is a disqualification.", cite: "Rules 6.12, 9.1" },
       { k: "Round robin", v: "Most divisions are round-robin, so the division is decided by wins before it is decided by points.", cite: "Format" },
     ],
   },
@@ -198,11 +202,11 @@ export const RULESETS = {
     name: "The Revolution",
     longName: "The Revolution (Liberty Events)",
     version: "Tournament Rules, current published edition",
-    effective: "Checked October 2026",
-    source: "leapllc.com — The Revolution official tournament rules page",
-    checked: "2026-10-05",
+    effective: "Checked November 2026",
+    source: "leapllc.com/tournament-rules — The Revolution official tournament rules page",
+    checked: "2026-11-08",
     gi: true,
-    blurb: "Uses IBJJF as a guideline but scores side control and a back grab — four points where IBJJF gives none.",
+    blurb: "Uses IBJJF as a guideline for points, advantages and penalties, and scores a back grab with hooks among its four-point positions.",
     control: "3 seconds of continuous control; short of that it is an advantage.",
     scoring: {
       takedown:   P(2, "3s of control", "Scoring"),
@@ -210,8 +214,16 @@ export const RULESETS = {
       kneeOnBelly:P(2, "3s of control", "Scoring"),
       mount:      P(4, "3s of control", "Scoring"),
       backMount:  P(4, "3s of control", "Scoring"),
-      backControl:P(4, "3s of control — including a back grab", "Scoring"),
-      sideControl:P(4, "3s of control — side mount and technical mount both score", "Scoring"),
+      backControl:P(4, "3s of control, hooks in. A back grab counts at 4 only with the hooks in — arms around from behind with the feet crossed, or both arms trapped under the legs, is an advantage", "Scoring"),
+      // Not a scoring position, here or anywhere else in this app. The rules
+      // list "Side/Technical Mount" among the four-point positions, beside
+      // front mount and back mount — that is the mount variation you land in
+      // coming off mount onto your side, not side control. An earlier version
+      // of this file read it as side control and taught that settling chest
+      // to chest scored 4, which is the kind of thing that loses an argument
+      // with a referee. If your event reads it the other way, their director
+      // has the final say and this is worth asking before you compete.
+      sideControl:P(null, "No points on its own. The four-point group is front mount, back mount, side/technical mount and a back grab with hooks", "Scoring"),
       sweep:      P(2, "3s of control", "Scoring"),
       submissionAttempt: P(null, "No points — near misses are advantages", "Scoring"),
     },
@@ -221,9 +233,16 @@ export const RULESETS = {
       cite: "Scoring",
     },
     penalties: {
-      ladder: ["Follows IBJJF's penalty guideline, with the tournament director as the final authority"],
-      stalling: "Follows the IBJJF guideline.",
-      cite: "Rules",
+      ladder: [
+        "1st serious foul — penalty marked on the offender's scoreboard",
+        "2nd — penalty, plus an advantage to the opponent",
+        "3rd — penalty, plus 2 points to the opponent",
+        "4th — disqualification, for athletes 15 and over",
+        "Age 14 and under: the 4th and 5th each add a penalty and 2 points, and the 6th disqualifies",
+        "A severe foul is an immediate disqualification",
+      ],
+      stalling: "20 consecutive seconds for each stalling penalty, stacked on the same ladder as serious fouls. Gripping in 50/50 starts the 20-second count.",
+      cite: "Fouls",
     },
     durations: [
       { division: "Master 1/2 black, brown, purple & advanced", time: "6 min" },
@@ -233,13 +252,14 @@ export const RULESETS = {
     ],
     durationCite: "Match durations",
     tiebreak: [
-      "Points, then advantages, then penalties, following the IBJJF guideline",
-      "The tournament director has the final say on anything the document does not cover",
+      "The published rules do not state a tiebreak",
+      "They do say IBJJF is the guideline for points, advantages and penalties, so expect advantages, then fewest penalties, then a referee decision",
+      "The tournament director has the final say on anything the rules do not cover — worth asking on the day rather than assuming",
     ],
-    tiebreakSummary: "Advantages, then penalties, following the IBJJF guideline, with the tournament director as the final authority.",
+    tiebreakSummary: "Not published. IBJJF is the stated guideline for points, advantages and penalties, and the tournament director decides anything else.",
     specials: [
-      { k: "Side control scores", v: "Side mount and technical mount are worth 4 points. Under IBJJF, side control is worth nothing on its own — this is the difference that costs people matches.", cite: "Scoring" },
-      { k: "Back grab scores", v: "A back grab is worth 4.", cite: "Scoring" },
+      { k: "Four points covers the mount family", v: "Front mount, back mount and side/technical mount are all 4. Side control is not on that list — under these rules and IBJJF's alike, settling chest to chest scores nothing on its own, and the points for getting there came from the guard pass.", cite: "Scoring" },
+      { k: "A back grab scores, with hooks", v: "A back grab counts among the 4-point positions when the hooks are in. Arms around from behind with the feet crossed, or with both arms trapped under the legs, is an advantage rather than 4.", cite: "Scoring" },
       { k: "A guideline, not a copy", v: "The rules say IBJJF is used as the guideline for points, advantages and penalties — not that the rules are identical.", cite: "Rules" },
     ],
   },

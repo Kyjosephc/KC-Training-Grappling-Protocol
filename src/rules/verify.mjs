@@ -189,6 +189,32 @@ RULESET_IDS.forEach(id => {
 });
 console.log("near-miss scenarios are well formed");
 
+// 12b. What a position is worth, and what the prose beside it says, have to
+// agree. The Revolution's side control was listed at 4 points while the rules
+// score a different position of a similar name, and the requirement text went
+// on to teach it — scoring table and prose drifting apart is how a quiz ends
+// up confidently wrong, and it is checkable.
+RULESET_IDS.forEach(id => {
+  Object.entries(REQUIREMENTS[id] || {}).forEach(([pos, r]) => {
+    const entry = RULESETS[id].scoring[pos];
+    const scores = !!(entry && entry.points != null && entry.points > 0);
+    const must = (r.must || []).join(" ");
+    const saysNoScore = /not a scoring position|no points|nothing/i.test(must);
+    if (!scores && !saysNoScore) {
+      fail(`${id}.${pos}: worth no points, but its requirements do not say so — they read "${must.slice(0, 70)}"`);
+    }
+    if (scores && saysNoScore) {
+      fail(`${id}.${pos}: worth ${entry.points} points, but its requirements say it does not score`);
+    }
+    // A position that scores nothing cannot be nearly achieved for an
+    // advantage either — there is no points position to fall short of.
+    if (!scores && (r.notPoints || []).some(nm => nm && nm.verdict === "advantage")) {
+      fail(`${id}.${pos}: worth no points, yet falling short of it is said to earn an advantage`);
+    }
+  });
+});
+console.log("every position's prose agrees with what it is worth");
+
 // 13. Ranks and selection
 const ranks = [0, 299, 300, 1599, 4500, 99999].map(x => rankFor(x).name);
 if (ranks[0] !== "Beginner" || ranks[2] !== "Novice" || ranks[4] !== "Referee-Level") fail("rank thresholds wrong: " + ranks.join(","));
