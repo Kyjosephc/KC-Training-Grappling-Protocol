@@ -1,7 +1,8 @@
 // The money path, exercised rather than read. Run: node scripts/verify-payment.cjs
 // Build the bundle first (see scripts/verify-payment.sh).
 const { __t } = require("../.pay.cjs");
-const { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient, resolvePaid } = __t;
+const { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient, resolvePaid,
+        PROGRAM_PRICE, PROMO_CODES } = __t;
 
 let failed = 0;
 const check = (label, got, want) => {
@@ -21,6 +22,29 @@ const athlete = (over = {}) => ({
 // isCurrent && freeSessionsUsed(client) && !client.paid — isCurrent is a view
 // position, so the rule worth testing is the other two clauses.
 const blocked = (c) => freeSessionsUsed(c) && !c.paid;
+
+console.log("\nWhat it costs");
+// One number, used everywhere. A price written into a sentence somewhere is a
+// price that stays at the old figure after it changes, and the first anybody
+// hears about it is an athlete being asked for the wrong amount.
+{
+  const fs = require("fs"), path = require("path");
+  const src = fs.readFileSync(path.join(__dirname, "..", "src", "App.jsx"), "utf8");
+  const body = src.replace(/const PROGRAM_PRICE = \d+;/, "");
+  const hardcoded = [...body.matchAll(/\$(\d+)\b/g)]
+    .map((m) => m[1])
+    .filter((n) => Number(n) >= 5 && Number(n) <= 500);
+  check("the price is never written into a sentence",
+    hardcoded.length ? hardcoded.join(", ") : "none", "none");
+  check("the price is a positive whole number of dollars",
+    Number.isInteger(PROGRAM_PRICE) && PROGRAM_PRICE > 0, true);
+  // A discount that meets or beats the price leaves an athlete looking at a
+  // payment screen asking for nothing, or for a negative amount. Promo codes
+  // are edited by hand in a map, and the price has already moved once.
+  const bad = Object.entries(PROMO_CODES || {}).filter(([, off]) => !(off > 0 && off < PROGRAM_PRICE));
+  check(`every promo code leaves something to pay at $${PROGRAM_PRICE}`,
+    bad.length ? bad.map(([c, off]) => `${c} takes $${off}`).join(", ") : "none", "none");
+}
 
 console.log("\nFree sessions, then the ask");
 check("brand new athlete trains free", blocked(athlete({ sessionsCompleted: 0, logs: [] })), false);

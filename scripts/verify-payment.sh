@@ -12,7 +12,7 @@ cd "$(dirname "$0")/.."
 # `set -e` it used to fail the whole run after every check had already passed.
 trap 'rm -f src/_v.jsx .pay.cjs || true' EXIT INT TERM
 cp src/App.jsx src/_v.jsx
-printf '\nexport const __t = { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient, buildProgramVariant, resolvePaid };\n' >> src/_v.jsx
+printf '\nexport const __t = { freeSessionsUsed, FREE_SESSION_LIMIT, positionAtIndex, buildClient, buildProgramVariant, resolvePaid, PROGRAM_PRICE, PROMO_CODES };\n' >> src/_v.jsx
 node_modules/.bin/esbuild src/_v.jsx --bundle --outfile=.pay.cjs --format=cjs --loader:.js=jsx \
   --define:import.meta.env='{"VITE_SUPABASE_URL":"https://p.supabase.co","VITE_SUPABASE_ANON_KEY":"k","VITE_COACH_USER_ID":"coach-1"}' \
   --external:react --external:react-dom --external:recharts --log-level=error

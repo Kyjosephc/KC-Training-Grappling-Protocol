@@ -68,7 +68,7 @@ const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
 // deletion request — ended in "ask your coach". That worked when every athlete
 // trained at the same gym. Set VITE_SUPPORT_EMAIL and it becomes a real path.
 const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || "";
-const PROGRAM_PRICE = 15;
+const PROGRAM_PRICE = 10;
 // Promo codes map to a dollar amount off PROGRAM_PRICE. Add more codes here as needed.
 const PROMO_CODES = { INFINITI: 5 };
 
