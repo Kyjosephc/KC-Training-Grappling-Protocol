@@ -2175,5 +2175,42 @@ check("program D is not the same session four weeks running", () => {
   if (sigs[0] === sigs[2]) throw new Error("week 1 and week 3 are the identical session");
 });
 
+
+console.log("\nThe name");
+check("the app has one name and it is the same everywhere", () => {
+  // The name lives in the browser title, the home screen title, the web
+  // manifest, the service worker, the share sheet, the waiver and two separate
+  // wordmark lockups. Renaming it by hand means fourteen edits and no way to
+  // tell you missed one, which is what this is for.
+  const fs = require("fs"), path = require("path");
+  const root = path.join(__dirname, "..");
+  const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
+
+  const stale = ["index.html", "public/manifest.webmanifest", "public/sw.js", "src/App.jsx"]
+    .filter((f) => /Strength Matrix/.test(read(f)));
+  if (stale.length) throw new Error(`the previous name is still in ${stale.join(", ")}`);
+
+  // Two lockups render it: a stacked one in the top bar and an inline one.
+  // They are separate markup and nothing else stops them drifting apart.
+  const app = read("src/App.jsx");
+  const words = [...app.matchAll(/className="brand(?:-lockup)?-word">([^<]+)</g)].map((m) => m[1]);
+  const subs = [...app.matchAll(/className="brand-sub">([^<]+)</g)].map((m) => m[1]);
+  if (words.length !== 2 || subs.length !== 2) {
+    throw new Error(`expected two wordmarks, found ${words.length} first lines and ${subs.length} second lines`);
+  }
+  if (new Set(words).size !== 1 || new Set(subs).size !== 1) {
+    throw new Error(`the two wordmarks disagree: "${words.join('" / "')}" over "${subs.join('" / "')}"`);
+  }
+
+  const name = `${words[0]} ${subs[0]}`;
+  const manifest = JSON.parse(read("public/manifest.webmanifest"));
+  if (manifest.name !== name) throw new Error(`the wordmark says "${name}", the manifest says "${manifest.name}"`);
+  if (manifest.short_name !== name) throw new Error(`the manifest short name says "${manifest.short_name}"`);
+  if (!read("index.html").includes(`<title>${name}</title>`)) {
+    throw new Error(`the browser tab does not say "${name}"`);
+  }
+  if (!app.includes(`Welcome to ${name}`)) throw new Error(`the welcome screen does not say "${name}"`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

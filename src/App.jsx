@@ -1758,7 +1758,7 @@ function UpdateBanner() {
   if (!available || dismissed) return null;
   return (
     <div className="update-banner" role="status">
-      <span>A newer version of Strength Matrix is ready.</span>
+      <span>A newer version of Open Mat is ready.</span>
       <span className="update-banner-actions">
         <button className="btn-primary" onClick={() => window.location.reload()}>Reload</button>
         <button className="btn-ghost" onClick={() => setDismissed(true)}>Later</button>
@@ -6668,7 +6668,7 @@ function ProgressHub({ client, onPersist, userId }) {
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { failed: false }; }
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error) { try { console.error("Strength Matrix error:", error); } catch {} }
+  componentDidCatch(error) { try { console.error("Open Mat error:", error); } catch {} }
   render() {
     if (!this.state.failed) return this.props.children;
     return (
@@ -7348,7 +7348,7 @@ function OnboardingScreen({ onSubmit }) {
         {logoImageOk && <img src="/kc-logo.png" alt="" className="logo-image" onError={() => setLogoImageOk(false)} />}
         <BrandLockup />
       </div>
-      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Strength Matrix</div>
+      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Open Mat</div>
       {!waiver && <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>}
       {!waiver && <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Four short steps — the paperwork, then you, then your week, then anything to work around. It takes a minute and it only happens once.</p>}
 
@@ -7559,8 +7559,8 @@ function PaymentModal({ onClose, userId }) {
 function BrandLockup() {
   return (
     <div className="brand-lockup">
-      <div className="brand-lockup-word">Strength</div>
-      <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
+      <div className="brand-lockup-word">Open</div>
+      <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Mat</span><span className="brand-rule-line" /></div>
     </div>
   );
 }
@@ -7570,8 +7570,8 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
     <div className="topbar">
       <div className="brand-block">
         <div className="brand-stack">
-          <div className="brand-word">Strength</div>
-          <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Matrix</span><span className="brand-rule-line" /></div>
+          <div className="brand-word">Open</div>
+          <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Mat</span><span className="brand-rule-line" /></div>
         </div>
       </div>
       <div className="topbar-avatar-wrap">
@@ -7588,7 +7588,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
       </div>
       <div className="topbar-icons">
         <div className="topbar-icon-group">
-          <button className="icon-btn" onClick={onOpenShare} aria-label="Share Strength Matrix with a friend"><Share2 size={20} /></button>
+          <button className="icon-btn" onClick={onOpenShare} aria-label="Share Open Mat with a friend"><Share2 size={20} /></button>
           {isCoach && (
             <button className="icon-btn icon-btn-badged" onClick={onOpenCoachDashboard}
               aria-label={newSignupCount > 0 ? `Coach Dashboard — ${newSignupCount} new sign-up${newSignupCount === 1 ? "" : "s"} to review` : "Coach Dashboard"}>
@@ -7629,9 +7629,9 @@ const TUTORIAL_PAGES = [
 // The legal name behind the app. Change VITE_PROVIDER_NAME in Vercel the day
 // an LLC exists and every agreement in here names the company from then on.
 // Bump WAIVER_VERSION at the same time so athletes re-sign against the new name.
-const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Strength Matrix";
+const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Open Mat";
 
-const WAIVER_VERSION = "2026-10-09";
+const WAIVER_VERSION = "2026-11-07";
 const WAIVER_TITLE = "Assumption of Risk and Release of Liability";
 const WAIVER_SECTIONS = [
   { heading: "What you are agreeing to",
@@ -7738,7 +7738,7 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
 
 
 const TERMS_SECTIONS = [
-  { heading: "What this app is", body: "Strength Matrix is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
+  { heading: "What this app is", body: "Open Mat is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
   { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to the person who operates the app.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
   { heading: "Payment", body: `The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one, and there is nothing to cancel. You pay Kyle directly, through Venmo or whichever method is shown in the app; this app never sees, transmits or stores a card or bank account number, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable. If something is wrong, email ${SUPPORT_EMAIL || "the address in Settings"} within 14 days of paying and you will be refunded. If you stop training, nothing further is charged and everything you have logged stays in your account.` },
   { heading: "Not coaching, not medical advice", body: "This app is software that writes you a training program. It is not personal training, it is not coaching, and it is not medical care: nobody is supervising you, reviewing your sessions or assessing whether a given lift is safe for you. It cannot account for an injury, a medical condition, or anything else it has not been told, so check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you say you feel, but it cannot see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train, that you are choosing to train unsupervised, and that you accept that risk as your own." },
@@ -7769,13 +7769,13 @@ function smsHref(text) {
 function ShareModal({ onClose }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const shareText = "Strength Matrix is a strength and conditioning program built for BJJ and wrestling. Get started here:";
+  const shareText = "Open Mat is a training app for BJJ and wrestling — the strength programming, the technique, and the rules, in one place. Get started here:";
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
   const handleNativeShare = async () => {
     try {
-      await navigator.share({ title: "Strength Matrix", text: shareText, url: shareUrl });
+      await navigator.share({ title: "Open Mat", text: shareText, url: shareUrl });
     } catch (err) {
       // The person canceled the share sheet or it failed silently — nothing to surface here.
     }
@@ -7792,7 +7792,7 @@ function ShareModal({ onClose }) {
   };
 
   return (
-    <ModalShell onClose={onClose} title="Share Strength Matrix">
+    <ModalShell onClose={onClose} title="Share Open Mat">
       <p className="muted" style={{ marginBottom: 16 }}>Invite a friend to train with you — they'll get their own account and can pick their own program.</p>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ marginBottom: 8 }}>Your invite link</div>

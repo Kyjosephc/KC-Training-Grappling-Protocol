@@ -1,7 +1,7 @@
 {
-  "name": "Strength Matrix",
-  "short_name": "Strength Matrix",
-  "description": "Strength & conditioning training program for grapplers.",
+  "name": "Open Mat",
+  "short_name": "Open Mat",
+  "description": "Strength, technique and the rules, for BJJ and wrestling.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
