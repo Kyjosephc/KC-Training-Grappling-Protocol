@@ -2705,6 +2705,230 @@ check("a clip on the Latest wall says which room it came from", () => {
   });
 });
 
+check("a room says how many clips are in it before you open it", () => {
+  const yt = "https://youtu.be/dQw4w9WgXcQ";
+  const now = new Date(2026, 10, 4, 20, 0, 0).getTime(); // a Wednesday
+  const lastWeek = new Date(2026, 9, 28, 12, 0, 0).toISOString();
+  const thisWeek = new Date(2026, 10, 3, 19, 0, 0).toISOString();
+  const rows = [
+    { channel: "passing", video_url: yt, created_at: thisWeek },
+    { channel: "passing", video_url: yt, created_at: lastWeek },
+    { channel: "sweeps", video_url: yt, created_at: thisWeek },
+    // Not clips. A half-typed link promises a video that is not there.
+    { channel: "passing", video_url: "youtube dot com slash", created_at: thisWeek },
+    { channel: "passing", video_url: "", created_at: thisWeek },
+    { channel: "general", video_url: null, created_at: thisWeek },
+  ];
+  const c = A.clipCountsFrom(rows, true, now);
+  if (c.byRoom.passing !== 2) throw new Error(`passing counted ${c.byRoom.passing}, not 2`);
+  if (c.byRoom.sweeps !== 1) throw new Error(`sweeps counted ${c.byRoom.sweeps}`);
+  if (c.byRoom.general) throw new Error("a post with no clip was counted as one");
+  if (c.total !== 3) throw new Error(`the library total is ${c.total}, not 3`);
+  // Nothing at all is zero, not a crash and not an empty object pretending.
+  const none = A.clipCountsFrom([], true, now);
+  if (none.total !== 0) throw new Error("an empty library did not count zero");
+  if (A.clipCountsFrom(null, true, now).total !== 0) throw new Error("no rows at all threw");
+});
+
+check("This week counts this week, the library total counts everything", () => {
+  // The room only ever shows this week, so a number next to it that counted
+  // October would send somebody into a room that looks empty.
+  const yt = "https://youtu.be/dQw4w9WgXcQ";
+  const now = new Date(2026, 10, 4, 20, 0, 0).getTime(); // Wednesday
+  const rows = [
+    { channel: A.THIS_WEEK, video_url: yt, created_at: new Date(2026, 10, 2, 19).toISOString() },
+    { channel: A.THIS_WEEK, video_url: yt, created_at: new Date(2026, 10, 1, 9).toISOString() },
+    { channel: A.THIS_WEEK, video_url: yt, created_at: new Date(2026, 9, 20, 19).toISOString() },
+    { channel: A.THIS_WEEK, video_url: yt, created_at: new Date(2026, 8, 3, 19).toISOString() },
+  ];
+  const c = A.clipCountsFrom(rows, true, now);
+  if (c.byRoom[A.THIS_WEEK] !== 2) throw new Error(`This week counted ${c.byRoom[A.THIS_WEEK]}, not the 2 from this week`);
+  // The older ones were never deleted, so the library still has four.
+  if (c.total !== 4) throw new Error(`the library total is ${c.total}, not 4 — older weeks were dropped from it`);
+  // An ordinary room is not week-filtered, or every count in the app becomes
+  // "clips posted since Sunday".
+  const other = A.clipCountsFrom([
+    { channel: "passing", video_url: yt, created_at: new Date(2025, 1, 1).toISOString() },
+  ], true, now);
+  if (other.byRoom.passing !== 1) throw new Error("an ordinary room was filtered to this week");
+});
+
+check("a part of the game adds up its own rooms", () => {
+  const yt = "https://youtu.be/dQw4w9WgXcQ";
+  const now = Date.now();
+  const guards = A.channelsInGroup("guards");
+  if (guards.length < 2) throw new Error("the guards part has fewer than two rooms");
+  const rows = [
+    { channel: guards[0].id, video_url: yt, created_at: new Date(now).toISOString() },
+    { channel: guards[0].id, video_url: yt, created_at: new Date(now).toISOString() },
+    { channel: guards[1].id, video_url: yt, created_at: new Date(now).toISOString() },
+    { channel: "passing", video_url: yt, created_at: new Date(now).toISOString() },
+  ];
+  const c = A.clipCountsFrom(rows, true, now);
+  if (A.groupClipCount(c, "guards") !== 3) throw new Error(`guards adds up to ${A.groupClipCount(c, "guards")}, not 3`);
+  if (A.groupClipCount(c, "top") !== 1) throw new Error(`top adds up to ${A.groupClipCount(c, "top")}`);
+  if (A.groupClipCount(c, "standing") !== 0) throw new Error("an empty part did not add up to zero");
+  // Unknown is not zero.
+  if (A.groupClipCount(null, "guards") !== null) throw new Error("no counts at all reported as a number");
+});
+
+check("without the channel column no room claims the whole library", () => {
+  // Before the migration runs there is one feed and no way to tell rooms
+  // apart. Attributing every clip to whichever room happens to be first would
+  // put a number next to a room that has nothing in it.
+  const yt = "https://youtu.be/dQw4w9WgXcQ";
+  const rows = [{ video_url: yt, created_at: new Date().toISOString() }, { video_url: yt, created_at: new Date().toISOString() }];
+  const c = A.clipCountsFrom(rows, false, Date.now());
+  if (c.total !== 2) throw new Error(`the library total is ${c.total}, not 2`);
+  if (Object.keys(c.byRoom).length) throw new Error(`rooms were given counts anyway: ${Object.keys(c.byRoom).join(", ")}`);
+});
+
+check("a count that never arrived is not shown as zero", () => {
+  // There is no database in this harness, so the count fails every time —
+  // which is exactly the state being checked. A room reading 0 because
+  // nothing loaded stops somebody opening the one room that had clips in it.
+  mountGroup();
+  act(() => { host.querySelector(".room-bar").click(); });
+  const badges = host.querySelectorAll(".room-row-count");
+  if (badges.length) throw new Error(`${badges.length} rooms claim a count with nothing loaded, the first reading "${badges[0].textContent.trim()}"`);
+  if (host.querySelector(".room-group-count")) throw new Error("a part of the game claims a total with nothing loaded");
+  // The list itself still works.
+  if ([...host.querySelectorAll(".room-row")].length < A.COMMUNITY_CHANNELS.length) {
+    throw new Error("the room list did not render at all");
+  }
+  unmount();
+});
+
+check("the number beside a room counts clips, not posts", () => {
+  // The number is a promise about what is behind the row. A post with a
+  // half-typed link in it is a post, not a clip, and counting it sends
+  // somebody into a room expecting a video that was never there.
+  const now = new Date(2026, 10, 4, 12).getTime();           // Wednesday
+  const thisWeek = new Date(2026, 10, 2, 19).toISOString();  // Monday
+  const lastWeek = new Date(2026, 9, 28, 19).toISOString();  // the Wednesday before
+  const rows = [
+    { channel: "thisweek", video_url: "https://youtu.be/aaaaaaaaaaa", created_at: thisWeek },
+    { channel: "thisweek", video_url: "https://youtu.be/bbbbbbbbbbb", created_at: lastWeek },
+    { channel: "passing", video_url: "https://youtu.be/ccccccccccc", created_at: lastWeek },
+    { channel: "passing", video_url: "half-typed youtube link", created_at: thisWeek },
+    { channel: "sweeps", video_url: "", created_at: thisWeek },
+    { channel: "sweeps", created_at: thisWeek },
+  ];
+  const c = A.clipCountsFrom(rows, true, now);
+  if (c.total !== 3) throw new Error(`the library total is ${c.total}, not the 3 playable clips`);
+  if (c.byRoom.passing !== 1) throw new Error(`Passing counted ${c.byRoom.passing}`);
+  if (c.byRoom.sweeps) throw new Error(`Sweeps counted ${c.byRoom.sweeps} from posts with no clip in them`);
+  // This Week only ever shows this week, so its number has to mean that or the
+  // row promises a clip the room then refuses to show.
+  if (c.byRoom.thisweek !== 1) throw new Error(`This week counted ${c.byRoom.thisweek} rather than this week's 1`);
+  // Nothing at all does not throw. (The no-channel-column case has its own
+  // check further down.)
+  [[], null, undefined].forEach((v) => {
+    const empty = A.clipCountsFrom(v, true, now);
+    if (empty.total !== 0 || Object.keys(empty.byRoom).length) throw new Error("an empty library counted something");
+  });
+});
+
+check("the room list says how many are new, not just that something is", () => {
+  // A dot said something had happened without saying how much or where, which
+  // is not enough to decide which of twenty-three rooms to open.
+  mountGroup({ prefs: { channel: "general" }, unreadByChannel: { passing: 3 } });
+  act(() => { host.querySelector(".room-bar").click(); });
+  const rowFor = (id) => {
+    const want = A.COMMUNITY_CHANNELS.find((c) => c.id === id);
+    return [...host.querySelectorAll(".room-row")]
+      .find((r) => (r.querySelector(".room-row-blurb") || {}).textContent === want.blurb);
+  };
+  const passing = rowFor("passing");
+  if (!passing) throw new Error("no row for Passing");
+  const mark = passing.querySelector(".room-row-new");
+  if (!mark) throw new Error("Passing does not say anything is new");
+  if (!/3/.test(mark.textContent)) throw new Error(`it says "${mark.textContent.trim()}" rather than how many`);
+  const quiet = rowFor("sweeps");
+  if (quiet && quiet.querySelector(".room-row-new")) throw new Error("a room with nothing new was marked anyway");
+  if (host.querySelector(".channel-dot")) throw new Error("the old dot is still being rendered beside the number");
+  // The list explains itself at the top, and that explanation drifted once
+  // already: it described a dot for a while after the dot had been replaced by
+  // a number. Prose is not usually worth pinning; prose that describes a thing
+  // on the same screen is.
+  // Every paragraph on the screen, rather than a guess at which one is the
+  // intro — a selector that finds the wrong element passes whatever the copy
+  // says, which is how this check failed to catch anything the first time.
+  const dotty = [...host.querySelectorAll("p")].find((p) => /\bdot\b/i.test(p.textContent));
+  if (dotty) throw new Error(`the list still promises a dot: "${dotty.textContent.trim()}"`);
+  unmount();
+});
+
+check("a new comment notifies, the same as a new video does", () => {
+  // The thing most worth being told about is somebody answering your clip,
+  // and a comment is a post with a parent_id. Nothing filters them out of the
+  // badge, which is deliberate rather than accidental, so it is pinned here:
+  // a tidy-up that added .is("parent_id", null) to that query, or a filter in
+  // here, would silently stop every reply from ever notifying anybody again.
+  const seenBy = { passing: "2026-11-01T00:00:00.000Z", sweeps: "2026-11-01T00:00:00.000Z" };
+  const rows = [
+    { id: "a", channel: "passing", created_at: "2026-11-04T10:00:00.000Z", video_url: "https://youtu.be/dQw4w9WgXcQ" },
+    { id: "b", channel: "passing", created_at: "2026-11-05T10:00:00.000Z", parent_id: "a", body: "try the far-side grip" },
+    { id: "c", channel: "sweeps", created_at: "2026-10-20T10:00:00.000Z", body: "older than the last look" },
+  ];
+  const unseen = A.unseenRows(rows, seenBy, "2026-11-01T00:00:00.000Z");
+  const ids = unseen.map((r) => r.id);
+  if (!ids.includes("b")) throw new Error("a new comment did not notify anybody");
+  if (!ids.includes("a")) throw new Error("a new clip did not notify anybody");
+  if (ids.includes("c")) throw new Error("something older than the last look was counted as new");
+  // Per room, which is what puts the number on the row.
+  const per = {};
+  unseen.forEach((r) => { per[r.channel] = (per[r.channel] || 0) + 1; });
+  if (per.passing !== 2) throw new Error(`Passing counted ${per.passing}, not the clip and the comment`);
+  // A room read more recently than the oldest room is not re-notified. This is
+  // why the query floor and the per-room floor are different numbers.
+  const caughtUp = A.unseenRows(rows, { passing: "2026-11-06T00:00:00.000Z" }, "2026-11-01T00:00:00.000Z");
+  if (caughtUp.some((r) => r.channel === "passing")) throw new Error("a room already read was notified again");
+  // And the query itself must still ask for replies.
+  const fs = require("fs"), path = require("path");
+  const src = fs.readFileSync(path.join(__dirname, "..", "src", "App.jsx"), "utf8");
+  const at = src.indexOf("function useCommunityUnread");
+  const body = src.slice(at, src.indexOf("return { count, byChannel }", at));
+  if (/parent_id/.test(body)) throw new Error("the notification query now filters on parent_id, so comments cannot reach it");
+});
+
+check("Latest marks read what it showed, and nothing else", () => {
+  // The badge has to be clearable from the screen the tab lands on, or it sits
+  // there forever. It must not be clearable by landing there, or one tap
+  // empties every unread mark in the app and those posts are never surfaced.
+  const posts = [
+    { id: "1", channel: "passing", created_at: "2026-11-04T10:00:00.000Z", video_url: "https://youtu.be/aaaaaaaaaaa" },
+    { id: "2", channel: "passing", created_at: "2026-11-05T10:00:00.000Z", video_url: "" },
+    { id: "3", channel: "sweeps", created_at: "2026-11-03T10:00:00.000Z", video_url: "https://youtu.be/bbbbbbbbbbb" },
+    { id: "4", channel: "sweeps", created_at: "2026-11-06T10:00:00.000Z", parent_id: "3", video_url: "https://youtu.be/ccccccccccc" },
+  ];
+  // The wall shows clips. A new comment in a room whose newest clip you just
+  // looked at is still a new comment, and a text post is not on the wall.
+  const wall = A.shownByRoomIn(posts, "clips");
+  if (wall.passing !== "2026-11-04T10:00:00.000Z") throw new Error(`the wall claimed to show ${wall.passing} in Passing`);
+  if (wall.sweeps !== "2026-11-03T10:00:00.000Z") throw new Error(`a reply counted as something the wall showed: ${wall.sweeps}`);
+  // Reading it as a feed does show the text post.
+  const feed = A.shownByRoomIn(posts, "feed");
+  if (feed.passing !== "2026-11-05T10:00:00.000Z") throw new Error(`the feed showed ${feed.passing}`);
+
+  const prefs = { lastSeen: { passing: "2026-01-01T00:00:00.000Z", escapes: "2026-01-01T00:00:00.000Z" } };
+  const after = A.seenPatch(prefs, A.ALL_ROOMS, null, wall);
+  if (after.passing !== "2026-11-04T10:00:00.000Z") throw new Error(`Passing was left at ${after.passing}`);
+  if (after.escapes !== "2026-01-01T00:00:00.000Z") throw new Error("a room the wall never showed was marked read");
+  // Marks move forward only. An older page held on screen must not un-read a
+  // room somebody has already caught up on.
+  const ahead = A.seenPatch({ lastSeen: { passing: "2026-12-01T00:00:00.000Z" } }, A.ALL_ROOMS, null, wall);
+  if (ahead.passing !== "2026-12-01T00:00:00.000Z") throw new Error(`a read mark was moved backwards to ${ahead.passing}`);
+  // A room the app no longer has cannot be written into stored prefs.
+  const junk = A.shownPatch(prefs, { wormguard: "2026-11-04T10:00:00.000Z", __all: "2026-11-04T10:00:00.000Z" });
+  if (Object.prototype.hasOwnProperty.call(junk, "wormguard") || Object.prototype.hasOwnProperty.call(junk, "__all")) {
+    throw new Error("a room that does not exist was written into the read marks");
+  }
+  // And being open, with nothing shown, still marks nothing.
+  const bare = A.seenPatch(prefs, A.ALL_ROOMS, null, null);
+  if (bare.passing !== "2026-01-01T00:00:00.000Z") throw new Error("landing on Latest marked a room read");
+});
+
 check("only posts with a playable clip reach the wall", () => {
   const yes = [
     { video_url: "https://youtu.be/dQw4w9WgXcQ" },

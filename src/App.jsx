@@ -467,10 +467,37 @@ function lastSeenMap(prefs) {
 // Skimming Latest is not reading twenty-two rooms, so it marks none of them
 // read. Without this the virtual id was also written into stored prefs as a
 // key nothing will ever read again.
-function seenPatch(prefs, channel, when) {
+function seenPatch(prefs, channel, when, shown) {
   const map = lastSeenMap(prefs);
-  if (isVirtualChannel(channel)) return map;
+  // Latest cannot mark a room read by being open — it is twenty-three rooms at
+  // once, and one tap would empty every unread mark in the app. It can mark
+  // read exactly what it put on the screen, which is what viewing something
+  // means. Anything it did not show stays new.
+  if (isVirtualChannel(channel)) return shownPatch(prefs, shown);
   return { ...map, [channel]: when || new Date().toISOString() };
+}
+// The newest post from each room among the ones actually rendered. Marks move
+// forward only: a view holding an older page must never un-read a room.
+function shownPatch(prefs, shown) {
+  const map = lastSeenMap(prefs);
+  Object.keys(shown || {}).forEach((room) => {
+    if (!Object.prototype.hasOwnProperty.call(map, room)) return;
+    if (!map[room] || shown[room] > map[room]) map[room] = shown[room];
+  });
+  return map;
+}
+// What a cross-room view has on the screen, per room. The clips view shows
+// only clips, so a new comment in a room whose newest clip you just looked at
+// is still a new comment.
+function shownByRoomIn(posts, view) {
+  const rootsNow = (posts || []).filter((p) => !p.parent_id);
+  const src = view === "clips" ? rootsNow.filter(isClip) : rootsNow;
+  const m = {};
+  src.forEach((p) => {
+    if (!p.channel || !p.created_at) return;
+    if (!m[p.channel] || p.created_at > m[p.channel]) m[p.channel] = p.created_at;
+  });
+  return m;
 }
 
 // A technique library is only a library if you can find anything in it. This
@@ -704,6 +731,61 @@ async function fetchCommunityFeed(pages, channel, opts) {
   });
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
+
+// How many clips sit in each room, so the list can say so before anybody
+// opens anything. A room reading 0 is worth knowing; a room reading nothing
+// because the count never arrived must not read as 0, which is why this can
+// return a failure and the badge is simply absent when it does.
+//
+// One small query. A room id, a link and a date per clip and nothing else —
+// not the bodies, which are the expensive part of a post.
+const CLIP_COUNT_LIMIT = 4000;
+
+// Pure, so the counting rules can be checked without a database in the room.
+function clipCountsFrom(rows, ready, now) {
+  const since = weekStart(now).getTime();
+  const byRoom = {};
+  let total = 0;
+  (rows || []).forEach((r) => {
+    // Only what the app can actually play. A row with a half-typed URL in it
+    // is a post, not a clip, and counting it promises a video that is not
+    // there.
+    if (!isClip(r)) return;
+    total += 1;
+    if (!ready || !r.channel) return;
+    // This week's number counts this week, because that is all the room shows.
+    // A clip it held in October is still in the library total above it.
+    if (isWeekRoom(r.channel) && new Date(r.created_at).getTime() < since) return;
+    byRoom[r.channel] = (byRoom[r.channel] || 0) + 1;
+  });
+  return { byRoom, total };
+}
+
+// The whole part of the game, not one room in it.
+function groupClipCount(counts, groupId) {
+  if (!counts) return null;
+  return channelsInGroup(groupId).reduce((n, c) => n + (counts.byRoom[c.id] || 0), 0);
+}
+
+async function fetchClipCounts() {
+  if (!supabase) return LOAD_FAILED;
+  const outcome = await withRetry(async () => {
+    const run = async (withChannel) => supabase.from("community_posts")
+      .select(withChannel ? "channel, video_url, created_at" : "video_url, created_at")
+      .is("deleted_at", null)
+      .is("parent_id", null)
+      .not("video_url", "is", null)
+      .limit(CLIP_COUNT_LIMIT);
+    let ready = channelsAreReady();
+    let { data, error } = await run(ready);
+    if (error && isMissingChannelColumn(error)) { markChannelsMissing(); ready = false; ({ data, error } = await run(false)); }
+    if (error) throw error;
+    return { rows: data || [], ready };
+  });
+  if (!outcome.ok) return LOAD_FAILED;
+  return clipCountsFrom(outcome.result.rows, outcome.result.ready);
+}
+
 
 async function fetchCommunityReactions(postIds) {
   if (!supabase) return LOAD_FAILED;
@@ -5647,6 +5729,17 @@ function ConditioningPlan({ target, name }) {
 // server-side to send it. That is a separate build, and deliberately not
 // pretended at here: telling someone they will be notified and then not
 // notifying them is worse than not offering it.
+// Which of the rows that came back are actually new to this person, counted
+// per room by the caller.
+//
+// Replies are in here on purpose. A comment on your clip is the thing most
+// worth being told about, and it is a post with a parent_id — so this must
+// never grow a filter that drops them, and the query above must never grow
+// .is("parent_id", null). There is a check that fails if either happens.
+function unseenRows(rows, seenBy, lastSeen) {
+  return (rows || []).filter((row) => row.created_at > ((seenBy || {})[row.channel] || lastSeen));
+}
+
 function useCommunityUnread(prefs, userId, enabled) {
   const [count, setCount] = useState(0);
   // Which rooms have something new, for the dots on the strip. Same single
@@ -5673,7 +5766,7 @@ function useCommunityUnread(prefs, userId, enabled) {
           .order("created_at", { ascending: false })
           .limit(30);
         if (error || cancelled || !data) return;
-        const unseen = data.filter((row) => row.created_at > (seenBy[row.channel] || lastSeen));
+        const unseen = unseenRows(data, seenBy, lastSeen);
         // With no channel column every row reads as the default channel, which
         // is exactly the single-feed behaviour from before channels existed.
         setCount(unseen.length);
@@ -5927,6 +6020,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [picked, setPicked] = useState(null);
   const [matchedRooms, setMatchedRooms] = useState([]);
   const [roomPickerOpen, setRoomPickerOpen] = useState(false);
+  // Null until the count arrives, and null again if it fails. Never 0 by
+  // default: a room that says 0 because nothing loaded is a lie that stops
+  // somebody opening the one room that had something in it.
+  const [clipCounts, setClipCounts] = useState(null);
   // The room opens as a wall of clips rather than a column of text, because
   // that is what the rooms are for. General is the exception — it is the room
   // for asking things, and a grid of nothing would be the first thing a new
@@ -6054,6 +6151,16 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     return () => { alive = false; };
   }, [userId]);
 
+  // Refreshed when the list is opened as well as on arrival, so a clip posted
+  // ten minutes ago is counted. It is one query and nobody opens this list on
+  // a timer.
+  const loadCounts = useCallback(async () => {
+    const res = await fetchClipCounts();
+    setClipCounts(res === LOAD_FAILED ? null : res);
+  }, []);
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+  useEffect(() => { if (roomPickerOpen) loadCounts(); }, [roomPickerOpen, loadCounts]);
+
   // Optimistic, and rolled back if the write fails. A bookmark that silently
   // did not stick is worse than one that visibly refused.
   const toggleSave = async (postId, on) => {
@@ -6095,7 +6202,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const switchChannel = (next) => {
     if (next === channel) return;
     // Leaving a channel marks it read, the same as leaving the tab does.
-    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, channel) });
+    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, channel, null, shownByRoomIn(posts, view)) });
     markedRef.current = false;
     mutations.current += 1;
     pagesRef.current = 1;
@@ -6138,13 +6245,20 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, [load]);
 
+  // What Latest currently has on the screen, by room. Only meaningful for a
+  // cross-room view; a real room marks itself read by being open.
+  const shownByRoom = useMemo(
+    () => (isVirtualChannel(channel) ? shownByRoomIn(posts, view) : null),
+    [channel, posts, view]
+  );
+
   // Opening the tab is what marks the feed read. Written once per visit rather
   // than on every poll, so it is not a save on a timer.
   const markedRef = useRef(false);
   useEffect(() => {
     if (markedRef.current || !posts || !posts.length) return;
     markedRef.current = true;
-    savePrefs({ lastSeen: seenPatch(prefs, channel) });
+    savePrefs({ lastSeen: seenPatch(prefs, channel, null, shownByRoom) });
   }, [posts, savePrefs]); // eslint-disable-line
 
   // And again on the way out, so anything that arrived while you were sitting
@@ -6156,7 +6270,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => { savePrefsRef.current = savePrefs; }, [savePrefs]);
   useEffect(() => { if (posts && posts.length) loadedRef.current = true; }, [posts]);
   const seenOnExitRef = useRef(null);
-  useEffect(() => { seenOnExitRef.current = seenPatch(prefs, channel); }, [prefs, channel]);
+  useEffect(() => {
+    seenOnExitRef.current = seenPatch(prefs, channel, null, shownByRoom);
+  }, [prefs, channel, shownByRoom]);
   useEffect(() => () => {
     if (loadedRef.current && seenOnExitRef.current) savePrefsRef.current({ lastSeen: seenOnExitRef.current });
   }, []);
@@ -6615,10 +6731,15 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
       {roomPickerOpen && (
         <ModalShell title="Rooms" onClose={() => setRoomPickerOpen(false)}>
           <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
-            Every room, by where it happens. A dot means something new since you last looked.
+            Every room, by where it happens. The number is how many clips are in
+            there, and "new" is how many posts and comments have landed since
+            you last looked.
           </p>
           <div className="room-group">
-            <div className="room-group-label">Everything</div>
+            <div className="room-group-label">
+              Everything
+              {clipCounts ? <span className="room-group-count">{clipCounts.total}</span> : null}
+            </div>
             {VIRTUAL_CHANNELS.map((c) => (
               <button key={c.id} type="button"
                 className={`room-row${c.id === channel ? " current" : ""}`}
@@ -6628,14 +6749,27 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                   <span className="room-row-name">{c.label}</span>
                   <span className="room-row-blurb">{c.blurb}</span>
                 </span>
+                {clipCounts ? (
+                  <span className={`room-row-count${clipCounts.total ? "" : " none"}`}>
+                    {clipCounts.total}
+                    <span className="sr-only"> {clipCounts.total === 1 ? "clip" : "clips"}</span>
+                  </span>
+                ) : null}
                 {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
               </button>
             ))}
           </div>
           {CHANNEL_GROUPS.map((g) => (
             <div key={g.id} className="room-group">
-              <div className="room-group-label">{g.label}</div>
-              {channelsInGroup(g.id).map((c) => (
+              <div className="room-group-label">
+                {g.label}
+                {/* The whole part of the game, so you can skip six rooms at
+                    once rather than opening each of them to find out. */}
+                {clipCounts ? <span className="room-group-count">{groupClipCount(clipCounts, g.id)}</span> : null}
+              </div>
+              {channelsInGroup(g.id).map((c) => {
+                const n = clipCounts ? (clipCounts.byRoom[c.id] || 0) : null;
+                return (
                 <button key={c.id} type="button"
                   className={`room-row${c.id === channel ? " current" : ""}`}
                   aria-current={c.id === channel ? "true" : undefined}
@@ -6643,13 +6777,22 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                   <span className="room-row-main">
                     <span className="room-row-name">
                       {c.label}
-                      {unreadByChannel[c.id] ? <span className="channel-dot" aria-label="new posts" /> : null}
+                      {unreadByChannel[c.id] ? (
+                        <span className="room-row-new">{unreadByChannel[c.id]} new</span>
+                      ) : null}
                     </span>
                     <span className="room-row-blurb">{c.blurb}</span>
                   </span>
+                  {n === null ? null : (
+                    <span className={`room-row-count${n ? "" : " none"}`}>
+                      {n}
+                      <span className="sr-only"> {n === 1 ? "clip" : "clips"}</span>
+                    </span>
+                  )}
                   {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           ))}
         </ModalShell>
@@ -12880,6 +13023,14 @@ function GlobalStyle() {
         flex-wrap: wrap; margin: -6px 0 12px; padding: 0 2px; }
       .week-bar-text { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
       .room-group { margin-bottom: 18px; }
+      .room-row-count { flex: none; align-self: center; min-width: 26px; text-align: right;
+        font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+      .room-row-count.none { color: var(--text-dim); font-weight: 600; }
+      .room-row-new { flex: none; align-self: center; font-size: 10.5px; font-weight: 800;
+        letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+        background: var(--belt-fill, var(--accent)); color: var(--belt-on-fill, var(--accent-text)); }
+      .room-group-count { margin-left: 8px; font-weight: 700; letter-spacing: 0;
+        font-variant-numeric: tabular-nums; color: var(--text-dim); }
       .room-group-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
         color: var(--text-dim); margin: 0 0 6px 2px; }
       .room-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
@@ -12890,13 +13041,7 @@ function GlobalStyle() {
       .room-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
       .room-row-name { position: relative; display: inline-flex; align-items: center; gap: 7px;
         font-size: 14px; font-weight: 700; }
-      .room-row-name .channel-dot { position: static; width: 7px; height: 7px; box-shadow: none; }
       .room-row-blurb { font-size: 12px; line-height: 1.45; color: var(--text-dim); }
-      /* The two chip rows and their styles went with them. What is left is the
-         dot, which the room list still uses beside a room's name. */
-      .channel-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--belt-fill);
-        box-shadow: 0 0 0 2px var(--card); }
-
       /* THE COMPOSER, CLOSED
          One line until somebody wants it, so the room's posts are what the
          screen is for. */
