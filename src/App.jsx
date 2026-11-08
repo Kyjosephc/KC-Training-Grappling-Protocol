@@ -237,6 +237,17 @@ function clipThumb(url) {
 }
 const isClip = (p) => !!(p && p.video_url && embedFor(p.video_url));
 
+// The line under a tile. A wall of clips drawn from twenty-three rooms with
+// nothing saying where any of them live is a wall of clips from nowhere, and
+// the room is the strongest label a clip carries — most posters never write
+// the technique's name in the post itself.
+function clipTileWho(post, crossRoom) {
+  const p = post || {};
+  const who = p.author_name || "Athlete";
+  const room = crossRoom && p.channel ? ` · ${channelMeta(p.channel).label}` : "";
+  return `${who}${room} · ${timeAgo(p.created_at)}`;
+}
+
 const COMMUNITY_BASE_COLS = "id, author_id, author_name, author_belt, body, video_url, parent_id, created_at";
 const COMMUNITY_COLS = `${COMMUNITY_BASE_COLS}, channel`;
 // Set to false the first time the database tells us the column is not there, so
@@ -290,7 +301,37 @@ function isMissingChannelColumn(error) {
 // game it belongs to and the strip shows one part at a time. The ids are what
 // the database CHECK constraint and every stored post key on — labels and
 // grouping can change freely, ids cannot.
+// Weeks start on Sunday, in the athlete's own timezone, because that is when
+// the gym's week starts. The This Week room is measured against this boundary
+// rather than "the last seven days": a rolling window never gives you a clean
+// slate, and a clean slate every Sunday is the entire point of the room.
+function weekStart(now) {
+  const d = new Date(now == null ? Date.now() : now);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+const weekStartISO = (now) => weekStart(now).toISOString();
+// The room for whatever is being drilled right now. It looks blank again every
+// Sunday, but nothing in it is ever deleted — the week's posts move behind
+// "Past weeks" and stay there. A weekly wipe that actually destroyed posts
+// would throw away the best study material in the app, with no undo.
+const THIS_WEEK = "thisweek";
+const isWeekRoom = (id) => id === THIS_WEEK;
+// Not a room. Nothing is stored in it, the database never sees this id, and no
+// post can live here — it is a way of reading every room at once, which is
+// what makes twenty-two thin rooms read as a library instead of as a list of
+// empty rooms.
+const ALL_ROOMS = "__all";
+const VIRTUAL_CHANNELS = [
+  { id: ALL_ROOMS, group: null, label: "Latest",
+    blurb: "Everything new from every room, newest first.",
+    placeholder: "" },
+];
+const isVirtualChannel = (id) => VIRTUAL_CHANNELS.some((c) => c.id === id);
+
 const CHANNEL_GROUPS = [
+  { id: "week", label: "This week" },
   { id: "start", label: "General" },
   { id: "standing", label: "Standing" },
   { id: "top", label: "Top" },
@@ -299,6 +340,12 @@ const CHANNEL_GROUPS = [
   { id: "attacking", label: "Attacking" },
 ];
 const COMMUNITY_CHANNELS = [
+  // First in the list and first in the picker, because it is the only room
+  // whose contents are about tonight.
+  { id: THIS_WEEK, group: "week", label: "This week",
+    blurb: "Only what is being covered in this week's sessions. Goes blank every Sunday for the new week — nothing is deleted, it moves to past weeks.",
+    placeholder: "What did we cover tonight? Name the technique and the detail you want to remember, or post the clip you found afterwards." },
+
   { id: "general", group: "start", label: "General",
     blurb: "Questions about the app, the program, how to log something, or anything else.",
     placeholder: "Ask anything — about a lift, the app, or the week you are having." },
@@ -382,17 +429,31 @@ const COMMUNITY_CHANNELS = [
 function channelsInGroup(groupId) {
   return COMMUNITY_CHANNELS.filter((c) => c.group === groupId);
 }
+// The part of the game an unknown room belongs to. Also by id rather than by
+// position, for the same reason: the first part in the list is This week.
+const FALLBACK_GROUP = "start";
 function groupLabel(groupId) {
-  const g = CHANNEL_GROUPS.find((x) => x.id === groupId);
+  const g = CHANNEL_GROUPS.find((x) => x.id === groupId)
+    || CHANNEL_GROUPS.find((x) => x.id === FALLBACK_GROUP);
   return g ? g.label : CHANNEL_GROUPS[0].label;
 }
 function groupOfChannel(id) {
   const c = COMMUNITY_CHANNELS.find((x) => x.id === id);
-  return (c && c.group) || CHANNEL_GROUPS[0].id;
+  return (c && c.group) || FALLBACK_GROUP;
 }
 const DEFAULT_CHANNEL = "general";
+// Where the tab opens for somebody with no stored preference. Deliberately not
+// DEFAULT_CHANNEL, which is the fallback a *query* uses when it has no channel
+// — that one has to stay a real room the database will accept.
+const LANDING_CHANNEL = ALL_ROOMS;
 function channelMeta(id) {
-  return COMMUNITY_CHANNELS.find((c) => c.id === id) || COMMUNITY_CHANNELS[0];
+  return COMMUNITY_CHANNELS.find((c) => c.id === id)
+    || VIRTUAL_CHANNELS.find((c) => c.id === id)
+    // By id and not by position. A post in a room that has since been retired
+    // falls through to here, and the first entry in the list is now This week
+    // — so a post from March would have been labelled with this week's dates.
+    || COMMUNITY_CHANNELS.find((c) => c.id === DEFAULT_CHANNEL)
+    || COMMUNITY_CHANNELS[0];
 }
 // Read state per channel. Athletes from before channels existed carry a single
 // lastSeenAt, which seeds both so nothing they had already read comes back.
@@ -402,6 +463,14 @@ function lastSeenMap(prefs) {
   const map = {};
   COMMUNITY_CHANNELS.forEach((c) => { map[c.id] = (p.lastSeen && p.lastSeen[c.id]) || legacy; });
   return map;
+}
+// Skimming Latest is not reading twenty-two rooms, so it marks none of them
+// read. Without this the virtual id was also written into stored prefs as a
+// key nothing will ever read again.
+function seenPatch(prefs, channel, when) {
+  const map = lastSeenMap(prefs);
+  if (isVirtualChannel(channel)) return map;
+  return { ...map, [channel]: when || new Date().toISOString() };
 }
 
 // A technique library is only a library if you can find anything in it. This
@@ -579,16 +648,39 @@ const TECHNIQUE_TERMS = [
   "gi", "no gi", "lapel", "collar grip", "sleeve grip", "pistol grip", "spider lasso",
 ];
 
-async function fetchCommunityFeed(pages, channel) {
+// Which room the query filters to, and how far back it reaches. Separated from
+// the query itself because these are the two decisions worth being sure about
+// and neither of them can be tested through a Supabase client that is null.
+function feedScope(channel, opts) {
+  return {
+    // Null means no room filter at all. ALL_ROOMS is not a channel the
+    // database has heard of, so filtering on it would return nothing.
+    room: channel === ALL_ROOMS ? null : (channel || DEFAULT_CHANNEL),
+    since: (opts && opts.since) || null,
+  };
+}
+// What the room being read wants: a floor at the start of this week, or none.
+// Archive mode lifts the floor rather than reaching for a different table.
+function feedWindow(channel, archive, now) {
+  return isWeekRoom(channel) && !archive ? { since: weekStartISO(now) } : null;
+}
+
+async function fetchCommunityFeed(pages, channel, opts) {
   if (!supabase) return LOAD_FAILED;
   const limit = Math.min(pages || 1, COMMUNITY_MAX_PAGES) * COMMUNITY_PAGE;
+  // The This Week room is this same table with the week's start as a floor. The
+  // cut is made by the database rather than after the fact, so "load older"
+  // pages through this week instead of pulling months of posts down a phone
+  // connection and discarding nearly all of them.
+  const scope = feedScope(channel, opts);
   const outcome = await withRetry(async () => {
     const roots_ = async (withChannel) => {
       let q = supabase.from("community_posts")
         .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
         .is("deleted_at", null)
         .is("parent_id", null);
-      if (withChannel) q = q.eq("channel", channel || DEFAULT_CHANNEL);
+      if (withChannel && scope.room) q = q.eq("channel", scope.room);
+      if (scope.since) q = q.gte("created_at", scope.since);
       return q.order("created_at", { ascending: false }).limit(limit + 1);
     };
     let { data, error } = await roots_(channelsAreReady());
@@ -5814,7 +5906,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
   const [channel, setChannel] = useState(() => (
-    COMMUNITY_CHANNELS.some((c) => c.id === prefs?.channel) ? prefs.channel : DEFAULT_CHANNEL
+    COMMUNITY_CHANNELS.some((c) => c.id === prefs?.channel) || isVirtualChannel(prefs?.channel)
+      ? prefs.channel
+      : LANDING_CHANNEL
   ));
   const [posts, setPosts] = useState(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -5839,6 +5933,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // athlete saw.
   const [view, setView] = useState("clips");
   const [openClipId, setOpenClipId] = useState(null);
+  // In the This Week room only. Off means the current week; on lifts the floor
+  // and shows everything the room has ever held.
+  const [weekArchive, setWeekArchive] = useState(false);
   // Whether saving works at all. False means the migration has not been run,
   // and the honest thing is to stop offering a button that cannot work rather
   // than to let people press it and blame their wifi.
@@ -5867,9 +5964,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => { pagesRef.current = pages; }, [pages]);
   const channelRef = useRef(channel);
   useEffect(() => { channelRef.current = channel; }, [channel]);
+  // Read by load(), which runs on a timer and must never see a stale value.
+  const weekArchiveRef = useRef(false);
+  useEffect(() => { weekArchiveRef.current = weekArchive; }, [weekArchive]);
   const load = useCallback(async () => {
     const at = mutations.current;
-    const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current);
+    const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current,
+      feedWindow(channelRef.current, weekArchiveRef.current));
     if (feed === LOAD_FAILED) { setFailed(true); return; }
     const reacts = await fetchCommunityReactions(feed.posts.map((p) => p.id));
     if (mutations.current !== at) return;
@@ -5934,7 +6035,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   // Leaving a channel abandons the search with it.
   useEffect(() => { clearSearch(); }, [channel]); // eslint-disable-line
-  useEffect(() => { setOpenClipId(null); setView(channel === "general" ? "feed" : "clips"); }, [channel]);
+  // This Week opens as a column of text rather than a wall of clips: it is a
+  // conversation about what was covered, and most of what lands in it on a
+  // Tuesday night is a note, not a video.
+  useEffect(() => {
+    setOpenClipId(null);
+    setView(channel === "general" || isWeekRoom(channel) ? "feed" : "clips");
+  }, [channel]);
 
   useEffect(() => {
     let alive = true;
@@ -5988,16 +6095,31 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const switchChannel = (next) => {
     if (next === channel) return;
     // Leaving a channel marks it read, the same as leaving the tab does.
-    if (loadedRef.current) savePrefs({ lastSeen: { ...lastSeenMap(prefs), [channel]: new Date().toISOString() } });
+    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, channel) });
     markedRef.current = false;
     mutations.current += 1;
     pagesRef.current = 1;
     setPages(1);
     setPosts(null);
+    weekArchiveRef.current = false;
+    setWeekArchive(false);
     setChannel(next);
     if (savePrefs) savePrefs({ channel: next });
   };
   useEffect(() => { load(); }, [channel]); // eslint-disable-line
+
+  // The ref is set here as well as in its effect, because load() is called on
+  // the next line and an effect has not run by then.
+  const toggleWeekArchive = () => {
+    const next = !weekArchive;
+    setWeekArchive(next);
+    weekArchiveRef.current = next;
+    mutations.current += 1;
+    pagesRef.current = 1;
+    setPages(1);
+    setPosts(null);
+    load();
+  };
 
   const loadOlder = async () => {
     setLoadingMore(true);
@@ -6022,7 +6144,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => {
     if (markedRef.current || !posts || !posts.length) return;
     markedRef.current = true;
-    savePrefs({ lastSeen: { ...lastSeenMap(prefs), [channel]: new Date().toISOString() } });
+    savePrefs({ lastSeen: seenPatch(prefs, channel) });
   }, [posts, savePrefs]); // eslint-disable-line
 
   // And again on the way out, so anything that arrived while you were sitting
@@ -6034,7 +6156,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => { savePrefsRef.current = savePrefs; }, [savePrefs]);
   useEffect(() => { if (posts && posts.length) loadedRef.current = true; }, [posts]);
   const seenOnExitRef = useRef(null);
-  useEffect(() => { seenOnExitRef.current = { ...lastSeenMap(prefs), [channel]: new Date().toISOString() }; }, [prefs, channel]);
+  useEffect(() => { seenOnExitRef.current = seenPatch(prefs, channel); }, [prefs, channel]);
   useEffect(() => () => {
     if (loadedRef.current && seenOnExitRef.current) savePrefsRef.current({ lastSeen: seenOnExitRef.current });
   }, []);
@@ -6056,6 +6178,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   }, [reactions]);
 
   const send = async (text, vid, parentId) => {
+    // Latest is a way of reading, not a place. The composer is not offered
+    // there, so this is belt rather than braces — but a post failing with a
+    // CHECK violation is a bad way to discover that.
+    if (!parentId && isVirtualChannel(channel)) return false;
     const payload = {
       author_id: userId,
       author_name: (client.name || "Member").trim(),
@@ -6178,9 +6304,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   const canPost = (body.trim().length > 0 || embedFor(videoUrl)) && !uploading;
   const openGroup = groupOfChannel(channel);
+  const inLatest = isVirtualChannel(channel);
+  const canPostHere = !inLatest;
   // Anything new in a room other than the one being read. The old strip could
-  // mark the part that held it; one line has to carry the whole answer.
-  const unreadElsewhere = COMMUNITY_CHANNELS.some((c) => c.id !== channel && unreadByChannel[c.id]);
+  // mark the part that held it; one line has to carry the whole answer. In
+  // Latest there is no elsewhere — every room is already on the screen.
+  const unreadElsewhere = !inLatest && COMMUNITY_CHANNELS.some((c) => c.id !== channel && unreadByChannel[c.id]);
+  const barPart = inLatest ? "Every room" : groupLabel(openGroup);
   const clipHits = clipsForPicker(results);
   const shownResults = Array.isArray(results) && picked
     ? results.filter((p) => p.id === picked)
@@ -6305,18 +6435,38 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           into that list, beside the room it describes, where it is useful
           when you are choosing rather than taking two lines every visit. */}
       <button type="button" className="room-bar" onClick={() => setRoomPickerOpen(true)}
-        aria-haspopup="dialog" aria-label={`Current room: ${channelMeta(channel).label} in ${groupLabel(openGroup)}. Change room.`}>
+        aria-haspopup="dialog" aria-label={inLatest
+          ? `Showing ${channelMeta(channel).label}, from every room. Change room.`
+          : barPart === channelMeta(channel).label
+          ? `Current room: ${channelMeta(channel).label}. Change room.`
+          : `Current room: ${channelMeta(channel).label} in ${barPart}. Change room.`}>
         <span className="room-bar-text">
-          {/* The General room sits in the General part, so without this the
-              bar reads "GENERAL" over "General". */}
-          {groupLabel(openGroup) !== channelMeta(channel).label && (
-            <span className="room-bar-part">{groupLabel(openGroup)}</span>
+          {/* The General room sits in the General part, and This week is its
+              own part, so without this the bar reads "GENERAL" over
+              "General". */}
+          {barPart !== channelMeta(channel).label && (
+            <span className="room-bar-part">{barPart}</span>
           )}
           <span className="room-bar-name">{channelMeta(channel).label}</span>
         </span>
         {unreadElsewhere ? <span className="room-bar-dot" aria-label="new posts in other rooms" /> : null}
         <ChevronRight size={16} className="room-bar-chev" aria-hidden="true" />
       </button>
+
+      {/* Said plainly, because "where did last week's posts go" is the first
+          question this room will get asked. */}
+      {isWeekRoom(channel) && (
+        <div className="week-bar">
+          <span className="week-bar-text">
+            {weekArchive
+              ? "Every week this room has held, newest first."
+              : `Week of ${weekStart().toLocaleDateString(undefined, { month: "short", day: "numeric" })}. Clears again next Sunday — nothing is deleted.`}
+          </span>
+          <button type="button" className="link-btn" onClick={toggleWeekArchive}>
+            {weekArchive ? "Back to this week" : "Past weeks"}
+          </button>
+        </div>
+      )}
 
       <div className="tech-search">
         <Search size={15} className="tech-search-icon" aria-hidden="true" />
@@ -6401,6 +6551,14 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         <div className="adjust-box" style={{ marginBottom: 12 }}>
           You can read the group but can't post in it right now. Talk to Kyle if you think that's a mistake.
         </div>
+      ) : !canPostHere ? (
+        /* There is no "everywhere" to post to. Latest is a way of reading the
+           library, so the one control it offers is the decision that has to be
+           made first anyway, which is which room the post belongs in. */
+        <button type="button" className="composer-open" onClick={() => setRoomPickerOpen(true)}>
+          <Plus size={16} aria-hidden="true" />
+          <span>Pick a room to post in</span>
+        </button>
       ) : !composerOpen ? (
         /* An empty three-line box and two paragraphs of instructions used to be
            the first thing on the screen, above every post in the room. The feed
@@ -6459,6 +6617,21 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
             Every room, by where it happens. A dot means something new since you last looked.
           </p>
+          <div className="room-group">
+            <div className="room-group-label">Everything</div>
+            {VIRTUAL_CHANNELS.map((c) => (
+              <button key={c.id} type="button"
+                className={`room-row${c.id === channel ? " current" : ""}`}
+                aria-current={c.id === channel ? "true" : undefined}
+                onClick={() => { setRoomPickerOpen(false); switchChannel(c.id); }}>
+                <span className="room-row-main">
+                  <span className="room-row-name">{c.label}</span>
+                  <span className="room-row-blurb">{c.blurb}</span>
+                </span>
+                {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
+              </button>
+            ))}
+          </div>
           {CHANNEL_GROUPS.map((g) => (
             <div key={g.id} className="room-group">
               <div className="room-group-label">{g.label}</div>
@@ -6550,14 +6723,28 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
       {results === null && posts !== null && roots.length === 0 && !failed && (
         <div className="room-empty">
           <MessageCircle size={26} aria-hidden="true" />
-          <div className="room-empty-title">No posts in {channelMeta(channel).label} yet</div>
-          <p>{channel === "general"
+          <div className="room-empty-title">
+            {inLatest ? "Nothing posted yet" : `No posts in ${channelMeta(channel).label} yet`}
+          </div>
+          <p>{inLatest
+            ? "The moment anybody posts in any room it turns up here, newest first."
+            : channel === "general"
             ? "Ask about a lift, the app, or anything that isn't clicking. Somebody here has had the same question."
+            : isWeekRoom(channel) && !weekArchive
+            ? "Nothing from this week yet. Post what was covered tonight — the technique, the detail that made it work, the clip you found after — and it stays here until Sunday."
+            : isWeekRoom(channel)
+            ? "No posts in here at all yet. This week's are the ones that show by default."
             : "Post a clip of something you're drilling, or a detail you want eyes on. The first one makes it a room."}</p>
           {!iAmBlocked && !composerOpen && (
-            <button type="button" className="btn-primary" onClick={() => setComposerOpen(true)}>
-              Post the first one
-            </button>
+            canPostHere ? (
+              <button type="button" className="btn-primary" onClick={() => setComposerOpen(true)}>
+                Post the first one
+              </button>
+            ) : (
+              <button type="button" className="btn-primary" onClick={() => setRoomPickerOpen(true)}>
+                Pick a room
+              </button>
+            )
           )}
         </div>
       )}
@@ -6611,7 +6798,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                         {savedIds.has(p.id) ? <span className="clip-tile-saved" aria-hidden="true"><Bookmark size={13} /></span> : null}
                       </span>
                       <span className="clip-tile-text">{p.body ? matchSnippet(p.body, "", 58) : "No description"}</span>
-                      <span className="clip-tile-who">{p.author_name || "Athlete"} · {timeAgo(p.created_at)}</span>
+                      <span className="clip-tile-who">{clipTileWho(p, inLatest)}</span>
                     </button>
                   );
                 })}
@@ -12689,6 +12876,9 @@ function GlobalStyle() {
       .room-bar-name { font-size: 15px; font-weight: 700; }
       .room-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--belt, var(--accent)); flex: none; }
       .room-bar-chev { color: var(--text-dim); flex: none; }
+      .week-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+        flex-wrap: wrap; margin: -6px 0 12px; padding: 0 2px; }
+      .week-bar-text { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
       .room-group { margin-bottom: 18px; }
       .room-group-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
         color: var(--text-dim); margin: 0 0 6px 2px; }

@@ -1,5 +1,5 @@
 -- =============================================================================
--- TWENTY-TWO ROOMS: THE MERGE
+-- TWENTY-THREE ROOMS: THE MERGE, PLUS THIS WEEK
 -- =============================================================================
 -- Run this once in the Supabase SQL editor, BEFORE deploying the new build.
 -- Safe to run more than once.
@@ -33,6 +33,7 @@ alter table community_posts drop constraint if exists community_posts_channel_ch
 alter table community_posts
   add constraint community_posts_channel_check
   check (channel in (
+    'thisweek',
     'general', 'technique',
     'wrestling', 'footsweeps',
     'passing', 'topcontrol',
@@ -44,6 +45,12 @@ alter table community_posts
 create index if not exists community_posts_channel_created_idx
   on community_posts (channel, created_at desc);
 
+-- 'thisweek' is the room for whatever is being drilled in the current week.
+-- The app shows only the posts made since the most recent Sunday, so it reads
+-- as blank again every week, but nothing in it is ever deleted and the older
+-- weeks stay reachable behind "Past weeks". There is no scheduled job here and
+-- there should never be one: the clearing is a filter, not a delete.
+
 -- Check: nothing should be left in a retired room, and every row should sit
--- in one of the twenty-two above.
+-- in one of the twenty-three above.
 select channel, count(*) from community_posts group by channel order by channel;

@@ -586,7 +586,7 @@ const mountGroup = (over = {}) => {
 check("the page says which room you are in", () => {
   // Two rows of chips became one line. Twenty-nine rooms across six parts
   // cannot be navigated sideways — the Guards part alone is fourteen.
-  mountGroup();
+  mountGroup({ prefs: { channel: "general" } });
   const bar = host.querySelector(".room-bar");
   if (!bar) throw new Error("no room bar on the group page");
   if (!/general/i.test(bar.textContent)) throw new Error(`the bar reads "${bar.textContent.trim()}"`);
@@ -599,13 +599,17 @@ check("the page says which room you are in", () => {
 check("anything new in another room shows from the room you are in", () => {
   // The old strip could mark the part holding an unread room. One line has to
   // carry the whole answer or unread posts anywhere else are invisible.
-  mountGroup({ unreadByChannel: { passing: 3 } });
+  mountGroup({ prefs: { channel: "general" }, unreadByChannel: { passing: 3 } });
   if (!host.querySelector(".room-bar-dot")) throw new Error("nothing marks unread posts in another room");
-  mountGroup();
+  mountGroup({ prefs: { channel: "general" } });
   if (host.querySelector(".room-bar-dot")) throw new Error("a dot with nothing unread anywhere");
   // What is new in the room already open is not news.
-  mountGroup({ unreadByChannel: { general: 2 } });
+  mountGroup({ prefs: { channel: "general" }, unreadByChannel: { general: 2 } });
   if (host.querySelector(".room-bar-dot")) throw new Error("the room being read counted as somewhere else");
+  // Latest is every room at once, so there is no elsewhere for a dot to point
+  // at. Left in, it sits on the bar permanently and means nothing.
+  mountGroup({ unreadByChannel: { passing: 3, sweeps: 1 } });
+  if (host.querySelector(".room-bar-dot")) throw new Error("a dot pointing elsewhere while every room is on the screen");
   unmount();
 });
 
@@ -614,11 +618,14 @@ check("every room is two taps away, grouped by where it happens", () => {
   act(() => { host.querySelector(".room-bar").click(); });
   const rows = [...host.querySelectorAll(".room-row")];
   const heads = [...host.querySelectorAll(".room-group-label")];
-  if (rows.length !== A.COMMUNITY_CHANNELS.length) {
-    throw new Error(`the list offers ${rows.length} rooms, the app has ${A.COMMUNITY_CHANNELS.length}`);
+  // Every real room, plus the cross-room views, which are offered in the same
+  // list because that is the one place somebody goes looking to change rooms.
+  const want = A.COMMUNITY_CHANNELS.length + A.VIRTUAL_CHANNELS.length;
+  if (rows.length !== want) {
+    throw new Error(`the list offers ${rows.length} rooms, the app has ${want}`);
   }
-  if (heads.length !== A.CHANNEL_GROUPS.length) {
-    throw new Error(`${heads.length} headings for ${A.CHANNEL_GROUPS.length} parts of the game`);
+  if (heads.length !== A.CHANNEL_GROUPS.length + 1) {
+    throw new Error(`${heads.length} headings for ${A.CHANNEL_GROUPS.length} parts of the game plus the cross-room one`);
   }
   const current = rows.filter((r) => r.classList.contains("current"));
   if (current.length !== 1) throw new Error(`${current.length} rooms marked as the one you are in`);
@@ -830,7 +837,7 @@ check("there is a way into your own saved list, and it is yours alone", () => {
 check("the composer is shut until somebody wants it", () => {
   // It used to open on an empty three-line box plus two paragraphs of
   // instructions, above every post in the room.
-  mountGroup();
+  mountGroup({ prefs: { channel: "technique" } });
   if (host.querySelector("#post-body")) throw new Error("the composer is open before anyone asked");
   const opener = [...host.querySelectorAll("button")].find((b) => /^post in /i.test(b.textContent.trim()));
   if (!opener) throw new Error("no way to open the composer");
@@ -847,8 +854,9 @@ check("the composer is shut until somebody wants it", () => {
 check("the prompt is not printed twice", () => {
   // The placeholder said "name the technique first"; a paragraph underneath
   // said the same thing again in different words, before a single post.
-  mountGroup();
+  mountGroup({ prefs: { channel: "technique" } });
   const opener = [...host.querySelectorAll("button")].find((b) => /^post in /i.test(b.textContent.trim()));
+  if (!opener) throw new Error("no way to open the composer");
   hit(opener);
   const box = host.querySelector("#post-body");
   const prompt = (box.getAttribute("placeholder") || "").toLowerCase();
@@ -2506,6 +2514,195 @@ check("a clip tile knows where to get its picture", () => {
     throw new Error("an uploaded clip was given a YouTube thumbnail");
   }
   if (A.clipThumb("") !== null || A.clipThumb(null) !== null) throw new Error("nothing produced a thumbnail");
+});
+
+check("the week starts on Sunday, at midnight, in every week of the year", () => {
+  // The whole This Week room hangs off this one function, and the classic way
+  // to get it wrong is to have a Sunday resolve to the Sunday before it —
+  // which nobody notices until Sunday, when the room refuses to clear.
+  const DAY = 86400000;
+  for (let i = 0; i < 400; i++) {
+    // Mid-afternoon rather than midnight, so a timezone offset cannot quietly
+    // carry the date over and make this pass by luck.
+    const t = new Date(2026, 0, 1, 15, 20, 0).getTime() + i * DAY;
+    const w = A.weekStart(t);
+    if (w.getDay() !== 0) throw new Error(`${new Date(t).toDateString()} gave ${w.toDateString()}, not a Sunday`);
+    if (w.getHours() || w.getMinutes() || w.getSeconds() || w.getMilliseconds()) {
+      throw new Error(`${w.toString()} is not midnight`);
+    }
+    if (w.getTime() > t) throw new Error(`${w.toDateString()} is after ${new Date(t).toDateString()}`);
+    if (t - w.getTime() >= 7 * DAY) throw new Error(`${new Date(t).toDateString()} reached back ${(t - w.getTime()) / DAY} days`);
+  }
+  // A Sunday belongs to its own week, not the one before it.
+  const sun = new Date(2026, 10, 1, 9, 0, 0); // 1 Nov 2026 is a Sunday
+  if (sun.getDay() !== 0) throw new Error("the fixture is not a Sunday");
+  const ws = A.weekStart(sun.getTime());
+  if (ws.getDate() !== sun.getDate() || ws.getMonth() !== sun.getMonth()) {
+    throw new Error(`Sunday morning was put in the week starting ${ws.toDateString()}`);
+  }
+  // And a Saturday night still belongs to the week that is ending.
+  const sat = new Date(2026, 9, 31, 23, 30, 0);
+  if (A.weekStart(sat.getTime()).getTime() !== A.weekStart(new Date(2026, 9, 26, 12).getTime()).getTime()) {
+    throw new Error("Saturday night fell into next week");
+  }
+});
+
+check("This week asks the database for this week, and past weeks lifts the floor", () => {
+  // The clearing is a filter and must never become a delete. If the floor is
+  // dropped the room silently becomes a second General that nobody clears; if
+  // it is applied to every room, the whole app forgets everything older than
+  // Sunday.
+  const now = new Date(2026, 10, 4, 20, 0, 0).getTime(); // a Wednesday
+  const w = A.feedWindow(A.THIS_WEEK, false, now);
+  if (!w || !w.since) throw new Error("This week asked for no window at all");
+  if (w.since !== A.weekStartISO(now)) throw new Error(`the floor is ${w.since}, not the start of the week`);
+  if (A.feedWindow(A.THIS_WEEK, true, now) !== null) throw new Error("past weeks still had a floor under it");
+  ["general", "passing", "sweeps", A.ALL_ROOMS].forEach((id) => {
+    if (A.feedWindow(id, false, now) !== null) throw new Error(`${id} was given a week floor`);
+  });
+});
+
+check("Latest filters to no room, every real room filters to itself", () => {
+  // ALL_ROOMS is not a channel the database has heard of. Filtering on it
+  // returns an empty feed rather than every room, which is the exact opposite
+  // of the point, and it looks like nobody has ever posted anything.
+  if (A.feedScope(A.ALL_ROOMS, null).room !== null) {
+    throw new Error("Latest was filtered to a single room");
+  }
+  A.COMMUNITY_CHANNELS.forEach((c) => {
+    if (A.feedScope(c.id, null).room !== c.id) throw new Error(`${c.id} fetched ${A.feedScope(c.id, null).room}`);
+  });
+  // No channel at all still has to be a room the database will accept.
+  const bare = A.feedScope(null, null).room;
+  if (!A.COMMUNITY_CHANNELS.some((c) => c.id === bare)) throw new Error(`an empty channel fetched "${bare}"`);
+  if (A.feedScope(A.ALL_ROOMS, { since: "2026-01-01" }).since !== "2026-01-01") {
+    throw new Error("the window was dropped on the way to the query");
+  }
+});
+
+check("a cross-room view is not a room anything can be posted to", () => {
+  // The database carries a CHECK constraint listing the rooms it accepts. A
+  // virtual id reaching an insert comes back 23514 and reads to the athlete as
+  // a post that vanished.
+  A.VIRTUAL_CHANNELS.forEach((v) => {
+    if (A.COMMUNITY_CHANNELS.some((c) => c.id === v.id)) {
+      throw new Error(`${v.id} is in the room list and will be offered a composer`);
+    }
+    if (!A.isVirtualChannel(v.id)) throw new Error(`${v.id} is not recognised as a view`);
+    if (!v.label) throw new Error("a cross-room view with no name");
+  });
+  A.COMMUNITY_CHANNELS.forEach((c) => {
+    if (A.isVirtualChannel(c.id)) throw new Error(`the real room ${c.id} is treated as a view`);
+  });
+  // Every id the database could be handed has to be one it will accept, so the
+  // ids themselves must not collide.
+  if (A.VIRTUAL_CHANNELS.some((v) => !/^__/.test(v.id))) {
+    throw new Error("a view's id does not announce itself as one");
+  }
+});
+
+check("Latest offers somewhere to post instead of a composer that cannot work", () => {
+  mountGroup();
+  const bar = host.querySelector(".room-bar");
+  if (!/latest/i.test(bar.textContent)) throw new Error(`the tab did not land on Latest: "${bar.textContent.trim()}"`);
+  const open = host.querySelector(".composer-open");
+  if (!open) throw new Error("no way to post at all from Latest");
+  // Not "does it contain the words post in" — the honest button is "Pick a
+  // room to post in", which does. What must not happen is Latest offering to
+  // post *into Latest*, which is the shape "Post in <name>".
+  if (/^\s*post in\b/i.test(open.textContent)) {
+    throw new Error(`Latest offers "${open.textContent.trim()}", which has no room to post to`);
+  }
+  if (!/pick a room/i.test(open.textContent)) {
+    throw new Error(`Latest offers "${open.textContent.trim()}" rather than a way to choose a room`);
+  }
+  // And a real room still offers the composer it always did.
+  mountGroup({ prefs: { channel: "passing" } });
+  const real = host.querySelector(".composer-open");
+  if (!real || !/post in/i.test(real.textContent)) {
+    throw new Error(`a real room offers "${real ? real.textContent.trim() : "nothing"}"`);
+  }
+  unmount();
+});
+
+check("the This week room says what happens on Sunday", () => {
+  // "Where did last week's posts go" is the first question this room will be
+  // asked, and the answer has to be on the screen rather than in a changelog.
+  mountGroup({ prefs: { channel: A.THIS_WEEK } });
+  const bar = host.querySelector(".week-bar");
+  if (!bar) throw new Error("the This week room says nothing about its week");
+  const text = bar.textContent.toLowerCase();
+  if (!/sunday/.test(text)) throw new Error(`it does not mention Sunday: "${bar.textContent.trim()}"`);
+  if (!/nothing is deleted/.test(text)) {
+    throw new Error(`it does not say the posts are kept: "${bar.textContent.trim()}"`);
+  }
+  if (!/past weeks/i.test(bar.textContent)) throw new Error("no way through to the older weeks");
+  // No other room claims a week it does not have.
+  mountGroup({ prefs: { channel: "passing" } });
+  if (host.querySelector(".week-bar")) throw new Error("an ordinary room grew a weekly clock");
+  unmount();
+});
+
+check("looking at Latest does not mark twenty-three rooms as read", () => {
+  // Skimming a grid is not reading the rooms it came from. Marking them read
+  // from here empties every unread dot in the app in one tap and the posts are
+  // never surfaced again.
+  const prefs = { lastSeen: { passing: "2026-01-01T00:00:00.000Z" } };
+  const after = A.seenPatch(prefs, A.ALL_ROOMS);
+  if (after.passing !== "2026-01-01T00:00:00.000Z") throw new Error("Latest moved a room's read mark");
+  const stamped = Object.keys(after).filter((k) => after[k] !== (prefs.lastSeen[k] || "1970-01-01"));
+  if (stamped.length) throw new Error(`Latest marked ${stamped.join(", ")} read`);
+  if (Object.prototype.hasOwnProperty.call(after, A.ALL_ROOMS)) {
+    throw new Error("the view's id was written into stored prefs as a room");
+  }
+  // A real room still gets its mark moved, or nothing is ever read anywhere.
+  const real = A.seenPatch(prefs, "passing");
+  if (real.passing === "2026-01-01T00:00:00.000Z") throw new Error("reading a room no longer marks it read");
+});
+
+check("a room that no longer exists is not labelled with this week", () => {
+  // The fallback used to be the first entry in the list, which was General and
+  // is now This week. A post from March in a retired room would have been
+  // labelled with the current week, which is a date, and a wrong one.
+  const meta = A.channelMeta("wormguard");
+  if (meta.id === A.THIS_WEEK) throw new Error("a retired room fell through to This week");
+  if (!A.COMMUNITY_CHANNELS.some((c) => c.id === meta.id)) throw new Error(`it fell through to "${meta.id}"`);
+  if (A.channelMeta(undefined).id === A.THIS_WEEK) throw new Error("no room at all fell through to This week");
+  if (A.groupLabel("nonsense") === A.groupLabel("week")) {
+    throw new Error("an unknown part of the game fell through to This week");
+  }
+  // The views still resolve to themselves rather than to the fallback.
+  if (A.channelMeta(A.ALL_ROOMS).label !== A.VIRTUAL_CHANNELS[0].label) {
+    throw new Error("Latest resolved to a room instead of to itself");
+  }
+});
+
+check("a clip on the Latest wall says which room it came from", () => {
+  // Twenty-three rooms of clips in one grid, with nothing saying where any of
+  // them live, is a wall of clips from nowhere — and the room is the strongest
+  // label a clip carries, because most posters never write the technique's
+  // name into the post itself.
+  const post = { author_name: "Marcus", channel: "legentries", created_at: new Date().toISOString() };
+  const cross = A.clipTileWho(post, true);
+  if (!cross.includes("Marcus")) throw new Error(`the tile lost the poster: "${cross}"`);
+  if (!cross.includes(A.channelMeta("legentries").label)) {
+    throw new Error(`a tile on the cross-room wall does not name its room: "${cross}"`);
+  }
+  // Inside a room, naming the room on every tile is twenty-three repetitions
+  // of something the bar above already says.
+  const inside = A.clipTileWho(post, false);
+  if (inside.includes(A.channelMeta("legentries").label)) {
+    throw new Error(`a tile repeats the room it is already in: "${inside}"`);
+  }
+  // A post from a room that has since been retired must not be labelled with
+  // this week, which the positional fallback used to do.
+  const old = A.clipTileWho({ author_name: "Ana", channel: "wormguard", created_at: new Date().toISOString() }, true);
+  if (old.toLowerCase().includes("this week")) throw new Error(`a retired room read as this week: "${old}"`);
+  // And nothing anonymous crashes the wall.
+  ["", null, undefined].forEach((v) => {
+    const t = A.clipTileWho({ author_name: v, channel: v, created_at: v }, true);
+    if (!t || !t.trim() || /undefined|null|NaN/.test(t)) throw new Error(`an empty post gave "${t}"`);
+  });
 });
 
 check("only posts with a playable clip reach the wall", () => {
