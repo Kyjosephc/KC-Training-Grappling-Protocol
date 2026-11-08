@@ -1795,16 +1795,25 @@ function freeSessionsUsed(client) {
   return pos.weekNumber > 1 || (client.logs || []).length >= FREE_SESSION_LIMIT;
 }
 function est1RM(weight, reps) {
-  if (!weight || !reps) return 0;
+  // A negative weight produced a negative one-rep max — est1RM(-50, 5) came
+  // back as -58, which then flowed into records, the strength verdict and the
+  // suggested weight for next time. Nothing in the UI types a negative, but a
+  // partial sync or a hand-edited record can carry one, and a number this
+  // wrong is better treated as no number.
+  if (!Number.isFinite(Number(weight)) || !Number.isFinite(Number(reps))) return 0;
+  if (weight <= 0 || reps <= 0) return 0;
   if (reps === 1) return weight;
   return Math.round(weight * (1 + Math.min(reps, E1RM_REP_CAP) / 30));
 }
 function bestSetOf(sets) {
   let best = null;
   for (const s of sets || []) {
+    // A hole in the array threw rather than being skipped, and a set saved
+    // half-written is exactly the shape a dropped connection leaves behind.
+    if (!s) continue;
     const w = Number(s.weight) || 0;
     const r = Number(s.reps) || 0;
-    if (!w || !r) continue;
+    if (w <= 0 || r <= 0) continue;
     // A high-rep back-off set is not evidence of a new max. Ignore those
     // entirely rather than letting one set of twenty poison the estimate.
     if (r > E1RM_REP_CAP) continue;
@@ -2103,6 +2112,10 @@ function milestoneProgress(client) {
 }
 function weekStartOf(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
+  // An unparseable date used to reach toISOString and throw "Invalid time
+  // value", which took the whole leaderboard calculation down rather than
+  // skipping the one bad row.
+  if (Number.isNaN(d.getTime())) return null;
   const wd = d.getDay();
   d.setDate(d.getDate() + ((wd === 0 ? -6 : 1) - wd));
   return toLocalDateStr(d);
@@ -9183,8 +9196,11 @@ function suggestFromHistory(client, exerciseName, target, isDeload) {
     if (!en) continue;
     let top = null;
     for (const st of en.sets || []) {
+      if (!st) continue;
       const w = Number(st.weight) || 0, r = Number(st.reps) || 0;
-      if (!w || !r || r > E1RM_REP_CAP) continue;
+      // w <= 0 rather than !w: a logged weight of -100 is truthy, and it used
+      // to come back out as a suggestion to load minus ninety pounds.
+      if (w <= 0 || r <= 0 || r > E1RM_REP_CAP) continue;
       if (!top || w > top.weight || (w === top.weight && r > top.reps)) {
         top = { weight: w, reps: r, rir: st.rir };
       }

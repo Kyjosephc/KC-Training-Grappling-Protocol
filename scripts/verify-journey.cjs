@@ -2331,5 +2331,58 @@ check("a second block is not the first block again", () => {
   if (same.length) throw new Error(`block two is identical to block one in: ${same.join(", ")}`);
 });
 
+
+console.log("\nA half-written record");
+check("a corrupt set never crashes or suggests nonsense", () => {
+  // None of these come from the UI. They come from a save that dropped
+  // halfway, a hand-edited record, or a sync that landed partially — and the
+  // screens that read them had no guard, so one bad row took out the
+  // suggestion, the record and the leaderboard rather than being skipped.
+  const problems = [];
+
+  // A negative weight produced a negative one-rep max, which then flowed into
+  // records and into the weight suggested for next time.
+  [[0, 0], [225, 0], [-50, 5], [225, -3], [NaN, 5], [225, NaN], [1e9, 5]].forEach(([w, r]) => {
+    let out;
+    try { out = A.est1RM(w, r); } catch (e) { problems.push(`est1RM(${w},${r}) threw`); return; }
+    if (!Number.isFinite(out) || out < 0) problems.push(`est1RM(${w},${r}) = ${out}`);
+  });
+
+  // A hole in the set array threw rather than being skipped.
+  [[null], [undefined], [{ weight: -100, reps: 5 }], [{ weight: 0, reps: 0 }], [{}]].forEach((sets, i) => {
+    let out;
+    try { out = A.bestSetOf(sets); } catch (e) { problems.push(`bestSetOf case ${i} threw: ${e.message}`); return; }
+    if (out && (!Number.isFinite(out.e1rm) || out.e1rm <= 0)) problems.push(`bestSetOf case ${i}: e1rm ${out.e1rm}`);
+  });
+
+  const log = (ex) => ({ logs: [{ date: "2026-10-01", exercises: ex }] });
+  [log([{ name: "Back Squat", sets: [null] }]),
+   log([{ name: "Back Squat", sets: [{ weight: -100, reps: 5 }] }]),
+   log([{ name: "Back Squat", sets: [{}] }]),
+   { logs: null }, {}].forEach((c, i) => {
+    let out;
+    try { out = A.suggestFromHistory(c, "Back Squat", { reps: "5" }, false); }
+    catch (e) { problems.push(`suggestFromHistory case ${i} threw: ${e.message}`); return; }
+    if (out && (!Number.isFinite(out.weight) || out.weight <= 0)) {
+      problems.push(`suggestFromHistory case ${i} suggested ${out.weight} lb`);
+    }
+  });
+
+  // An unparseable date reached toISOString and threw, which took the whole
+  // leaderboard calculation down instead of skipping the one row.
+  [{ logs: [{ date: "bad-date", totalVolume: 100 }] },
+   { logs: [{ date: "", totalVolume: 100 }] },
+   { logs: [{ totalVolume: 100 }] },
+   { logs: [{ date: "2026-10-01", totalVolume: -5 }] }].forEach((c, i) => {
+    let t;
+    try { t = A.leaderboardTotalsFor(c); } catch (e) { problems.push(`leaderboard case ${i} threw: ${e.message}`); return; }
+    if (!Number.isFinite(t.total) || !Number.isFinite(t.week) || t.total < 0 || t.week < 0) {
+      problems.push(`leaderboard case ${i}: ${JSON.stringify(t)}`);
+    }
+  });
+
+  if (problems.length) throw new Error(problems.slice(0, 5).join(" | "));
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);
