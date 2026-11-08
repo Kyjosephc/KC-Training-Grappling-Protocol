@@ -2491,6 +2491,53 @@ check("the database is what keeps one gym out of another", () => {
   }
 });
 
+check("a room that is a conversation opens as one", () => {
+  // A team's Team room is where "who is training Thursday" goes. It opened as
+  // a grid of clips, which for that room is a grid of nothing.
+  ["general", A.TEAM_DEFAULT_CHANNEL, "thisweek", "teamweek"].forEach((id) => {
+    if (!A.opensAsConversation(id)) throw new Error(`${id} opens as a wall of clips`);
+  });
+  ["passing", "leglocks", "teamclips", "halfguard"].forEach((id) => {
+    if (A.opensAsConversation(id)) throw new Error(`${id} opens as a column of text`);
+  });
+});
+
+check("a stored team id is not permission to be in that team", () => {
+  // Coming back to the team you were last in is a convenience. The membership
+  // is checked again, against the same approved test as everything else —
+  // otherwise a stale id in somebody's saved settings walks them back into a
+  // team they were removed from.
+  const teams = [
+    { id: "t1", name: "In", status: "approved" },
+    { id: "t2", name: "Waiting", status: "pending" },
+    { id: "t3", name: "Told no", status: "denied" },
+  ];
+  if (!A.restorableTeam(teams, "t1")) throw new Error("an approved membership was not restored");
+  ["t2", "t3", "t4", null, undefined, ""].forEach((id) => {
+    if (A.restorableTeam(teams, id)) throw new Error(`${JSON.stringify(id)} was restored into a team`);
+  });
+  if (A.restorableTeam([], "t1")) throw new Error("a team that is not in the list was restored");
+});
+
+check("a clip saved out of a team you left says so rather than going nowhere", () => {
+  // The post is still yours to look at — you saved it, and the database still
+  // serves it or it would not be in the list. Its room is not somewhere you
+  // can go, and offering to take you there opens a room that is empty by
+  // definition, because a team room holds nothing that is not the team's.
+  const teams = [{ id: "t1", name: "Infiniti Kryos", status: "approved" }];
+  const mine = A.savedPostHome({ team_id: "t1", channel: "teamclips" }, teams);
+  if (!mine.reachable || !mine.team) throw new Error("a clip from your own team was treated as unreachable");
+  if (mine.team.name !== "Infiniti Kryos") throw new Error("it points at the wrong team");
+  const gone = A.savedPostHome({ team_id: "t9", channel: "teamclips" }, teams);
+  if (gone.reachable || gone.team) throw new Error("a clip from a team you are not in still offered a way in");
+  // A public post needs no team and is always reachable.
+  const open = A.savedPostHome({ channel: "passing" }, teams);
+  if (!open.reachable || open.team) throw new Error("a public post was given a team");
+  [null, undefined].forEach((p) => {
+    if (!A.savedPostHome(p, teams).reachable) throw new Error("an empty post was called unreachable");
+  });
+});
+
 check("an invite code is stored the way it will be typed", () => {
   // A code is read off one screen and typed into another, often by somebody
   // standing in a gym. "Infiniti" and "INFINITI" are two different rows to a

@@ -499,6 +499,30 @@ const teamSeenKey = (teamId, channel) => `t:${teamId}:${channel}`;
 // Which read mark a room writes to, from where you are standing.
 const seenKeyFor = (channel, team) => (team ? teamSeenKey(team.id, channel) : channel);
 
+// Rooms that are a conversation open as one. The rest open as a wall of clips,
+// which is what they are for. A team's Team room is where "who is training
+// Thursday" goes, and a grid of nothing was the first thing it showed.
+const opensAsConversation = (channel) =>
+  channel === "general" || channel === TEAM_DEFAULT_CHANNEL || isWeekRoom(channel);
+
+// A stored team id is not permission. Coming back to the team you were last in
+// is a convenience; the membership is checked again every time, against the
+// same approved test everything else uses.
+function restorableTeam(teams, teamId) {
+  if (!teamId) return null;
+  return (teams || []).find((t) => t.id === teamId && t.status === "approved") || null;
+}
+
+// Where a saved post lives, and whether you can still get there. A clip saved
+// out of a team you have since left is still yours to look at — it was saved —
+// but its room is not somewhere you can go, and offering to take you there
+// lands in a room that is empty by definition.
+function savedPostHome(post, teams) {
+  if (!post || !post.team_id) return { team: null, reachable: true };
+  const team = restorableTeam(teams, post.team_id);
+  return { team, reachable: !!team };
+}
+
 // The filter every query that reads posts must carry, in one place so there is
 // one thing to be sure about rather than four. A team id fetches that team. No
 // team id fetches the open rooms — explicitly, with "team_id is null", not by
@@ -6625,6 +6649,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => { weekArchiveRef.current = weekArchive; }, [weekArchive]);
   const teamRef = useRef(null);
   useEffect(() => { teamRef.current = activeTeam; }, [activeTeam]);
+  // Once per visit. Without it, every poll would drag somebody back into the
+  // team they had just stepped out of.
+  const restoredRef = useRef(false);
 
   const loadTeams = useCallback(async () => {
     const mine = await fetchMyTeams(userId);
@@ -6633,11 +6660,25 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setTeamsOn(teamsReady());
     // A membership can be revoked while somebody is sitting in the room.
     setActiveTeam((cur) => {
-      if (!cur) return cur;
-      const still = mine.find((t) => t.id === cur.id && t.status === "approved");
-      return still || null;
+      if (cur) {
+        const still = mine.find((t) => t.id === cur.id && t.status === "approved");
+        return still || null;
+      }
+      // Back where you left off. Only if the membership is still good — a
+      // stored id is not permission, and the check is the same one as above.
+      if (!restoredRef.current && prefs?.teamId) {
+        const saved = restorableTeam(mine, prefs.teamId);
+        if (saved) {
+          restoredRef.current = true;
+          teamRef.current = saved;
+          setChannel(TEAM_DEFAULT_CHANNEL);
+          return saved;
+        }
+      }
+      restoredRef.current = true;
+      return cur;
     });
-  }, [userId]);
+  }, [userId, prefs?.teamId]);
   useEffect(() => { loadTeams(); }, [loadTeams]);
   const load = useCallback(async () => {
     const at = mutations.current;
@@ -6713,7 +6754,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // Tuesday night is a note, not a video.
   useEffect(() => {
     setOpenClipId(null);
-    setView(channel === "general" || isWeekRoom(channel) ? "feed" : "clips");
+    setView(opensAsConversation(channel) ? "feed" : "clips");
   }, [channel]);
 
   useEffect(() => {
@@ -6795,6 +6836,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     teamRef.current = team;
     setActiveTeam(team);
     setChannel(team ? TEAM_DEFAULT_CHANNEL : LANDING_CHANNEL);
+    if (savePrefs) savePrefs({ teamId: team ? team.id : null, channel: team ? TEAM_DEFAULT_CHANNEL : LANDING_CHANNEL });
   };
 
   const switchChannel = (next) => {
@@ -7095,11 +7137,27 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                     aria-label="Remove this from your saved list">
                     <Bookmark size={15} aria-hidden="true" /><span>Saved</span>
                   </button>
-                  {p.channel && (
-                    <button className="post-act" onClick={() => { setShowSaved(false); switchChannel(p.channel); }}>
-                      <span>Go to {channelMeta(p.channel).label}</span>
-                    </button>
-                  )}
+                  {p.channel && (() => {
+                    // A saved clip can be from a team. Opening its room without
+                    // opening the team lands in a room that is empty by
+                    // definition, because a team room holds nothing that is not
+                    // the team's. If the membership has gone, so has the way
+                    // back — the post is still here because it was saved, and
+                    // that is the honest thing to say.
+                    const { team: home, reachable } = savedPostHome(p, teams);
+                    if (!reachable) {
+                      return <span className="muted" style={{ fontSize: 12 }}>In a team you are no longer in</span>;
+                    }
+                    return (
+                      <button className="post-act" onClick={() => {
+                        setShowSaved(false);
+                        if (home) switchTeam(home);
+                        switchChannel(p.channel);
+                      }}>
+                        <span>Go to {channelMeta(p.channel).label}{home ? ` in ${home.name}` : ""}</span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </article>
             ))}
