@@ -89,7 +89,7 @@ function positionQuestions(rsId) {
 // Each step says what was held, because "takedown, pass, mount" is a list of
 // words and "you land them on their back, hold three seconds, clear the legs
 // into side control, hold three seconds" is a match.
-const SEQUENCES = [
+export const SEQUENCES = [
   { steps: ["takedown", "guardPass"],
     story: "You take your opponent down onto their back from standing and hold the top position for 3 seconds. They recover guard, you clear their legs into side control, and hold that for 3 seconds." },
   { steps: ["takedown", "guardPass", "mount"],
@@ -104,6 +104,24 @@ const SEQUENCES = [
     story: "You take them down and hold 3 seconds, pass into side control for 3 seconds, step into knee on belly for 3 seconds, then slide into mount and hold 3 seconds." },
   { steps: ["sweep", "mount"],
     story: "From your closed guard you reverse them and come straight up into mount, holding the mount for 3 seconds." },
+  // Appended rather than inserted: the Learn view calls sequenceWalkthrough
+  // with no index and gets 3, so renumbering the first seven would silently
+  // change which sequence the lesson teaches.
+  //
+  // Every step below is one of the seven positions all four rulesets score.
+  // A position a ruleset does not list scores zero rather than falling back,
+  // so a sequence built on ADCC's clean takedown would teach that IBJJF gives
+  // nothing for a takedown that lands past the guard, which is false.
+  { steps: ["guardPass", "mount", "backControl"],
+    story: "They pull guard and you get straight to work. You clear their legs into side control and hold it 3 seconds, climb up into mount for 3 seconds, and when they turn away you take their back with both heels hooked inside their thighs for 3 seconds." },
+  { steps: ["takedown", "backControl"],
+    story: "You take them down onto their back and hold the top position for 3 seconds. They turn to their knees to build back up, and instead of passing you ride the turn and take their back, both heels hooked inside their thighs, for 3 seconds. You never pass their guard at any point." },
+  { steps: ["sweep", "guardPass", "kneeOnBelly"],
+    story: "They are working to pass your guard when you reverse them and come up on top for 3 seconds. You clear their legs into side control and hold it 3 seconds, then post one foot wide and drive the near knee onto their stomach for 3 seconds." },
+  { steps: ["guardPass", "kneeOnBelly", "mount"],
+    story: "From inside their guard you clear the legs into side control and hold 3 seconds, step into knee on belly for 3 seconds, then slide the knee across their body into mount and hold that 3 seconds." },
+  { steps: ["takedown", "guardPass", "kneeOnBelly", "mount", "backControl"],
+    story: "You take them down and hold 3 seconds, clear their legs into side control for 3 seconds, step into knee on belly for 3 seconds, slide into mount for 3 seconds, and when they turn in to escape you take their back with both heels hooked inside their thighs for 3 seconds." },
 ];
 
 // ADCC is the one ruleset where WHEN in the match changes the answer, so its

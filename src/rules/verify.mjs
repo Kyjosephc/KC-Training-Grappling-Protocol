@@ -1,6 +1,6 @@
 import { RULESETS, RULESET_IDS, COMPARE_ROWS } from "./rulesets.js";
 import { REQUIREMENTS, SCENES } from "./requirements.js";
-import { buildQuestionBank, pickQuestions, rankFor } from "./engine.js";
+import { buildQuestionBank, pickQuestions, rankFor, SEQUENCES } from "./engine.js";
 const bank = buildQuestionBank();
 let fails = 0; const fail = (m) => { fails++; console.log("  FAIL " + m); };
 
@@ -13,6 +13,24 @@ bank.forEach(q => {
   if (q.options.length < 2) fail(`${q.id}: fewer than 2 options`);
 });
 console.log(`structure: ${bank.length} questions checked`);
+
+// 1b. A sequence may only use positions that every ruleset scores.
+// sequenceWalkthrough gives a position a ruleset does not list zero points and
+// the line "does not score this position at all". For a shared sequence that
+// is a lie told confidently: ADCC alone has a clean takedown, so a sequence
+// built on one would teach that IBJJF awards nothing for a takedown landing
+// past the guard. The seven shared positions are the whole safe vocabulary.
+SEQUENCES.forEach((seq, i) => {
+  if (!seq.story || seq.story.length < 40) fail(`sequence ${i}: no story worth reading`);
+  if (!Array.isArray(seq.steps) || seq.steps.length < 2) fail(`sequence ${i}: fewer than two steps`);
+  (seq.steps || []).forEach((k) => {
+    RULESET_IDS.forEach((id) => {
+      const sc = RULESETS[id].scoring[k];
+      if (!sc || sc.points == null) fail(`sequence ${i} uses "${k}", which ${RULESETS[id].name} does not score`);
+    });
+  });
+});
+console.log(`sequences: ${SEQUENCES.length} checked against all ${RULESET_IDS.length} rulesets`);
 
 // 2. The question must not contain its own answer.
 // This is the check that would have caught "Knees above the shoulder line does
