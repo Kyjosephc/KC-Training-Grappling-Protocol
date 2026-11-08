@@ -1886,6 +1886,83 @@ function fmtRatio(r) {
   return `${n >= 10 ? Math.round(n).toLocaleString() : n.toFixed(1)}\u00d7`;
 }
 
+// The weeks a standing is published for: this one and the one before it. The
+// previous week is included because somebody who trains Saturday and does not
+// open the app until Tuesday would otherwise never have last week recorded,
+// and a week nobody published is a week nobody won.
+function recentWeekStarts(todayS, n) {
+  const out = [];
+  const d = new Date(String(todayS) + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return out;
+  for (let i = 0; i < n; i++) {
+    const ws = weekStartOf(toLocalDateStr(d));
+    if (ws && !out.includes(ws)) out.push(ws);
+    d.setDate(d.getDate() - 7);
+  }
+  return out;
+}
+
+// One row per week, from this athlete's own logs. The ratio is what ranks —
+// the same bodyweight-relative number the board already uses, because a
+// medal decided on raw tonnage is a medal for being heavy.
+function weekRatiosFor(client, weeks, todayS) {
+  const logs = (client && client.logs) || [];
+  const bw = latestBodyweight(client);
+  const byWeek = {};
+  logs.forEach((l) => {
+    const ws = l && l.date ? weekStartOf(l.date) : null;
+    if (!ws) return;
+    byWeek[ws] = (byWeek[ws] || 0) + Math.max(0, Math.round(l.totalVolume || 0));
+  });
+  return recentWeekStarts(todayS || todayStr(), weeks || 2).map((ws) => {
+    const lbs = byWeek[ws] || 0;
+    return { weekStart: ws, lbs, ratio: bw ? Number((lbs / bw).toFixed(2)) : 0 };
+  });
+}
+
+// Gold, silver and bronze for each week that has finished. Derived rather
+// than awarded: there is no moment when something has to run and no row that
+// has to be written at the right time, so a medal cannot be missed because
+// nobody had the app open on a Sunday night. A week recomputes if somebody
+// syncs late, which is the honest answer — they did do that work.
+const MEDAL_PLACES = ["gold", "silver", "bronze"];
+function medalTally(rows, currentWeekStart) {
+  const byWeek = new Map();
+  (rows || []).forEach((r) => {
+    if (!r || !r.user_id || !r.week_start) return;
+    // The week in progress has not been won yet.
+    if (currentWeekStart && String(r.week_start) >= String(currentWeekStart)) return;
+    const ratio = Number(r.ratio) || 0;
+    // A week you did not train is not a week you came third in.
+    if (ratio <= 0) return;
+    if (!byWeek.has(r.week_start)) byWeek.set(r.week_start, []);
+    byWeek.get(r.week_start).push({ user_id: r.user_id, ratio });
+  });
+  const tally = {};
+  byWeek.forEach((list) => {
+    // Sorted by id after ratio, so a tie lands the same way for everybody
+    // looking at it rather than however the rows happened to arrive.
+    list.sort((a, b) => (b.ratio - a.ratio) || String(a.user_id).localeCompare(String(b.user_id)));
+    list.slice(0, MEDAL_PLACES.length).forEach((row, i) => {
+      const t = tally[row.user_id] || (tally[row.user_id] = { gold: 0, silver: 0, bronze: 0 });
+      t[MEDAL_PLACES[i]] += 1;
+    });
+  });
+  return tally;
+}
+
+// "2 gold, 1 bronze" for a screen reader; the medals themselves for everyone
+// else. Nothing at all for somebody who has not won one, rather than three
+// zeroes, which reads as a scoreboard of failure.
+function medalCountsLabel(t) {
+  if (!t) return "";
+  const parts = [];
+  if (t.gold) parts.push(`${t.gold} gold`);
+  if (t.silver) parts.push(`${t.silver} silver`);
+  if (t.bronze) parts.push(`${t.bronze} bronze`);
+  return parts.join(", ");
+}
+
 // First name plus last initial. A leaderboard has to name people or it is not
 // one, but it does not have to publish a full legal name to strangers.
 function leaderboardNameFor(client) {
@@ -1898,12 +1975,73 @@ function leaderboardNameFor(client) {
   return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.` : parts[0];
 }
 
+// supabase-leaderboard-medals.sql has not been run. Medals are simply absent
+// until it has — the board works exactly as it did before.
+let weeksMissing = false;
+const weeksReady = () => !weeksMissing;
+function isMissingWeeks(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  if (code === "42P01" || code === "PGRST205") return true;
+  const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
+  return msg.includes("leaderboard_weeks")
+    && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
+}
+
+async function publishWeeks(userId, client) {
+  if (!supabase || !userId || !client || !weeksReady()) return { ok: false };
+  const rows = weekRatiosFor(client, 2)
+    .filter((w) => w.lbs > 0)
+    .map((w) => ({
+      user_id: userId, week_start: w.weekStart, lbs: w.lbs, ratio: w.ratio,
+      display_name: leaderboardNameFor(client), updated_at: new Date().toISOString(),
+    }));
+  if (!rows.length) return { ok: true };
+  const { error } = await supabase.from("leaderboard_weeks")
+    .upsert(rows, { onConflict: "user_id,week_start" });
+  if (error) {
+    if (isMissingWeeks(error)) { weeksMissing = true; return { ok: false }; }
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
+async function removeWeeks(userId) {
+  if (!supabase || !userId || !weeksReady()) return;
+  try { await supabase.from("leaderboard_weeks").delete().eq("user_id", userId); } catch { /* opting out is best effort */ }
+}
+
+const MEDAL_WEEKS = 40;
+async function fetchMedalWeeks() {
+  if (!supabase || !weeksReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("leaderboard_weeks")
+      .select("user_id, week_start, ratio")
+      .order("week_start", { ascending: false })
+      .limit(MEDAL_WEEKS * 50);
+    if (error) {
+      if (isMissingWeeks(error)) return "missing";
+      throw error;
+    }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === "missing") { weeksMissing = true; return []; }
+  return outcome.ok ? outcome.result : [];
+}
+
 async function publishStanding(userId, client) {
   if (!supabase || !userId || !client) return { ok: false };
   // Opting out has to remove the row, not merely stop refreshing it. Skipping
   // the write would leave whatever was last published sitting on the board for
   // good, which is the opposite of what the switch says it does.
-  if (client.leaderboardOptOut) { await removeStanding(userId); return { ok: true, optedOut: true }; }
+  // Opting out takes the week history with it. Leaving those rows behind
+  // would keep somebody in other people's medal counts after they asked to
+  // come off the board.
+  if (client.leaderboardOptOut) {
+    await removeStanding(userId);
+    await removeWeeks(userId);
+    return { ok: true, optedOut: true };
+  }
   const { total, week, weekStart, totalRatio, weekRatio } = leaderboardTotalsFor(client);
   const outcome = await withRetry(async () => {
     const { error } = await supabase.from("leaderboard").upsert({
@@ -1919,6 +2057,9 @@ async function publishStanding(userId, client) {
     if (error) throw error;
     return true;
   });
+  // The week rows are their own write and their own failure. A board that
+  // published and medals that did not is better than neither.
+  await publishWeeks(userId, client);
   // Silent on failure. A standing that did not publish is worth nothing to
   // interrupt a session over, and the next finish republishes it.
   return { ok: outcome.ok };
@@ -7889,7 +8030,7 @@ const PROGRESS_VIEWS = [
 
 const MEDALS = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
 
-function BoardList({ rows, ratioField, lbsField, youId, empty }) {
+function BoardList({ rows, ratioField, lbsField, youId, empty, medals }) {
   if (!rows.length) return <p className="muted" style={{ marginBottom: 0 }}>{empty}</p>;
   return (
     <ol className="board-list">
@@ -7898,6 +8039,21 @@ function BoardList({ rows, ratioField, lbsField, youId, empty }) {
           <span className="board-rank">{MEDALS[i] || i + 1}</span>
           <span className="board-name">
             {r.display_name || "Athlete"}{r.user_id === youId ? " (you)" : ""}
+            {(() => {
+              const t = medals && medals[r.user_id];
+              const label = medalCountsLabel(t);
+              if (!label) return null;
+              return (
+                <span className="board-medals" title={label}>
+                  <span aria-hidden="true">
+                    {t.gold ? `${MEDALS[0]}${t.gold}` : ""}
+                    {t.silver ? `${MEDALS[1]}${t.silver}` : ""}
+                    {t.bronze ? `${MEDALS[2]}${t.bronze}` : ""}
+                  </span>
+                  <span className="sr-only">{label} from finished weeks</span>
+                </span>
+              );
+            })()}
             <span className="board-sub">{fmtRatio(r[ratioField])} bodyweight</span>
           </span>
           <span className="board-lbs">{fmtTonnage(r[lbsField] || 0)}</span>
@@ -7912,11 +8068,16 @@ function BoardList({ rows, ratioField, lbsField, youId, empty }) {
 function LeaderboardTab({ client, userId }) {
   const [board, setBoard] = useState(null);
   const [failed, setFailed] = useState(false);
+  // Worked out here rather than stored anywhere: the weeks are the record and
+  // the medals are what they add up to.
+  const [medals, setMedals] = useState(null);
   const load = useCallback(async () => {
     const res = await fetchLeaderboard();
     if (res === LOAD_FAILED) { setFailed(true); return; }
     setFailed(false);
     setBoard(res);
+    const weeks = await fetchMedalWeeks();
+    setMedals(weeks.length ? medalTally(weeks, weekStartOf(todayStr())) : null);
   }, []);
   useEffect(() => {
     load();
@@ -7948,11 +8109,13 @@ function LeaderboardTab({ client, userId }) {
 
       <Card title="This Week" subtitle="Times your bodyweight · resets every Monday">
         {board ? <BoardList rows={board.weekly} ratioField="week_ratio" lbsField="week_lbs" youId={userId}
+          medals={medals}
           empty="Nobody has logged a session yet this week. Be the first." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
       </Card>
 
       <Card title="All Time" subtitle="Times your bodyweight, since you joined">
         {board ? <BoardList rows={board.allTime} ratioField="total_ratio" lbsField="total_lbs" youId={userId}
+          medals={medals}
           empty="No sessions logged yet." /> : <p className="muted" style={{ marginBottom: 0 }}>Loading…</p>}
       </Card>
 
@@ -14380,6 +14543,8 @@ function GlobalStyle() {
       .board-list { list-style: none; margin: 0; padding: 0; }
       .board-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
       .board-row:last-child { border-bottom: none; }
+      .board-medals { display: inline-flex; gap: 5px; margin-left: 7px; font-size: 11.5px;
+        font-weight: 700; letter-spacing: 0.02em; vertical-align: middle; }
       .board-rank { font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 600; min-width: 26px; text-align: center; color: var(--text-dim); flex-shrink: 0; }
       .board-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; overflow: hidden; }
       .board-sub { display: block; font-weight: 400; font-size: 11.5px; color: var(--text-dim); margin-top: 1px; }

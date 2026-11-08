@@ -2348,6 +2348,113 @@ check("a team post is never retried as a post with no room", () => {
   });
 });
 
+console.log("\nMedals");
+
+check("only a finished week is won", () => {
+  // The week in progress has not been won by anybody yet. Counting it means
+  // a medal that appears on Tuesday and is gone by Thursday.
+  const rows = [
+    { user_id: "a", week_start: "2026-11-02", ratio: 9 },
+    { user_id: "b", week_start: "2026-11-02", ratio: 5 },
+    { user_id: "c", week_start: "2026-11-09", ratio: 99 },
+  ];
+  const t = A.medalTally(rows, "2026-11-09");
+  if (t.c) throw new Error("the week in progress handed out a medal");
+  if (!t.a || t.a.gold !== 1) throw new Error("the finished week did not hand out gold");
+  if (!t.b || t.b.silver !== 1) throw new Error("second place got nothing");
+  // With no current week given, everything counts — which is what a caller
+  // asking for the whole history means.
+  if (!A.medalTally(rows, null).c) throw new Error("asking for every week still skipped one");
+});
+
+check("a week you did not train is not a week you came third in", () => {
+  const rows = [
+    { user_id: "a", week_start: "2026-11-02", ratio: 9 },
+    { user_id: "b", week_start: "2026-11-02", ratio: 0 },
+    { user_id: "c", week_start: "2026-11-02", ratio: 0 },
+  ];
+  const t = A.medalTally(rows, "2026-11-09");
+  if (t.b || t.c) throw new Error("somebody who logged nothing was given a medal");
+  if (t.a.gold !== 1) throw new Error("the one person who trained did not win");
+  // Three places, and a fourth finisher gets nothing. Without the cut every
+  // entrant is handed a medal under a name that does not exist, which counts
+  // as NaN rather than failing loudly.
+  const five = A.medalTally(
+    ["a", "b", "c", "d", "e"].map((u, i) => ({ user_id: u, week_start: "2026-11-02", ratio: 10 - i })),
+    "2026-11-09");
+  if (Object.keys(five).length !== 3) {
+    throw new Error(`${Object.keys(five).length} athletes were given medals for one week`);
+  }
+  if (five.d || five.e) throw new Error("fourth place was given a medal");
+  Object.entries(five).forEach(([who, t]) => {
+    const n = (t.gold || 0) + (t.silver || 0) + (t.bronze || 0);
+    if (n !== 1) throw new Error(`${who} came away with ${n} medals from one week`);
+    if (!Number.isFinite(n)) throw new Error(`${who} has a medal count that is not a number`);
+  });
+
+  // Two people means gold and silver and no bronze, not bronze by default.
+  const two = A.medalTally([
+    { user_id: "a", week_start: "2026-11-02", ratio: 9 },
+    { user_id: "b", week_start: "2026-11-02", ratio: 4 },
+  ], "2026-11-09");
+  if (Object.values(two).some((x) => x.bronze)) throw new Error("bronze was awarded with nobody in third");
+});
+
+check("medals add up across weeks, and a tie lands the same way for everyone", () => {
+  const rows = [];
+  ["2026-10-05", "2026-10-12", "2026-10-19"].forEach((w) => {
+    rows.push({ user_id: "a", week_start: w, ratio: 9 });
+    rows.push({ user_id: "b", week_start: w, ratio: 5 });
+    rows.push({ user_id: "c", week_start: w, ratio: 1 });
+  });
+  const t = A.medalTally(rows, "2026-11-09");
+  if (t.a.gold !== 3) throw new Error(`three wins counted as ${t.a.gold}`);
+  if (t.b.silver !== 3 || t.c.bronze !== 3) throw new Error("the other places did not add up");
+  if (t.a.silver || t.a.bronze) throw new Error("winning gold also counted as something else");
+  // A dead heat has to resolve identically wherever it is computed, or two
+  // athletes see different medal counts for the same week.
+  const tie = [
+    { user_id: "zoe", week_start: "2026-10-05", ratio: 5 },
+    { user_id: "abe", week_start: "2026-10-05", ratio: 5 },
+  ];
+  const one = A.medalTally(tie, "2026-11-09");
+  const other = A.medalTally([...tie].reverse(), "2026-11-09");
+  if (JSON.stringify(one) !== JSON.stringify(other)) {
+    throw new Error("the same tie produced different medals depending on row order");
+  }
+});
+
+check("a medal count says nothing when there is nothing to say", () => {
+  if (A.medalCountsLabel(null) !== "") throw new Error("no medals produced a label");
+  if (A.medalCountsLabel({ gold: 0, silver: 0, bronze: 0 }) !== "") {
+    throw new Error("three zeroes were printed as a scoreboard of failure");
+  }
+  const label = A.medalCountsLabel({ gold: 2, silver: 0, bronze: 1 });
+  if (!/2 gold/.test(label) || !/1 bronze/.test(label)) throw new Error(`it reads "${label}"`);
+  if (/silver/.test(label)) throw new Error(`a place they have not won is listed: "${label}"`);
+});
+
+check("the weeks published are this one and the one before", () => {
+  // Somebody who trains Saturday and opens the app on Tuesday would otherwise
+  // never have last week recorded, and a week nobody published is a week
+  // nobody won.
+  const weeks = A.recentWeekStarts("2026-11-11", 2);
+  if (weeks.length !== 2) throw new Error(`published ${weeks.length} weeks`);
+  if (weeks[0] !== A.weekStartOf("2026-11-11")) throw new Error("this week is not among them");
+  if (weeks[0] <= weeks[1]) throw new Error("the two weeks are not this one and an earlier one");
+  // A volume lands in the week it was done, not the week it was uploaded.
+  const client = { logs: [
+    { date: "2026-11-10", totalVolume: 20000 },
+    { date: "2026-11-05", totalVolume: 10000 },
+  ], bodyweightLog: [{ date: "2026-11-01", weight: 200 }] };
+  const got = A.weekRatiosFor(client, 2, "2026-11-11");
+  const thisW = got.find((w) => w.weekStart === A.weekStartOf("2026-11-10"));
+  const lastW = got.find((w) => w.weekStart === A.weekStartOf("2026-11-05"));
+  if (!thisW || thisW.lbs !== 20000) throw new Error(`this week came to ${thisW && thisW.lbs}`);
+  if (!lastW || lastW.lbs !== 10000) throw new Error(`last week came to ${lastW && lastW.lbs}`);
+  if (!(thisW.ratio > 0)) throw new Error("the ratio the board ranks on was not worked out");
+});
+
 check("handing a team over does not lock the leader out halfway through", () => {
   // is_team_leader() is what lets a leader write to team_members. Moving
   // teams.leader_id first makes that false on the very next statement, and
