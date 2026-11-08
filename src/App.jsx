@@ -13572,7 +13572,7 @@ function GlobalStyle() {
       .app-shell[data-theme="light"] { --belt-fill: var(--bg); --belt-ink: var(--text); --belt-on-fill: var(--text); --bg:#eceef1; --card:#ffffff; --border:#d2d6dc; --field-border:#7d828b; --text:#0a0b0d; --text-dim:#585c63; --accent:#00705f; --accent-text:#ffffff; --cta:#00705f; --cta2:#00705f; --green:#3f7d4a; --amber:#a9790d; --red:#a93226; --info:#1565c0; --neon-gold:#756800; }
       .app-shell::before { content: ""; position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: radial-gradient(ellipse 100% 60% at 50% 0%, var(--belt-glow, transparent) 0%, transparent 85%); opacity: 0.38; pointer-events: none; z-index: 0; }
       .app-shell::after { content: ""; position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; height: 6px; background: var(--belt-glow, transparent); opacity: 0.95; pointer-events: none; z-index: 6; box-shadow: 0 0 12px var(--belt-glow, transparent); }
-      .app-shell > * { position: relative; z-index: 1; }
+      .app-shell > * { position: relative; }
       * { box-sizing: border-box; }
       /* Fixed, above the session overlay (z-index 50): the one place this
          message matters is mid-session in a gym basement, and in normal flow it
@@ -14090,9 +14090,12 @@ function GlobalStyle() {
       .sig-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-dim); }
       .bjj-toggle { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 16px; cursor: pointer; }
       .bjj-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
-      .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
-      .modal-box { background: var(--bg); width: 100%; max-width: 480px; max-height: 88dvh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; overflow: hidden; }
-      .modal-overlay.fullscreen .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; }
+      .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex;
+        align-items: center; justify-content: center; padding: 16px; }
+      .modal-box { background: var(--bg); width: 100%; max-width: 480px; max-height: calc(100dvh - 32px);
+        border: 1px solid var(--border); border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; }
+      .modal-overlay.fullscreen { padding: 0; }
+      .modal-overlay.fullscreen .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; border: 0; }
       .modal-overlay.fullscreen .modal-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
       .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px; }
       .modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 16px; flex: 1; }
