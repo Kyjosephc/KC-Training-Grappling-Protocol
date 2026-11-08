@@ -6449,6 +6449,26 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
   );
 }
 
+// Teams switch themselves off when the database has not got them yet, which is
+// right — a half-present teams feature is the one shape this must never take.
+// Switching off silently was not: the only person who can do anything about it
+// had no way of knowing why the thing he had just built was not on the screen.
+// An athlete is shown nothing, because there is nothing they can do with a
+// migration filename.
+function TeamsOffNote({ isCoach }) {
+  if (!isCoach) return null;
+  return (
+    <div className="adjust-box" style={{ marginBottom: 10 }}>
+      <strong>Teams aren't switched on yet.</strong>
+      <p style={{ margin: "4px 0 0" }}>
+        Run supabase-rooms-v2.sql and then supabase-teams.sql in the Supabase SQL editor.
+        Until then nobody sees teams at all — which is deliberate, because half a private
+        room is not a private room.
+      </p>
+    </div>
+  );
+}
+
 function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel = {} }) {
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
@@ -7052,6 +7072,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
       {/* Which side of the wall you are standing on. Above the room bar
           because it is the bigger question: a room called This week means two
           different things depending on the answer. */}
+      {!teamsOn && <TeamsOffNote isCoach={isCoach} />}
+
       {teamsOn && (
         <button type="button" className="team-bar" onClick={() => setTeamPanel(true)}
           aria-haspopup="dialog"

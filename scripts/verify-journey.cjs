@@ -2491,6 +2491,22 @@ check("the database is what keeps one gym out of another", () => {
   }
 });
 
+check("teams switching themselves off tells the one person who can fix it", () => {
+  // The fail-safe is right and the silence was not: the feature hid itself and
+  // the only person able to act on it got no reason why.
+  unmount();
+  mount(React.createElement(A.TeamsOffNote, { isCoach: true }));
+  const coach = txt();
+  if (!/teams aren't switched on/i.test(coach)) throw new Error("the coach is told nothing");
+  if (!/supabase-teams\.sql/i.test(coach)) throw new Error("it does not say which migration to run");
+  unmount();
+  // An athlete can do nothing with a migration filename, so it is not put in
+  // front of them.
+  mount(React.createElement(A.TeamsOffNote, { isCoach: false }));
+  if (txt().trim()) throw new Error(`an athlete is shown "${txt().trim()}"`);
+  unmount();
+});
+
 check("the app has one name and it is the same everywhere", () => {
   // The name lives in the browser title, the home screen title, the web
   // manifest, the service worker, the share sheet, the waiver and two separate
