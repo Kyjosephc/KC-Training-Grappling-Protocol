@@ -8627,10 +8627,18 @@ function MainApp({ userId, onSignOut }) {
         <WaiverModal
           dismissible={false}
           defaultName={client.name && client.name !== "Athlete" ? client.name : [client.firstName, client.lastName].filter(Boolean).join(" ")}
-          onAccept={async ({ signature }) => {
+          onAccept={async ({ signature, drawn, drawnSkipped }) => {
             // A signed release that only exists in local state is not a record.
             // If the write fails the gate stays shut and the modal stays open.
-            const signed = { ...client, waiver: { at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: client.name || "", document: waiverDocument() } };
+            const signed = { ...client, waiver: {
+              at: new Date().toISOString(), version: WAIVER_VERSION, signature,
+              drawn: drawn || null, drawnSkipped: !!drawnSkipped,
+              name: client.name || "", document: waiverDocument(),
+              // Re-signing a new version must not quietly destroy the signature
+              // they gave against the old one. That older release still stood
+              // for the period it covered, so it is kept rather than overwritten.
+              history: priorWaivers(client.waiver),
+            } };
             const saved = await setClient(userId, signed.id, signed);
             if (!saved || saved.ok === false) {
               emitToast({ kind: "error", message: "Couldn't save your signature — check your connection and try again.", autoDismissMs: 7000 });
@@ -8855,7 +8863,7 @@ function OnboardingScreen({ onSubmit }) {
       </p>
       </>) : (
         <p className="signup-waiver-done">
-          Waiver signed by {waiver.signature} on {fmtDateTime(waiver.at)}.{" "}
+          Waiver signed by {waiver.signature}{waiver.drawn ? ", by hand and by name," : ""} on {fmtDateTime(waiver.at)}.{" "}
           <button type="button" className="link-btn" onClick={() => setShowWaiver(true)}>Read it again</button>
           {" · "}
           <button type="button" className="link-btn" onClick={() => setShowTerms(true)}>Terms &amp; Privacy</button>
@@ -8993,7 +9001,7 @@ function OnboardingScreen({ onSubmit }) {
           onClose={() => setShowWaiver(false)}
           accepted={waiver}
           defaultName={`${firstName.trim()} ${lastName.trim()}`.trim()}
-          onAccept={({ signature }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, name: `${firstName.trim()} ${lastName.trim()}`.trim(), document: waiverDocument() }); setShowWaiver(false); }}
+          onAccept={({ signature, drawn, drawnSkipped }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, drawn: drawn || null, drawnSkipped: !!drawnSkipped, name: `${firstName.trim()} ${lastName.trim()}`.trim(), document: waiverDocument() }); setShowWaiver(false); }}
         />
       )}
     </div>
@@ -9113,7 +9121,7 @@ const TUTORIAL_PAGES = [
 // Bump WAIVER_VERSION at the same time so athletes re-sign against the new name.
 const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Open Mat";
 
-const WAIVER_VERSION = "2026-11-07";
+const WAIVER_VERSION = "2026-11-08";
 const WAIVER_TITLE = "Assumption of Risk and Release of Liability";
 const WAIVER_SECTIONS = [
   { heading: "What you are agreeing to",
@@ -9129,7 +9137,7 @@ const WAIVER_SECTIONS = [
   { heading: "If part of this does not hold",
     body: "If a court finds any part of this agreement unenforceable, the rest of it stays in force. This agreement is governed by the laws of the State of Washington and binds your heirs and anyone acting on your behalf." },
   { heading: "Signing it",
-    body: `Typing your full legal name in the signature field below is your signature on this agreement, and you intend it to have the same effect as signing it by hand. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your signature, the date and time you sign, and the version of this wording are recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
+    body: `You sign this agreement twice below: once by drawing your signature with your mouse, your finger or a stylus, and once by typing your full legal name. The two together are your signature on this agreement, and you intend them to have the same effect as signing it by hand on paper. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your drawn signature, your typed name, the date and time you sign, and the version of this wording are all recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
 ];
 
 // The wording itself, as an object that can be stored. A version string says
@@ -9155,6 +9163,21 @@ function waiverDocument() {
 //            date and its version are still on file and still stand; the words
 //            are not, and printing today's text over an old signature would be
 //            inventing a document.
+// Signatures given against earlier versions of the wording. Bumping the version
+// asks everybody to sign again, and the naive way to handle that is to write the
+// new signature over the old one — which throws away the only evidence that the
+// athlete accepted the terms that were in force last month. Keep them.
+const WAIVER_HISTORY_MAX = 6;
+function priorWaivers(waiver) {
+  const past = (waiver && Array.isArray(waiver.history) ? waiver.history : []).slice();
+  if (waiver && waiver.at) {
+    const self = { ...waiver };
+    delete self.history;
+    past.push(self);
+  }
+  return past.slice(-WAIVER_HISTORY_MAX);
+}
+
 function waiverDocumentFor(waiver) {
   if (!waiver || !waiver.at) return null;
   const doc = waiver.document;
@@ -9174,6 +9197,11 @@ function waiverCopyLines(name, waiver) {
   lines.push("");
   lines.push("Athlete:   " + who);
   lines.push("Signed:    " + (waiver.signature || "(no signature on file)"));
+  lines.push("By hand:   " + (hasDrawnSignature(waiver.drawn)
+    ? "yes — a drawn signature is on file (shown in the app, and in the printable copy)"
+    : waiver.drawnSkipped
+      ? "no — the athlete reported being unable to draw one on their device"
+      : "no"));
   lines.push("Dated:     " + new Date(waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
   lines.push("Timestamp: " + waiver.at);
   lines.push("Version:   " + (waiver.version || "unversioned"));
@@ -9216,26 +9244,287 @@ function waiverCopyLines(name, waiver) {
   return lines;
 }
 
+const esc = (x) => String(x == null ? "" : x)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// One athlete's copy as a single self-contained file. HTML rather than plain
+// text for one reason: a drawn signature is the point of signing by hand, and a
+// .txt file cannot carry it. This opens in any browser, prints to paper or PDF,
+// and the signature travels inside it as vector drawing — no attachments, no
+// linked images, nothing to go missing.
+function waiverCopyHTML(name, waiver) {
+  const doc = waiverDocumentFor(waiver);
+  const who = (name || waiver.name || "Athlete").trim();
+  const d = sigPathData(waiver.drawn);
+  const vw = (waiver.drawn && Number(waiver.drawn.w)) || PAD_W;
+  const vh = (waiver.drawn && Number(waiver.drawn.h)) || PAD_H;
+  const ink = d
+    ? '<svg class="ink" viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="xMinYMid meet" role="img" aria-label="Handwritten signature">'
+      + '<path d="' + esc(d) + '" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<p class="note">' + (waiver.drawnSkipped
+        ? "No drawn signature is on file: the athlete reported being unable to draw one on their device."
+        : "No drawn signature is on file for this signature.") + '</p>';
+  const body = !doc
+    ? '<div class="warn"><strong>The wording of this agreement is not on file.</strong><p>This signature predates the app keeping a copy of the wording with it, and version '
+      + esc(waiver.version || "unversioned")
+      + ' is no longer the one in use. The signature, its date and its version above are a complete record that this athlete accepted that version. Showing today\'s wording over an older signature would be representing it as something it is not, so it is not shown.</p></div>'
+    : '<h2>' + esc(doc.title) + '</h2>'
+      + doc.sections.map((sec) => '<h3>' + esc(sec.heading) + '</h3><p>' + esc(sec.body) + '</p>').join("")
+      + '<p class="note">' + (doc.source === "signed"
+        ? "The wording above is the copy stored with this signature at the moment it was given. It is not regenerated from the current version of the app."
+        : "This signature was given before the app stored the wording alongside it. The text above is version " + esc(doc.version) + ", which is the version recorded against the signature and is still the version in use, so it is the wording that was agreed to.") + '</p>';
+  const mismatch = waiver.signature && waiver.name
+    && waiver.signature.trim().toLowerCase() !== waiver.name.trim().toLowerCase()
+    ? '<p class="warn">Signed as <strong>' + esc(waiver.signature) + '</strong> against the profile name <strong>' + esc(waiver.name) + '</strong>.</p>'
+    : "";
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<title>Signed waiver — ' + esc(who) + '</title><style>'
+    + 'body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;max-width:46em;margin:0 auto;padding:32px 20px 64px}'
+    + 'h1{font-size:19px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 20px}'
+    + 'h2{font-size:17px;margin:28px 0 14px}h3{font-size:14px;margin:20px 0 4px}'
+    + 'p{margin:0 0 10px}dl{margin:0 0 20px}dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin-top:10px}'
+    + 'dd{margin:1px 0 0;font-weight:600}.ink{display:block;width:100%;max-width:340px;height:110px;margin:4px 0 2px}'
+    + '.rule{border-top:1px solid #111;max-width:340px;margin:0 0 4px}.cap{font-size:11px;color:#666;max-width:340px}'
+    + '.lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin:0 0 2px}'
+    + '.note{font-size:12.5px;color:#555;margin-top:18px}.warn{font-size:13px;border-left:3px solid #b45309;padding-left:12px;margin:18px 0}'
+    + 'hr{border:none;border-top:1px solid #ddd;margin:26px 0}@media print{body{padding:0}}'
+    + '</style></head><body>'
+    + '<h1>' + esc(((doc && doc.provider) || PROVIDER)) + ' &mdash; Signed liability waiver</h1>'
+    + '<dl><dt>Athlete</dt><dd>' + esc(who) + '</dd>'
+    + '<dt>Dated</dt><dd>' + esc(new Date(waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })) + '</dd>'
+    + '<dt>Timestamp</dt><dd>' + esc(waiver.at) + '</dd>'
+    + '<dt>Version</dt><dd>' + esc(waiver.version || "unversioned") + '</dd></dl>'
+    + mismatch
+    + '<p class="lbl">Signed by hand</p>' + ink + '<div class="rule"></div><p class="cap">Drawn signature</p>'
+    + '<p style="font-size:26px;margin:18px 0 2px">' + esc(waiver.signature || "(no typed signature on file)") + '</p>'
+    + '<div class="rule"></div><p class="cap">Typed signature</p>'
+    + '<hr>' + body + '</body></html>';
+}
+
 function downloadWaiverCopy(name, waiver) {
-  const blob = new Blob([waiverCopyLines(name, waiver).join("\n")], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([waiverCopyHTML(name, waiver)], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   const slug = String(name || waiver.name || "athlete").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  a.download = "waiver-" + (slug || "athlete") + "-" + toLocalDateStr(new Date(waiver.at)) + ".txt";
+  a.download = "waiver-" + (slug || "athlete") + "-" + toLocalDateStr(new Date(waiver.at)) + ".html";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// The signature block. Typing your own name into it is the act of signing — so it
-// is rendered in a hand it would be signed in, over a rule, with the date beside
-// it, the way it would look on paper.
-function SignatureBlock({ value, onChange, dated }) {
+// A signature somebody actually draws. The strokes are stored as plain
+// coordinates rather than as a PNG, and that is a deliberate choice: the record
+// is a fraction of the size, it stays crisp at any scale, it embeds in a printed
+// copy without a base64 blob — and it does not need a working canvas to BE a
+// record. The canvas below is only the surface you draw on. The strokes are the
+// signature, and they outlive the thing that captured them.
+const PAD_W = 600;
+const PAD_H = 180;
+// Enough travel to be a mark somebody meant to make, rather than a click that
+// landed on the pad by accident. A short signature still clears this easily.
+const SIG_MIN_INK = 40;
+
+function sigInk(strokes) {
+  let total = 0;
+  (strokes || []).forEach((st) => {
+    const pts = st || [];
+    for (let i = 1; i < pts.length; i++) {
+      total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    }
+  });
+  return total;
+}
+function hasDrawnSignature(drawn) {
+  if (!drawn || !Array.isArray(drawn.strokes) || !drawn.strokes.length) return false;
+  return sigInk(drawn.strokes) >= SIG_MIN_INK;
+}
+function sigPathData(drawn) {
+  if (!drawn || !Array.isArray(drawn.strokes)) return "";
+  return drawn.strokes
+    .filter((st) => Array.isArray(st) && st.length)
+    .map((st) => st.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" "))
+    .join(" ");
+}
+
+// The drawn signature, rendered. Used in the athlete's copy, in the coach's
+// copy, and in the printable file — all from the same stored strokes, so what
+// gets printed is what was drawn.
+function SignatureInk({ drawn, className }) {
+  const d = sigPathData(drawn);
+  if (!d) return null;
+  const w = Number(drawn.w) || PAD_W;
+  const h = Number(drawn.h) || PAD_H;
+  return (
+    <svg className={className || "sig-ink"} viewBox={"0 0 " + w + " " + h}
+      preserveAspectRatio="xMinYMid meet" role="img" aria-label="Handwritten signature">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="2.4"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SignaturePad({ value, onChange, disabled }) {
+  const canvasRef = useRef(null);
+  const strokesRef = useRef([]);
+  const drawingRef = useRef(false);
+  const [, setTick] = useState(0);
+  const redraw = () => setTick((n) => n + 1);
+
+  // Cleared from outside (the modal reset, or a fresh sign-up) — follow it.
+  useEffect(() => { if (!value) { strokesRef.current = []; } }, [value]);
+
+  // A pad with no measurable size still has to produce usable coordinates, so
+  // fall back to its nominal size rather than dividing by nothing.
+  const measure = () => {
+    const el = canvasRef.current;
+    const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    const w = Math.round((rect && rect.width) || 0) || PAD_W;
+    const h = Math.round((rect && rect.height) || 0) || PAD_H;
+    return { rect, w, h };
+  };
+  const pointFrom = (src) => {
+    const { rect } = measure();
+    const cx = src && src.clientX != null ? src.clientX : 0;
+    const cy = src && src.clientY != null ? src.clientY : 0;
+    const x = cx - ((rect && rect.left) || 0);
+    const y = cy - ((rect && rect.top) || 0);
+    return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
+  };
+  const commit = () => {
+    const { w, h } = measure();
+    const strokes = strokesRef.current.filter((st) => st && st.length);
+    onChange(strokes.length ? { strokes, w, h } : null);
+    redraw();
+  };
+  const start = (src) => {
+    if (disabled) return;
+    drawingRef.current = true;
+    strokesRef.current = strokesRef.current.concat([[pointFrom(src)]]);
+    commit();
+  };
+  const extend = (src) => {
+    if (!drawingRef.current || disabled) return;
+    const cur = strokesRef.current[strokesRef.current.length - 1];
+    if (!cur) return;
+    const pt = pointFrom(src);
+    const last = cur[cur.length - 1];
+    // A signature does not need three hundred samples per letter, and every
+    // point dropped here is a point the stored record does not have to carry.
+    if (last && Math.hypot(pt[0] - last[0], pt[1] - last[1]) < 1.5) return;
+    cur.push(pt);
+    commit();
+  };
+  const end = () => { drawingRef.current = false; };
+
+  // Letting go anywhere ends the stroke — releasing off the edge of the pad is
+  // the normal way a signature finishes.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.addEventListener) return undefined;
+    const up = () => { drawingRef.current = false; };
+    window.addEventListener("mouseup", up);
+    window.addEventListener("touchend", up);
+    window.addEventListener("touchcancel", up);
+    return () => {
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("touchend", up);
+      window.removeEventListener("touchcancel", up);
+    };
+  }, []);
+
+  // Paint the strokes. If there is no 2d context — an old browser, a test
+  // renderer — the drawing simply isn't shown, and the strokes are still kept.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof el.getContext !== "function") return;
+    let ctx = null;
+    try { ctx = el.getContext("2d"); } catch (err) { ctx = null; }
+    if (!ctx || typeof ctx.beginPath !== "function") return;
+    const { w, h } = measure();
+    const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+    const pw = Math.round(w * dpr);
+    const ph = Math.round(h * dpr);
+    if (el.width !== pw) el.width = pw;
+    if (el.height !== ph) el.height = ph;
+    if (typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let color = "#111827";
+    try {
+      const cs = window.getComputedStyle(el);
+      if (cs && cs.color) color = cs.color;
+    } catch (err) { /* keep the fallback */ }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    strokesRef.current.forEach((st) => {
+      if (!st || !st.length) return;
+      ctx.beginPath();
+      if (st.length === 1) {
+        ctx.moveTo(st[0][0], st[0][1]);
+        ctx.lineTo(st[0][0] + 0.1, st[0][1]);
+      } else {
+        st.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      }
+      ctx.stroke();
+    });
+  });
+
+  const empty = !strokesRef.current.length;
+  return (
+    <div className="sig-pad-wrap">
+      <div className="sig-pad-head">
+        <span className="sig-label" style={{ marginBottom: 0 }}>Sign your name with your mouse, finger or stylus</span>
+        <button type="button" className="sig-clear" disabled={disabled || empty}
+          onClick={() => { strokesRef.current = []; onChange(null); redraw(); }}>Clear</button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        className="sig-pad"
+        width={PAD_W}
+        height={PAD_H}
+        role="img"
+        aria-label="Signature pad. Draw your signature here with your mouse, finger or stylus."
+        onMouseDown={(e) => { if (e.preventDefault) e.preventDefault(); start(e); }}
+        onMouseMove={(e) => extend(e)}
+        onMouseUp={end}
+        onTouchStart={(e) => { const t = e.touches && e.touches[0]; if (t) { if (e.preventDefault) e.preventDefault(); start(t); } }}
+        onTouchMove={(e) => { const t = e.touches && e.touches[0]; if (t) { if (e.preventDefault) e.preventDefault(); extend(t); } }}
+        onTouchEnd={end} />
+      {empty && <div className="sig-pad-hint">Draw here</div>}
+    </div>
+  );
+}
+
+// The signature block: drawn first, typed second. Two signatures, the way a
+// paper form takes one in ink and one in print. Both are rendered over a rule
+// with the date beside them, the way it would look on paper.
+function SignatureBlock({ value, onChange, drawn, onDrawnChange, dated, drawnSkipped, onSkipDrawn }) {
+  const started = !!(drawn && Array.isArray(drawn.strokes) && drawn.strokes.length);
+  const inked = hasDrawnSignature(drawn);
   return (
     <div className="sig-block">
-      <label className="sig-label" htmlFor="waiver-signature">Sign your full legal name</label>
+      {drawnSkipped ? (
+        <div className="adjust-box" style={{ marginBottom: 14 }}>
+          Signing with your typed name only. Your record will show that no drawn signature was given.{" "}
+          <button type="button" className="link-btn" onClick={() => onSkipDrawn(false)}>Draw one after all</button>
+        </div>
+      ) : (
+        <>
+          <SignaturePad value={drawn} onChange={onDrawnChange} />
+          {started && !inked && (
+            <p className="sig-hint">That is too small to be a signature — sign your name across the box.</p>
+          )}
+          <p className="sig-hint sig-hint-skip">
+            <button type="button" className="link-btn" onClick={() => onSkipDrawn(true)}>
+              Can&rsquo;t draw on this device?
+            </button>
+          </p>
+        </>
+      )}
+      <label className="sig-label" htmlFor="waiver-signature">Now type your full legal name</label>
       <input
         id="waiver-signature"
         className="sig-input"
@@ -9248,7 +9537,7 @@ function SignatureBlock({ value, onChange, dated }) {
         aria-describedby="waiver-signature-help" />
       <div className="sig-rule" />
       <div className="sig-foot">
-        <span id="waiver-signature-help">Electronic signature</span>
+        <span id="waiver-signature-help">Typed signature</span>
         <span>{dated}</span>
       </div>
     </div>
@@ -9259,7 +9548,13 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
   const [ticked, setTicked] = useState(false);
   const [signing, setSigning] = useState(false);
   const [signature, setSignature] = useState(defaultName);
+  const [drawn, setDrawn] = useState(null);
+  // A pad that will not draw on somebody's device must not lock them out of
+  // the program they are paying for, so there is a way past it — one that is
+  // recorded, not hidden, so the record never claims a mark that was not made.
+  const [drawnSkipped, setDrawnSkipped] = useState(false);
   const signedName = signature.trim();
+  const drawnOk = drawnSkipped || hasDrawnSignature(drawn);
   // Two words, or one long enough to be a name. Enough to stop an empty stroke
   // or a stray keypress counting as a signature, without turning away anyone
   // whose legal name is short or spelled a way we did not anticipate.
@@ -9277,7 +9572,16 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
       ))}
       {accepted && accepted.at ? (
         <div className="sig-block signed">
-          <div className="sig-label">Signed</div>
+          {accepted.drawn ? (
+            <>
+              <div className="sig-label">Signed by hand</div>
+              <SignatureInk drawn={accepted.drawn} />
+              <div className="sig-rule" />
+            </>
+          ) : accepted.drawnSkipped ? (
+            <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>No drawn signature was given — signed by typed name only.</p>
+          ) : null}
+          <div className="sig-label" style={{ marginTop: accepted.drawn ? 14 : 0 }}>Typed</div>
           <div className="sig-signed">{accepted.signature || accepted.name || "Signed electronically"}</div>
           <div className="sig-rule" />
           <div className="sig-foot">
@@ -9294,19 +9598,28 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
             <input type="checkbox" checked={ticked} onChange={() => setTicked((v) => !v)} />
             <span>I am 18 or older. I have read and understood this agreement, I accept the risks, and I agree to the release above.</span>
           </label>
-          <SignatureBlock value={signature} onChange={setSignature} dated={today} />
-          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk || signing}
+          <SignatureBlock
+            value={signature} onChange={setSignature}
+            drawn={drawn} onDrawnChange={setDrawn}
+            drawnSkipped={drawnSkipped}
+            onSkipDrawn={(v) => { setDrawnSkipped(v); if (v) setDrawn(null); }}
+            dated={today} />
+          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk || !drawnOk || signing}
             onClick={async () => {
               setSigning(true);
-              const ok = await onAccept({ signature: signedName });
+              const ok = await onAccept({ signature: signedName, drawn: drawnSkipped ? null : drawn, drawnSkipped });
               // `false` means the write failed — stay on this screen so the
               // athlete can retry rather than believing they've signed.
               if (ok === false) setSigning(false);
             }}>
             {signing ? "Saving…" : "Sign and continue"}
           </button>
-          {!signatureOk && ticked && (
-            <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>Type your full name above to sign.</p>
+          {!(ticked && signatureOk && drawnOk) && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>
+              {[!ticked && "tick the box above", !drawnOk && "sign your name in the box", !signatureOk && "type your full legal name"]
+                .filter(Boolean)
+                .reduce((out, part, i, all) => out + (i === 0 ? "Still to do: " : i === all.length - 1 ? " and " : ", ") + part, "") + "."}
+            </p>
           )}
           {footer}
         </>
@@ -10296,6 +10609,7 @@ function downloadWaiverRecord(records) {
     .forEach((r) => {
       lines.push(r.name);
       lines.push("  Signed:    " + (r.full.waiver.signature || "(no signature on file)"));
+      lines.push("  By hand:   " + (hasDrawnSignature(r.full.waiver.drawn) ? "yes" : r.full.waiver.drawnSkipped ? "no (reported unable to draw)" : "no"));
       lines.push("  Dated:     " + new Date(r.full.waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
       lines.push("  Timestamp: " + r.full.waiver.at);
       lines.push("  Version:   " + (r.full.waiver.version || "unversioned"));
@@ -10701,10 +11015,20 @@ function WaiverCopy({ name, waiver }) {
     <div className="waiver-copy">
       <dl className="waiver-copy-head">
         <div><dt>Athlete</dt><dd>{(name || waiver.name || "Athlete").trim()}</dd></div>
-        <div><dt>Signed</dt><dd className="waiver-copy-sig">{waiver.signature || "(no signature on file)"}</dd></div>
+        <div><dt>Typed</dt><dd className="waiver-copy-sig">{waiver.signature || "(no signature on file)"}</dd></div>
         <div><dt>Dated</dt><dd>{fmtDateTime(waiver.at)}</dd></div>
         <div><dt>Version</dt><dd>{waiver.version || "unversioned"}</dd></div>
       </dl>
+      <div className="waiver-copy-ink">
+        <dt>Signed by hand</dt>
+        {hasDrawnSignature(waiver.drawn) ? <SignatureInk drawn={waiver.drawn} /> : (
+          <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0" }}>
+            {waiver.drawnSkipped
+              ? "No drawn signature — the athlete reported being unable to draw one on their device."
+              : "No drawn signature is on file for this signature."}
+          </p>
+        )}
+      </div>
       {waiver.signature && waiver.name
         && waiver.signature.trim().toLowerCase() !== waiver.name.trim().toLowerCase() && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -14281,6 +14605,28 @@ function GlobalStyle() {
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 16px; text-align: right; }
       .sig-block { margin-top: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; }
+      .sig-pad-wrap { position: relative; margin-bottom: 18px; }
+      .sig-pad-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+      .sig-clear { flex: none; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 8px;
+        font-size: 11.5px; font-weight: 600; padding: 5px 11px; cursor: pointer; min-height: 32px; }
+      .sig-clear:disabled { opacity: 0.4; cursor: default; }
+      .sig-clear:not(:disabled):hover { color: var(--text); border-color: var(--text-dim); }
+      /* The pad is the surface, not the record — but it still has to feel like
+         somewhere you would sign: a wide box, a baseline, and no page scrolling
+         stealing the gesture out from under a finger mid-signature. */
+      .sig-pad { display: block; width: 100%; height: 170px; box-sizing: border-box; background: var(--card);
+        border: 1px dashed var(--border); border-bottom: 1px solid var(--border); border-radius: 10px;
+        color: var(--text); cursor: crosshair; touch-action: none; -webkit-user-select: none; user-select: none; }
+      .sig-pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      .sig-pad-hint { position: absolute; left: 0; right: 0; bottom: 64px; text-align: center; pointer-events: none;
+        font-family: 'Caveat', cursive; font-size: 22px; color: var(--text-dim); opacity: 0.5; }
+      .sig-hint { margin: 8px 0 0; font-size: 12px; color: var(--text-dim); }
+      .sig-hint-skip { margin-bottom: 20px; }
+      .sig-hint .link-btn { font-size: 12px; padding: 2px 0; }
+      .sig-ink { display: block; width: 100%; max-width: 300px; height: 92px; color: var(--text); }
+      .waiver-copy-ink { margin: 0 0 14px; }
+      .waiver-copy-ink dt { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-dim); margin-bottom: 2px; }
       .sig-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }
       .sig-input { width: 100%; box-sizing: border-box; background: transparent; border: none; outline: none; color: var(--text); font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; padding: 0 2px 6px; min-height: 48px; }
       .sig-input::placeholder { color: var(--text-dim); opacity: 0.45; }

@@ -19,6 +19,11 @@ global.matchMedia = dom.window.matchMedia = () => ({ matches: false, addEventLis
 // Recharts measures its container. jsdom has no layout engine, so give it the
 // observer it expects and a non-zero box to draw into.
 class RO { observe() {} unobserve() {} disconnect() {} }
+// There is no 2d canvas in jsdom, and that is the point: the signature pad has
+// to keep the strokes whether or not anything can paint them, because the
+// strokes are the record and the canvas is only the surface. Stubbing this to
+// null both silences jsdom's not-implemented noise and holds the pad to that.
+dom.window.HTMLCanvasElement.prototype.getContext = () => null;
 global.ResizeObserver = dom.window.ResizeObserver = RO;
 Object.defineProperty(dom.window.HTMLElement.prototype, "offsetWidth", { configurable: true, value: 1024 });
 Object.defineProperty(dom.window.HTMLElement.prototype, "offsetHeight", { configurable: true, value: 640 });
@@ -95,9 +100,25 @@ const openOnboarding = () => {
   signedUp = null;
   mount(React.createElement(A.OnboardingScreen, { onSubmit: (c) => { signedUp = c; } }));
 };
+// Signing by hand, as a hand would do it: press, drag across the box, let go.
+// `travel` is how far the stroke runs — a few pixels is the stray click that
+// must not count as a signature.
+const drawSignature = (travel = 240) => {
+  const pad = host.querySelector("canvas.sig-pad");
+  if (!pad) throw new Error("there is no signature pad on the waiver");
+  const at = (type, x, y) => act(() => {
+    pad.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+  });
+  at("mousedown", 20, 90);
+  for (let x = 20; x <= 20 + travel; x += Math.max(2, Math.round(travel / 12))) {
+    at("mousemove", x, 90 + ((x % 5) * 6));
+  }
+  at("mouseup", 20 + travel, 90);
+};
 const signWaiver = (name = "Marcus Hale") => {
   click(/sign the liability waiver/i);
   act(() => { host.querySelector("input[type=checkbox]").click(); });
+  drawSignature();
   setVal(host.querySelector("input[placeholder='Your full name']"), name);
   click(/sign and continue/i);
 };
@@ -118,7 +139,24 @@ check("the waiver will not accept a whitespace signature", () => {
   click(/sign and continue/i);
   has(/sign and continue/i, "still on the waiver");
 });
-check("a real signature gets through to the profile form", () => {
+check("a typed name alone will not sign it", () => {
+  // Two signatures are asked for, so one of them is not enough — and the screen
+  // has to say WHICH is missing, or the button just looks broken.
+  setVal(host.querySelector("input[placeholder='Your full name']"), "Marcus Hale");
+  click(/sign and continue/i);
+  has(/sign and continue/i, "still on the waiver");
+  has(/still to do: sign your name in the box/i, "a prompt to draw the signature");
+});
+check("a stray dot on the pad is not a signature", () => {
+  drawSignature(3);
+  click(/sign and continue/i);
+  has(/sign and continue/i, "still on the waiver");
+  has(/too small to be a signature/i, "the too-small warning");
+  click(/^clear$/i);
+  has(/draw here/i, "the empty pad again");
+});
+check("a drawn signature and a typed name together get through", () => {
+  drawSignature();
   setVal(host.querySelector("input[placeholder='Your full name']"), "Marcus Hale");
   click(/sign and continue/i);
   hasNot(/sign and continue/i, "the waiver");
@@ -164,6 +202,10 @@ check("a complete profile submits, and carries the signed waiver with it", () =>
   // onSubmit hands back the form's answers; the app builds the client from them.
   if (!signedUp) throw new Error("Get started did nothing on a complete form");
   if (!signedUp.waiver) throw new Error("the signed waiver did not travel with the profile");
+  // Both signatures, or the record is only half of what the athlete gave.
+  if (!A.hasDrawnSignature(signedUp.waiver.drawn)) throw new Error("the drawn signature did not travel with the profile");
+  if (!signedUp.waiver.signature) throw new Error("the typed signature did not travel with the profile");
+  if (!A.sigPathData(signedUp.waiver.drawn)) throw new Error("the stored strokes do not render to a path");
   if (signedUp.firstName !== "Marcus") throw new Error("the name did not come through");
   if (!(Number(signedUp.weight) > 0)) throw new Error("bodyweight did not come through");
   // The schedule and the program have to agree: two lifting days means the
@@ -2274,6 +2316,58 @@ check("one athlete's copy is a document, not a line in a list", () => {
   const same = A.waiverCopyLines("Ana Diaz", { ...w, signature: "Ana Diaz", name: "Ana Diaz" }).join("\n");
   if (/signed as/i.test(same)) throw new Error("a matching name was flagged as a mismatch");
   if (!/not on file/i.test(text) === false) throw new Error("a complete copy claimed the wording was missing");
+});
+
+check("signing a new version keeps the one signed before it", () => {
+  // Bumping the wording asks everybody to sign again. Writing the new signature
+  // straight over the old one would throw away the only evidence that they
+  // accepted the terms that were in force at the time.
+  const first = { at: "2026-05-01T10:00:00.000Z", version: "2026-05-01", signature: "Marcus Hale",
+                  name: "Marcus Hale", document: A.waiverDocument() };
+  const kept = A.priorWaivers(first);
+  if (kept.length !== 1) throw new Error(`the earlier signature was not kept (${kept.length} on file)`);
+  if (kept[0].at !== first.at) throw new Error("the kept record is not the one that was signed");
+  if ("history" in kept[0]) throw new Error("the kept record nests its own history");
+  // And again, a version later — both earlier signatures survive.
+  const second = { at: "2026-11-08T10:00:00.000Z", version: A.WAIVER_VERSION, signature: "Marcus Hale",
+                   name: "Marcus Hale", document: A.waiverDocument(), history: kept };
+  const twice = A.priorWaivers(second);
+  if (twice.length !== 2) throw new Error(`two signatures should be on file, got ${twice.length}`);
+  if (twice[0].version !== "2026-05-01") throw new Error("the oldest signature fell off the front");
+  // It cannot grow without bound either.
+  let w = { at: "2026-01-01T00:00:00.000Z", version: "v0", signature: "X", name: "X" };
+  for (let i = 0; i < 20; i++) w = { ...w, at: `2026-01-${String(i + 2).padStart(2, "0")}T00:00:00.000Z`, history: A.priorWaivers(w) };
+  if ((w.history || []).length > 6) throw new Error(`history grew to ${w.history.length}`);
+  if (A.priorWaivers(null).length !== 0) throw new Error("an unsigned record produced history");
+});
+
+check("the printable copy carries the drawn signature inside it", () => {
+  // A .txt copy cannot hold a handwritten signature, which is the whole point
+  // of asking for one. The downloadable copy has to be self-contained: open it
+  // anywhere, print it, and the signature is still on it.
+  const drawn = { strokes: [[[10, 90], [60, 40], [120, 100], [200, 50]]], w: 600, h: 180 };
+  const w = { at: "2026-11-08T18:30:00.000Z", version: A.WAIVER_VERSION, signature: "Marcus J. Hale",
+              name: "Marcus Hale", drawn, document: A.waiverDocument() };
+  const html = A.waiverCopyHTML("Marcus Hale", w);
+  if (!/<svg/i.test(html)) throw new Error("the drawn signature is not in the copy");
+  if (!html.includes(A.sigPathData(drawn))) throw new Error("the strokes in the copy are not the strokes that were drawn");
+  if (!html.includes("Marcus J. Hale")) throw new Error("the typed signature is missing");
+  if (!html.includes("2026-11-08T18:30:00.000Z")) throw new Error("the exact timestamp is missing");
+  A.WAIVER_SECTIONS.forEach((sec, i) => {
+    if (!html.includes(sec.heading)) throw new Error(`clause ${i} ("${sec.heading}") is not in the copy`);
+  });
+  // Nothing an athlete typed may come back out as markup.
+  const nasty = A.waiverCopyHTML("x", { ...w, signature: '<script>alert(1)</script>' });
+  if (/<script>alert/.test(nasty)) throw new Error("a typed signature was written into the copy as markup");
+  // And a record with no drawn signature says so rather than showing an empty rule.
+  const none = A.waiverCopyHTML("Ana Diaz", { ...w, drawn: null, drawnSkipped: true });
+  if (/<svg/i.test(none)) throw new Error("a signature was drawn where none exists");
+  if (!/unable to draw/i.test(none)) throw new Error("the copy does not say why there is no drawn signature");
+  // The plain-text record has to be honest about it too.
+  const lines = A.waiverCopyLines("Marcus Hale", w).join("\n");
+  if (!/By hand:\s+yes/.test(lines)) throw new Error("the text record does not note the drawn signature");
+  const noneLines = A.waiverCopyLines("Ana Diaz", { ...w, drawn: null }).join("\n");
+  if (!/By hand:\s+no/.test(noneLines)) throw new Error("the text record claims a drawn signature that is not there");
 });
 
 check("the signed waiver reads as a document on screen", () => {

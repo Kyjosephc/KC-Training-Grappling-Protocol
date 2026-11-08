@@ -16,6 +16,9 @@ global.navigator = dom.window.navigator; global.IS_REACT_ACT_ENVIRONMENT = true;
 global.matchMedia = dom.window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
 class RO { observe() {} unobserve() {} disconnect() {} }
 global.ResizeObserver = dom.window.ResizeObserver = RO;
+// jsdom has no 2d canvas. The signature pad must still work without one, so
+// hold it to that rather than letting a stub paper over it.
+dom.window.HTMLCanvasElement.prototype.getContext = () => null;
 Object.defineProperty(dom.window.HTMLElement.prototype, "offsetWidth", { configurable: true, value: 1024 });
 Object.defineProperty(dom.window.HTMLElement.prototype, "offsetHeight", { configurable: true, value: 640 });
 
@@ -37,6 +40,27 @@ const setVal = (el, v) => act(() => {
   Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(el, v);
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 });
+
+// The waiver takes two signatures now: one drawn, one typed. Walking the
+// sign-up flow means drawing one.
+const drawSignature = () => {
+  const pad = host.querySelector("canvas.sig-pad");
+  if (!pad) throw new Error("there is no signature pad on the waiver");
+  const at = (type, x, y) => act(() => {
+    pad.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+  });
+  at("mousedown", 20, 90);
+  for (let x = 20; x <= 260; x += 20) at("mousemove", x, 90 + ((x % 5) * 6));
+  at("mouseup", 260, 90);
+};
+const signTheWaiver = (name = "Test One") => {
+  click(/read and sign/i);
+  act(() => { host.querySelector("input[type=checkbox]").click(); });
+  drawSignature();
+  setVal(host.querySelector("input[placeholder='Your full name']"), name);
+  click(/sign and continue/i);
+  if (byText(/sign and continue/i)) throw new Error("the waiver would not sign");
+};
 
 // Placeholder text technically names a field, but it vanishes the moment
 // someone types, so it is reported separately rather than counted as a name.
@@ -160,18 +184,12 @@ for (const [name, make] of screens) {
 try {
   unmount();
   mount(React.createElement(A.OnboardingScreen, { onSubmit: noop }));
-  click(/read and sign/i);
-  act(() => { host.querySelector("input[type=checkbox]").click(); });
-  setVal(host.querySelector("input[placeholder='Your full name']"), "Test One");
-  click(/sign and continue/i);
+  signTheWaiver();
   audit("Sign-up page 2 — you");
   // audit() unmounts, so re-walk for each page rather than keeping state.
   const walkTo = (page) => {
     mount(React.createElement(A.OnboardingScreen, { onSubmit: noop }));
-    click(/read and sign/i);
-    act(() => { host.querySelector("input[type=checkbox]").click(); });
-    setVal(host.querySelector("input[placeholder='Your full name']"), "Test One");
-    click(/sign and continue/i);
+    signTheWaiver();
     const t = [...host.querySelectorAll("input[type=text]")];
     setVal(t[0], "Test"); setVal(t[1], "One");
     const n = [...host.querySelectorAll("input[type=number]")];
