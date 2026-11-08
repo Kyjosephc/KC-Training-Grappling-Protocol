@@ -9664,9 +9664,9 @@ function ShareModal({ onClose }) {
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
-    "Most lifting programs aren't built for grapplers. This one is.",
-    "Open Mat writes you a twelve-week strength and conditioning block aimed at what jiu-jitsu and wrestling actually demand: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. No tested max needed to start — tell it how beaten up you are and it rewrites the session before you lift.",
-    "Every set you log is kept and every PR tracked. Your gym gets its own private page to break technique down position by position, with video. And the rules game drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
+    "Hey team — I built something for us.",
+    "Most lifting programs aren't built for grapplers. This one is. Open Mat writes you a twelve-week strength and conditioning block aimed at what we actually need on the mat: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
+    "Every set you log is kept and every PR tracked. We get our own private page to break technique down position by position, with video. And the rules game drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
     "First week is free. Come train:",
   ].join("\n\n");
   const fullMessage = `${shareText} ${shareUrl}`;
