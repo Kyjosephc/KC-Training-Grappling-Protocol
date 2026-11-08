@@ -22,7 +22,7 @@
 //     Supabase is a different origin and never goes near this cache. Training
 //     data syncs the way it always did; this only makes the shell openable.
 
-const CACHE = "strength-matrix-shell-v1";
+const CACHE = "open-mat-shell-v2";
 const SHELL = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {

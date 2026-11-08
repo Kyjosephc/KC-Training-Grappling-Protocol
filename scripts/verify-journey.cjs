@@ -2199,8 +2199,15 @@ check("the app has one name and it is the same everywhere", () => {
   const root = path.join(__dirname, "..");
   const read = (f) => fs.readFileSync(path.join(root, f), "utf8");
 
-  const stale = ["index.html", "public/manifest.webmanifest", "public/sw.js", "src/App.jsx"]
-    .filter((f) => /Strength Matrix/.test(read(f)));
+  // Loosely, because a name does not only appear as two capitalised words. It
+  // also appears slugged, in filenames and cache keys — and this check looked
+  // only for "Strength Matrix" with its space and capitals, so
+  // "strength-matrix-shell-v1" sat in the service worker right through the
+  // rename, quietly serving the old icons to everyone who had installed the
+  // app.
+  const OLD = /strength[\s_-]*matrix/i;
+  const stale = ["index.html", "public/manifest.webmanifest", "public/sw.js", "src/App.jsx", ".env.example"]
+    .filter((f) => OLD.test(read(f)));
   if (stale.length) throw new Error(`the previous name is still in ${stale.join(", ")}`);
 
   // Two lockups render it: a stacked one in the top bar and an inline one.
@@ -2223,6 +2230,39 @@ check("the app has one name and it is the same everywhere", () => {
     throw new Error(`the browser tab does not say "${name}"`);
   }
   if (!app.includes(`Welcome to ${name}`)) throw new Error(`the welcome screen does not say "${name}"`);
+
+  // The service worker serves .png and .webmanifest cache-first, so the icons
+  // an installed app shows come from this cache and not from the server.
+  // Renaming the app without renaming the key leaves every phone that already
+  // has it installed showing the icon it was installed with, forever. Tying
+  // the key to the name makes the rename impossible to forget.
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const sw = read("public/sw.js");
+  const cache = (sw.match(/const CACHE = "([^"]+)"/) || [])[1];
+  if (!cache) throw new Error("the service worker does not name its cache at all");
+  if (!cache.startsWith(slug)) {
+    throw new Error(`the shell is cached under "${cache}", which is not ${name}'s — every installed app keeps the old one`);
+  }
+
+  // The waiver record is the one thing here that leaves the app as a document
+  // somebody else reads, and it carried the old name for two months after the
+  // rename because nothing looked at it.
+  if (!app.includes(`${name.toUpperCase()} — LIABILITY WAIVER RECORD`)) {
+    throw new Error(`the waiver record Kyle hands out is not headed "${name.toUpperCase()}"`);
+  }
+
+  // And the icons the manifest asks for have to be icons that exist.
+  const icons = manifest.icons || [];
+  if (icons.length < 4) throw new Error(`the manifest offers ${icons.length} icons`);
+  icons.forEach((i) => {
+    const file = i.src.replace(/^\//, "").split("?")[0];
+    if (!fs.existsSync(path.join(root, "public", file))) {
+      throw new Error(`the manifest asks for ${i.src}, which is not in public/`);
+    }
+  });
+  if (!icons.some((i) => i.purpose === "maskable")) {
+    throw new Error("no maskable icon, so Android crops the wordmark");
+  }
 });
 
 

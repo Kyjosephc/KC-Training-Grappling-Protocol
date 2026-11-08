@@ -9167,7 +9167,7 @@ function downloadWaiverRecord(records) {
   const signed = loadable.filter((r) => r.full && r.full.waiver && r.full.waiver.at);
   const unsigned = loadable.filter((r) => !(r.full && r.full.waiver && r.full.waiver.at));
   const lines = [];
-  lines.push("STRENGTH MATRIX — LIABILITY WAIVER RECORD");
+  lines.push("OPEN MAT — LIABILITY WAIVER RECORD");
   lines.push("Generated " + generated.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
   lines.push("");
   lines.push("Athletes who have accepted: " + signed.length + " of " + loadable.length);
