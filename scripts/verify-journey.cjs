@@ -2348,6 +2348,63 @@ check("a team post is never retried as a post with no room", () => {
   });
 });
 
+check("handing a team over does not lock the leader out halfway through", () => {
+  // is_team_leader() is what lets a leader write to team_members. Moving
+  // teams.leader_id first makes that false on the very next statement, and
+  // the policy refuses the rest of the handover — leaving the title moved and
+  // the roles not. It only ever worked because the person doing it was the
+  // coach, who passes a different test.
+  const fs = require("fs"), path = require("path");
+  const src = fs.readFileSync(path.join(__dirname, "..", "src", "App.jsx"), "utf8");
+  const at = src.indexOf("async function makeTeamLeader");
+  if (at < 0) throw new Error("the handover is gone");
+  const body = src.slice(at, src.indexOf("\n}", at));
+  const teamsWrite = body.indexOf('from("teams").update');
+  const lastMemberWrite = body.lastIndexOf('from("team_members")');
+  if (teamsWrite < 0) throw new Error("the handover never moves the title");
+  if (lastMemberWrite < 0) throw new Error("the handover never touches the roles");
+  if (teamsWrite < lastMemberWrite) {
+    throw new Error("the title is transferred before the roles, so the policy refuses the rest of it");
+  }
+  // And the outgoing leader is demoted, or the team shows two leaders.
+  if (!/role: "member"/.test(body)) {
+    throw new Error("the outgoing leader keeps the title in the member list");
+  }
+});
+
+check("searching by room name reaches the rooms on your side of the wall", () => {
+  // roomsMatchingTerm answers in open-room ids. Inside a team those ids cannot
+  // hold a single post — the constraint sees to that — so the query came back
+  // empty while the screen said "including everything in Passing". A promise
+  // the results could not keep is worse than not making it.
+  const open = A.matchedRoomsFor("passing", null);
+  if (!open.includes("passing")) throw new Error(`searching Passing from the open rooms reached ${open.join(", ") || "nothing"}`);
+  if (open.some((id) => A.isTeamChannel(id))) throw new Error("a search outside a team reached into team rooms");
+
+  const inTeam = A.matchedRoomsFor("passing", "team-1");
+  if (!inTeam.length) throw new Error("searching Passing inside a team reached no rooms at all");
+  if (!inTeam.every((id) => A.isTeamChannel(id))) {
+    throw new Error(`inside a team it reached ${inTeam.join(", ")}, which includes rooms of the open side`);
+  }
+  if (!inTeam.includes(A.teamChannelFor("passing"))) throw new Error("it did not reach the team's own Passing");
+  // An alias has to work on both sides, because it is the room's name either way.
+  const alias = A.matchedRoomsFor("knee shield", "team-1");
+  if (!alias.includes(A.teamChannelFor("halfguard"))) throw new Error("a room's other name stops working inside a team");
+  // And a term matching nothing reaches nothing, rather than every room.
+  if (A.matchedRoomsFor("zzzz", "team-1").length) throw new Error("a term matching no room reached rooms anyway");
+});
+
+check("the room for what time everyone is training suggests no techniques", () => {
+  if (A.vocabForChannel("general").length) throw new Error("the open General suggests technique names");
+  if (A.vocabForChannel(A.TEAM_DEFAULT_CHANNEL).length) {
+    throw new Error("a team's General suggests technique names");
+  }
+  if (!A.vocabForChannel("passing").length) throw new Error("Passing stopped suggesting anything");
+  if (!A.vocabForChannel(A.teamChannelFor("passing")).length) {
+    throw new Error("a team's Passing stopped suggesting anything");
+  }
+});
+
 check("a team has every room the open side has, and none of the same ids", () => {
   // Same parts of the game, same names, different audience. The ids differ by
   // a prefix, and the prefix is what the database checks — sharing the ids

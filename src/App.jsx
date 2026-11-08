@@ -654,6 +654,14 @@ function roomsMatchingTerm(term) {
   }).map((c) => c.id);
 }
 
+// The rooms a search should reach into by name, on the side of the wall the
+// searcher is standing on. Separated out because it is the part that was
+// wrong and the part a database is not needed to check.
+function matchedRoomsFor(term, teamId) {
+  const matched = roomsMatchingTerm(term);
+  return teamId ? matched.map(teamChannelFor) : matched;
+}
+
 async function searchCommunityPosts(term, channel, teamId) {
   if (!supabase) return LOAD_FAILED;
   const q = String(term || "").trim();
@@ -661,7 +669,12 @@ async function searchCommunityPosts(term, channel, teamId) {
   // PostgREST passes this through to ILIKE, so the wildcards are ours to add
   // and the user's own % and _ have to stop being wildcards.
   const safe = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-  const wantRooms = channelsAreReady() && !channel ? roomsMatchingTerm(q) : [];
+  // Matching a room by its name has to name the room on the side of the wall
+  // you are standing on. roomsMatchingTerm answers in open-room ids, and
+  // inside a team those ids cannot hold a single post — the constraint sees to
+  // that — so the second query returned nothing while the screen said
+  // "including everything in Passing". A promise the results could not keep.
+  const wantRooms = channelsAreReady() && !channel ? matchedRoomsFor(q, teamId) : [];
   const outcome = await withRetry(async () => {
     // Search is one side of the wall at a time. Inside a team it searches that
     // team; outside it searches the open rooms. It never searches both, which
@@ -743,7 +756,11 @@ function clipsForPicker(results, limit = 8) {
 // place the vocabulary really is noise — typing "ar" there was offering
 // armbar, arm drag and arm triangle to somebody asking about the app.
 function vocabForChannel(channel) {
-  return channel === "general" ? [] : TECHNIQUE_TERMS;
+  // A team's General is the same room as the open General, so it suggests the
+  // same nothing. Technique names are no help in the room for what time
+  // everybody is training.
+  const room = isTeamChannel(channel) ? publicChannelFor(channel) : channel;
+  return room === "general" ? [] : TECHNIQUE_TERMS;
 }
 
 // Suggestions come from two places: the techniques people actually post about,
@@ -938,23 +955,6 @@ async function fetchMyTeams(userId) {
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
-// Every team, for the coach. Nobody else can read this — the policy sees to
-// that, not this function.
-async function fetchAllTeams() {
-  if (!supabase || !teamsReady()) return [];
-  const outcome = await withRetry(async () => {
-    const { data, error } = await supabase.from("teams")
-      .select("id, name, invite_code, leader_id, created_at").order("name");
-    if (error) {
-      if (isMissingTeams(error)) return TEAMS_MISSING;
-      throw error;
-    }
-    return data || [];
-  });
-  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return []; }
-  return outcome.ok ? outcome.result : LOAD_FAILED;
-}
-
 // Six characters, no vowels and no 0/O/1/I/L, because this gets read off a
 // screen and typed into a phone by somebody standing in a gym.
 const CODE_ALPHABET = "BCDFGHJKMNPQRSTVWXYZ23456789";
@@ -1124,11 +1124,25 @@ async function requestTeamJoin(code, displayName) {
 async function makeTeamLeader(teamId, memberUserId) {
   if (!supabase || !teamsReady()) return { ok: false };
   const outcome = await withRetry(async () => {
-    const { error } = await supabase.from("teams").update({ leader_id: memberUserId }).eq("id", teamId);
-    if (error) throw error;
+    // Order matters, and getting it wrong locks you out halfway through.
+    // Changing teams.leader_id first means is_team_leader() stops being true
+    // for you on the very next statement, and the policy refuses the rest of
+    // your own handover. It only worked at all because the person doing it so
+    // far has been the coach, who passes on a different test. So: everything
+    // on team_members while you are still the leader, and the row that
+    // transfers the title last.
+    //
+    // The outgoing leader is demoted too. Without it both people carry
+    // role 'leader' — the title moves, the label does not, and the member
+    // list shows two leaders for a team that has one.
+    const { error: demote } = await supabase.from("team_members")
+      .update({ role: "member" }).eq("team_id", teamId).eq("role", "leader").neq("user_id", memberUserId);
+    if (demote) throw demote;
     const { error: rErr } = await supabase.from("team_members")
       .update({ role: "leader", status: "approved" }).eq("team_id", teamId).eq("user_id", memberUserId);
     if (rErr) throw rErr;
+    const { error } = await supabase.from("teams").update({ leader_id: memberUserId }).eq("id", teamId);
+    if (error) throw error;
   });
   if (!outcome.ok) {
     emitToast({ kind: "error", message: "Couldn't hand over the team — check your connection.", autoDismissMs: 6000 });
