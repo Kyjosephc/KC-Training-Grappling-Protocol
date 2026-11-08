@@ -2212,5 +2212,34 @@ check("the app has one name and it is the same everywhere", () => {
   if (!app.includes(`Welcome to ${name}`)) throw new Error(`the welcome screen does not say "${name}"`);
 });
 
+
+check("an injury swap keeps a demo when one exists", () => {
+  // The swap clears the original's video, which is right — it shows the wrong
+  // lift. Nothing ever put the replacement's in, so every substitution in the
+  // app arrived with no demonstration, and six of the twelve replacements had
+  // a video sitting in the library the whole time. Somebody training around a
+  // sore shoulder is the last person who should be guessing at a movement.
+  const blanked = [];
+  A.INJURY_AREAS.forEach((area) => {
+    ["A", "B", "C", "D"].forEach((v) => {
+      const p = A.buildProgramVariant(v);
+      const per = p.sessionsPerWeek || 3;
+      for (let w = 1; w <= 12; w++) for (let d = 0; d < per; d++) {
+        const pos = A.positionAtIndex(p, (w - 1) * per + d);
+        A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, { injuryAreas: [area.key] })
+          .forEach((sec) => (sec.exercises || []).forEach((e) => {
+            if (!e.substitutedFor) return;
+            const known = A.lookupVideo(e.name);
+            if (known && String(e.videoUrl || "").trim() !== known) {
+              blanked.push(`${area.key}: ${e.name}`);
+            }
+          }));
+      }
+    });
+  });
+  const unique = [...new Set(blanked)];
+  if (unique.length) throw new Error(`replacements shown with no demo despite one existing: ${unique.slice(0, 5).join(", ")}`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

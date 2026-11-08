@@ -5291,8 +5291,15 @@ function applyInjurySubstitutions(exercises, areas) {
         if (rule.drop) { dropped = true; break; }
         if (rule.to) {
           swappedHere = true;
+          // The replacement's own demo, not a blank. Clearing the original's
+          // video is right — it shows the wrong lift — but nothing ever put
+          // the substitute's in, so every injury swap in the app arrived with
+          // no demonstration at all. An athlete working around a sore shoulder
+          // is the person who most needs to see how the replacement is done,
+          // and six of the twelve replacements already had a video sitting in
+          // the library waiting to be looked up.
           current = { ...current, name: rule.to, substitutedFor: e.name, injuryNote: rule.why,
-            cues: rule.cues || current.cues, videoUrl: "", videoUrl2: "" };
+            cues: rule.cues || current.cues, videoUrl: lookupVideo(rule.to) || "", videoUrl2: "" };
         } else if (rule.lighter) {
           current = { ...current, rir: Math.max(Number(current.rir) || 0, 4), injuryNote: rule.why,
             sets: Math.max(1, Math.round((Number(current.sets) || 2) * 0.7)) };
