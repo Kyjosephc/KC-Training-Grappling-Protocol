@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { createClient } from "@supabase/supabase-js";
 import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
 import { toLocalDateStr, todayStr, yesterdayStr } from "./dates.js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search, Bookmark } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search, Bookmark, Users } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -321,7 +321,7 @@ const weekStartISO = (now) => weekStart(now).toISOString();
 // "Past weeks" and stay there. A weekly wipe that actually destroyed posts
 // would throw away the best study material in the app, with no undo.
 const THIS_WEEK = "thisweek";
-const isWeekRoom = (id) => id === THIS_WEEK;
+const isWeekRoom = (id) => id === THIS_WEEK || id === "teamweek";
 // Not a room. Nothing is stored in it, the database never sees this id, and no
 // post can live here — it is a way of reading every room at once, which is
 // what makes twenty-two thin rooms read as a library instead of as a list of
@@ -333,6 +333,26 @@ const VIRTUAL_CHANNELS = [
     placeholder: "" },
 ];
 const isVirtualChannel = (id) => VIRTUAL_CHANNELS.some((c) => c.id === id);
+
+// A team's own rooms. Three, not twenty-three: a ten-person gym cannot keep
+// twenty-three rooms alive, and the public side already shows what a wall of
+// empty rooms looks like. These ids exist only inside a team — the database
+// carries a constraint saying a post in one of these rooms must belong to a
+// team, and a post in any other room must not. That is the half of the privacy
+// guarantee that does not depend on anybody writing a correct query.
+const TEAM_CHANNELS = [
+  { id: "teamgeneral", group: "team", label: "Team",
+    blurb: "Your gym. Schedules, who is coming to open mat, anything that is nobody else's business.",
+    placeholder: "Anything for the team — who's training, what time, how a comp went." },
+  { id: "teamweek", group: "team", label: "This week",
+    blurb: "What your gym is covering this week. Goes blank every Sunday, same as the open one — nothing is deleted.",
+    placeholder: "What did we cover tonight? Name the technique and the detail worth remembering." },
+  { id: "teamclips", group: "team", label: "Clips",
+    blurb: "Your team's own film. Rolls, drilling, competition footage that stays in the room.",
+    placeholder: "Say what you want eyes on, then paste the clip." },
+];
+const isTeamChannel = (id) => TEAM_CHANNELS.some((c) => c.id === id);
+const TEAM_DEFAULT_CHANNEL = "teamgeneral";
 
 const CHANNEL_GROUPS = [
   { id: "week", label: "This week" },
@@ -452,6 +472,7 @@ const DEFAULT_CHANNEL = "general";
 const LANDING_CHANNEL = ALL_ROOMS;
 function channelMeta(id) {
   return COMMUNITY_CHANNELS.find((c) => c.id === id)
+    || TEAM_CHANNELS.find((c) => c.id === id)
     || VIRTUAL_CHANNELS.find((c) => c.id === id)
     // By id and not by position. A post in a room that has since been retired
     // falls through to here, and the first entry in the list is now This week
@@ -465,9 +486,44 @@ function lastSeenMap(prefs) {
   const p = prefs || {};
   const legacy = p.lastSeenAt || "1970-01-01";
   const map = {};
+  // Stored keys first, including ones this build has no list for — a team room
+  // is keyed by the team it belongs to, and rebuilding the map from the public
+  // room list alone used to drop every one of them on the next save.
+  Object.keys((p.lastSeen) || {}).forEach((k) => { map[k] = p.lastSeen[k]; });
   COMMUNITY_CHANNELS.forEach((c) => { map[c.id] = (p.lastSeen && p.lastSeen[c.id]) || legacy; });
   return map;
 }
+// A team's rooms are per team, so the read mark has to be too: two gyms both
+// have a room called This week and they are not the same room.
+const teamSeenKey = (teamId, channel) => `t:${teamId}:${channel}`;
+// Which read mark a room writes to, from where you are standing.
+const seenKeyFor = (channel, team) => (team ? teamSeenKey(team.id, channel) : channel);
+
+// The filter every query that reads posts must carry, in one place so there is
+// one thing to be sure about rather than four. A team id fetches that team. No
+// team id fetches the open rooms — explicitly, with "team_id is null", not by
+// leaving the filter off. Leaving it off returns a member's own team posts
+// mixed into the public feed, which is the leak this whole feature has to not
+// have. The only case with no filter is a database where the column does not
+// exist yet, and there are no team posts in one of those.
+function teamFilter(teamId) {
+  if (teamId) return { op: "eq", value: teamId };
+  if (teamsReady()) return { op: "is", value: null };
+  return null;
+}
+function applyTeamFilter(q, teamId) {
+  const f = teamFilter(teamId);
+  if (!f) return q;
+  return f.op === "eq" ? q.eq("team_id", f.value) : q.is("team_id", f.value);
+}
+// Whether a post may be retried without its room when the database turns out
+// not to have the channel column. A post with no room is a post in the one
+// feed everybody reads, so a team post may never take that path.
+const canRetryWithoutChannel = (row) => !(row && row.team_id);
+// And the same key, worked out from a row that came back from the database.
+const rowSeenKey = (row) => (row && row.team_id
+  ? teamSeenKey(row.team_id, row.channel)
+  : ((row && row.channel) || DEFAULT_CHANNEL));
 // Skimming Latest is not reading twenty-two rooms, so it marks none of them
 // read. Without this the virtual id was also written into stored prefs as a
 // key nothing will ever read again.
@@ -553,7 +609,7 @@ function roomsMatchingTerm(term) {
   }).map((c) => c.id);
 }
 
-async function searchCommunityPosts(term, channel) {
+async function searchCommunityPosts(term, channel, teamId) {
   if (!supabase) return LOAD_FAILED;
   const q = String(term || "").trim();
   if (q.length < 2) return { posts: [], term: q, rooms: [] };
@@ -562,10 +618,16 @@ async function searchCommunityPosts(term, channel) {
   const safe = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
   const wantRooms = channelsAreReady() && !channel ? roomsMatchingTerm(q) : [];
   const outcome = await withRetry(async () => {
-    const base = (withChannel) => supabase.from("community_posts")
-      .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
-      .is("deleted_at", null)
-      .is("parent_id", null);
+    // Search is one side of the wall at a time. Inside a team it searches that
+    // team; outside it searches the open rooms. It never searches both, which
+    // would put a team's clip in front of somebody standing in a public room.
+    const base = (withChannel) => {
+      let q = supabase.from("community_posts")
+        .select(withChannel ? COMMUNITY_COLS : COMMUNITY_BASE_COLS)
+        .is("deleted_at", null)
+        .is("parent_id", null);
+      return applyTeamFilter(q, teamId);
+    };
     const run = async (withChannel) => {
       let sel = base(withChannel).ilike("body", `%${safe}%`);
       // Null channel means every room. With one technique room, searching the
@@ -688,6 +750,11 @@ function feedScope(channel, opts) {
     // database has heard of, so filtering on it would return nothing.
     room: channel === ALL_ROOMS ? null : (channel || DEFAULT_CHANNEL),
     since: (opts && opts.since) || null,
+    // Which side of the wall. A team id fetches that team and nothing else;
+    // null fetches the open rooms and nothing else. Never neither — a query
+    // with no team filter at all returns a member's own team posts mixed into
+    // the public feed, which is the leak this exists to prevent.
+    teamId: (opts && opts.teamId) || null,
   };
 }
 // What the room being read wants: a floor at the start of this week, or none.
@@ -712,6 +779,7 @@ async function fetchCommunityFeed(pages, channel, opts) {
         .is("parent_id", null);
       if (withChannel && scope.room) q = q.eq("channel", scope.room);
       if (scope.since) q = q.gte("created_at", scope.since);
+      q = applyTeamFilter(q, scope.teamId);
       return q.order("created_at", { ascending: false }).limit(limit + 1);
     };
     let { data, error } = await roots_(channelsAreReady());
@@ -771,15 +839,19 @@ function groupClipCount(counts, groupId) {
   return channelsInGroup(groupId).reduce((n, c) => n + (counts.byRoom[c.id] || 0), 0);
 }
 
-async function fetchClipCounts() {
+async function fetchClipCounts(teamId) {
   if (!supabase) return LOAD_FAILED;
   const outcome = await withRetry(async () => {
-    const run = async (withChannel) => supabase.from("community_posts")
-      .select(withChannel ? "channel, video_url, created_at" : "video_url, created_at")
-      .is("deleted_at", null)
-      .is("parent_id", null)
-      .not("video_url", "is", null)
-      .limit(CLIP_COUNT_LIMIT);
+    // The numbers beside the open rooms count the open rooms. A team's clips
+    // are counted on the team's own page, by the same function pointed at it.
+    const run = async (withChannel) => {
+      let q = supabase.from("community_posts")
+        .select(withChannel ? "channel, video_url, created_at" : "video_url, created_at")
+        .is("deleted_at", null)
+        .is("parent_id", null)
+        .not("video_url", "is", null);
+      return applyTeamFilter(q, teamId).limit(CLIP_COUNT_LIMIT);
+    };
     let ready = channelsAreReady();
     let { data, error } = await run(ready);
     if (error && isMissingChannelColumn(error)) { markChannelsMissing(); ready = false; ({ data, error } = await run(false)); }
@@ -790,6 +862,163 @@ async function fetchClipCounts() {
   return clipCountsFrom(outcome.result.rows, outcome.result.ready);
 }
 
+
+// Which teams this person is in, or has asked to be in. One query: the team
+// rows come back embedded, so a member list does not become a list of ids and
+// then a second round trip per id.
+async function fetchMyTeams(userId) {
+  if (!supabase || !userId || !teamsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("team_members")
+      .select("team_id, status, role, member_name, teams:team_id ( id, name, invite_code, leader_id )")
+      .eq("user_id", userId);
+    if (error) {
+      if (isMissingTeams(error)) return TEAMS_MISSING;
+      throw error;
+    }
+    return (data || [])
+      .filter((r) => r.teams)
+      .map((r) => ({
+        id: r.team_id,
+        name: r.teams.name,
+        inviteCode: r.teams.invite_code,
+        leaderId: r.teams.leader_id,
+        status: r.status,
+        role: r.role,
+      }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  });
+  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+// Every team, for the coach. Nobody else can read this — the policy sees to
+// that, not this function.
+async function fetchAllTeams() {
+  if (!supabase || !teamsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("teams")
+      .select("id, name, invite_code, leader_id, created_at").order("name");
+    if (error) {
+      if (isMissingTeams(error)) return TEAMS_MISSING;
+      throw error;
+    }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+// Six characters, no vowels and no 0/O/1/I/L, because this gets read off a
+// screen and typed into a phone by somebody standing in a gym.
+const CODE_ALPHABET = "BCDFGHJKMNPQRSTVWXYZ23456789";
+function newInviteCode() {
+  let out = "";
+  const n = new Uint32Array(6);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) crypto.getRandomValues(n);
+  else for (let i = 0; i < 6; i++) n[i] = Math.floor(Math.random() * 4294967296);
+  for (let i = 0; i < 6; i++) out += CODE_ALPHABET[n[i] % CODE_ALPHABET.length];
+  return out;
+}
+
+async function createTeam(name, leaderId, userId) {
+  if (!supabase || !teamsReady()) return { ok: false, reason: TEAMS_MISSING };
+  const code = newInviteCode();
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("teams")
+      .insert({ name: String(name || "").trim(), invite_code: code, leader_id: leaderId, created_by: userId })
+      .select("id, name, invite_code, leader_id").single();
+    if (error) {
+      if (isMissingTeams(error)) return TEAMS_MISSING;
+      throw error;
+    }
+    // The leader is a member from the moment the team exists, and an approved
+    // one. A team whose leader has to ask permission to enter it is a bug
+    // nobody would think to look for.
+    const { error: mErr } = await supabase.from("team_members").insert({
+      team_id: data.id, user_id: leaderId, status: "approved", role: "leader", decided_at: new Date().toISOString(), decided_by: userId,
+    });
+    if (mErr) throw mErr;
+    return data;
+  });
+  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return { ok: false, reason: TEAMS_MISSING }; }
+  if (!outcome.ok) return { ok: false };
+  return { ok: true, team: outcome.result };
+}
+
+async function fetchTeamMembers(teamId) {
+  if (!supabase || !teamId || !teamsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("team_members")
+      .select("user_id, member_name, status, role, requested_at")
+      .eq("team_id", teamId)
+      .order("requested_at", { ascending: true });
+    if (error) {
+      if (isMissingTeams(error)) return TEAMS_MISSING;
+      throw error;
+    }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function decideTeamMember(teamId, memberUserId, status, deciderId) {
+  if (!supabase || !teamsReady()) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("team_members")
+      .update({ status, decided_at: new Date().toISOString(), decided_by: deciderId })
+      .eq("team_id", teamId).eq("user_id", memberUserId);
+    if (error) throw error;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't save that decision — check your connection.", autoDismissMs: 6000 });
+    return { ok: false };
+  }
+  return { ok: true };
+}
+
+// The only way in. The lookup runs inside the database as the definer, because
+// a team must not be readable to somebody who is not in it yet — which is the
+// whole point of a code rather than a list.
+const JOIN_NO_SUCH_CODE = "join-no-code";
+async function requestTeamJoin(code, displayName) {
+  if (!supabase) return { ok: false };
+  if (!teamsReady()) return { ok: false, reason: TEAMS_MISSING };
+  const { data, error } = await supabase.rpc("request_team_join", {
+    code: String(code || "").trim(),
+    display_name: String(displayName || "").trim(),
+  });
+  if (error) {
+    if (String(error.code || "") === "P0002" || /no team with that code/i.test(error.message || "")) {
+      return { ok: false, reason: JOIN_NO_SUCH_CODE };
+    }
+    if (isMissingTeams(error)) { markTeamsMissing(); return { ok: false, reason: TEAMS_MISSING }; }
+    return { ok: false };
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return { ok: false, reason: JOIN_NO_SUCH_CODE };
+  return { ok: true, team: { id: row.team_id, name: row.team_name, status: row.status } };
+}
+
+// Kyle starts every team, then hands it to whoever runs that gym. Without
+// this the coach stays the leader of every team forever and approves every
+// request for every gym, which is the opposite of the point.
+async function makeTeamLeader(teamId, memberUserId) {
+  if (!supabase || !teamsReady()) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("teams").update({ leader_id: memberUserId }).eq("id", teamId);
+    if (error) throw error;
+    const { error: rErr } = await supabase.from("team_members")
+      .update({ role: "leader", status: "approved" }).eq("team_id", teamId).eq("user_id", memberUserId);
+    if (rErr) throw rErr;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't hand over the team — check your connection.", autoDismissMs: 6000 });
+    return { ok: false };
+  }
+  return { ok: true };
+}
 
 async function fetchCommunityReactions(postIds) {
   if (!supabase) return LOAD_FAILED;
@@ -813,6 +1042,29 @@ async function fetchCommunityReactions(postIds) {
 // these were reported to the athlete as "check your connection", which is a
 // lie that sends somebody to reset their wifi over a migration that was never
 // run.
+// supabase-teams.sql has not been run. Until it has, teams are OFF rather than
+// open: no team rooms, no join box, no create button. A half-present teams
+// feature is the one shape this must never take, because every way it could
+// half-work ends with something private being readable.
+const TEAMS_MISSING = "teams-missing";
+let teamsMissing = false;
+const teamsReady = () => !teamsMissing;
+const markTeamsMissing = () => { teamsMissing = true; };
+function isMissingTeams(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
+  // 42P01 no such table, PGRST205 not in the schema cache, 42703 no such
+  // column — the team_id on community_posts is added by the same migration,
+  // so a build that has teams talking to a database that does not is exactly
+  // as broken whichever of the three answers comes back. PGRST202 is the
+  // function not being there, which is how joining by code fails.
+  if (code === "42P01" || code === "PGRST205" || code === "PGRST202") return true;
+  if (code === "42703") return msg.includes("team");
+  return /teams|team_members|team_id|request_team_join/.test(msg)
+    && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
+}
+
 const SAVES_MISSING = "saves-missing";
 const SAVES_REFUSED = "saves-refused";
 
@@ -946,9 +1198,18 @@ async function createCommunityPost(post) {
     if (error && isMissingChannelColumn(error)) {
       // Same reason as the feed: post it into the one feed that exists rather
       // than refusing, and stop claiming the connection is at fault.
+      //
+      // Never for a team post. That fallback strips the room, and a post with
+      // no room is a post in the one feed everybody can read — which is the
+      // single worst thing this app could do with something somebody wrote
+      // into a private room. It fails instead, loudly, and the text stays in
+      // the box. The database refuses it too (a team post must name a team
+      // room), but the app must not be the thing asking.
+      if (!canRetryWithoutChannel(row)) return { __teamsMissing: true };
       markChannelsMissing();
       ({ data, error } = await send(false));
     }
+    if (error && row.team_id && isMissingTeams(error)) return { __teamsMissing: true };
     if (error) {
       if (error.code === "23505") {
         const { data: already } = await supabase.from("community_posts")
@@ -962,6 +1223,15 @@ async function createCommunityPost(post) {
     }
     return data;
   });
+  if (outcome.ok && outcome.result && outcome.result.__teamsMissing) {
+    markTeamsMissing();
+    emitToast({
+      kind: "error",
+      autoDismissMs: 10000,
+      message: "Teams aren't switched on yet, so nothing was posted — and it was NOT posted anywhere public. Your text is still in the box.",
+    });
+    return { ok: false, teamsMissing: true };
+  }
   if (outcome.ok && outcome.result && outcome.result.__channelRejected) {
     emitToast({
       kind: "error",
@@ -5741,7 +6011,7 @@ function ConditioningPlan({ target, name }) {
 // never grow a filter that drops them, and the query above must never grow
 // .is("parent_id", null). There is a check that fails if either happens.
 function unseenRows(rows, seenBy, lastSeen) {
-  return (rows || []).filter((row) => row.created_at > ((seenBy || {})[row.channel] || lastSeen));
+  return (rows || []).filter((row) => row.created_at > ((seenBy || {})[rowSeenKey(row)] || lastSeen));
 }
 
 function useCommunityUnread(prefs, userId, enabled) {
@@ -5763,7 +6033,9 @@ function useCommunityUnread(prefs, userId, enabled) {
       if (document.visibilityState === "hidden") return;
       try {
         const { data, error } = await supabase.from("community_posts")
-          .select(channelsAreReady() ? "id, author_name, body, video_url, created_at, channel" : "id, author_name, body, video_url, created_at")
+          .select(channelsAreReady()
+            ? (teamsReady() ? "id, author_name, body, video_url, created_at, channel, team_id" : "id, author_name, body, video_url, created_at, channel")
+            : "id, author_name, body, video_url, created_at")
           .is("deleted_at", null)
           .gt("created_at", lastSeen)
           .neq("author_id", userId)
@@ -5775,10 +6047,7 @@ function useCommunityUnread(prefs, userId, enabled) {
         // is exactly the single-feed behaviour from before channels existed.
         setCount(unseen.length);
         const per = {};
-        unseen.forEach((row) => {
-          const id = row.channel || DEFAULT_CHANNEL;
-          per[id] = (per[id] || 0) + 1;
-        });
+        unseen.forEach((row) => { const k = rowSeenKey(row); per[k] = (per[k] || 0) + 1; });
         setByChannel(per);
       } catch { /* offline; the badge just stays where it was */ }
     };
@@ -5999,6 +6268,187 @@ function ReplyComposer({ userId, onSend }) {
   );
 }
 
+// Teams: switching between them, asking to join one, and — if you lead one —
+// deciding who gets in. Kept in one place because they are one idea, and split
+// across the page they read as four unrelated controls.
+function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, onChanged, onClose }) {
+  const [code, setCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinNote, setJoinNote] = useState("");
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [members, setMembers] = useState({});
+  const [busy, setBusy] = useState("");
+
+  const approved = teams.filter((t) => t.status === "approved");
+  const pending = teams.filter((t) => t.status === "pending");
+  const led = approved.filter((t) => t.leaderId === userId);
+
+  const loadMembers = useCallback(async (teamId) => {
+    const rows = await fetchTeamMembers(teamId);
+    if (rows !== LOAD_FAILED) setMembers((m) => ({ ...m, [teamId]: rows }));
+  }, []);
+  useEffect(() => { led.forEach((t) => loadMembers(t.id)); }, [teams.length]); // eslint-disable-line
+
+  const decide = async (teamId, memberId, status) => {
+    setBusy(teamId + memberId);
+    const res = await decideTeamMember(teamId, memberId, status, userId);
+    if (res.ok) await loadMembers(teamId);
+    setBusy("");
+  };
+
+  return (
+    <ModalShell title="Teams" onClose={onClose}>
+      <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+        A team is a private room for one gym. Only people its leader has let in can read
+        anything posted there, and no other team can see it at all. Kyle can read team posts
+        so he can remove something if he has to — that is the only exception, and it is
+        written here rather than left for anyone to find out later.
+      </p>
+
+      <div className="room-group">
+        <div className="room-group-label"><span>Where you are posting</span></div>
+        <button type="button" className={`room-row${!activeTeam ? " current" : ""}`}
+          onClick={() => { onSwitch(null); onClose(); }}>
+          <span className="room-row-main">
+            <span className="room-row-name">Open Mat — everyone</span>
+            <span className="room-row-blurb">The rooms every member shares, across every gym.</span>
+          </span>
+          {!activeTeam ? <Check size={16} aria-hidden="true" /> : null}
+        </button>
+        {approved.map((t) => (
+          <button key={t.id} type="button" className={`room-row${activeTeam && activeTeam.id === t.id ? " current" : ""}`}
+            onClick={() => { onSwitch(t); onClose(); }}>
+            <span className="room-row-main">
+              <span className="room-row-name">
+                {t.name}
+                {t.leaderId === userId ? <span className="room-row-count"> — you lead this</span> : null}
+              </span>
+              <span className="room-row-blurb">Private to this team. Three rooms: Team, This week, Clips.</span>
+            </span>
+            {activeTeam && activeTeam.id === t.id ? <Check size={16} aria-hidden="true" /> : null}
+          </button>
+        ))}
+        {approved.length === 0 && (
+          <p className="muted" style={{ fontSize: 12.5, margin: "4px 2px 0" }}>
+            You are not in a team yet. If your gym has one, ask whoever runs it for the code.
+          </p>
+        )}
+      </div>
+
+      {pending.length > 0 && (
+        <div className="adjust-box" style={{ marginBottom: 14 }}>
+          {pending.map((t) => (
+            <div key={t.id}>Waiting on <strong>{t.name}</strong> to let you in. Nothing to do — they will see your request.</div>
+          ))}
+        </div>
+      )}
+
+      {led.map((t) => {
+        const rows = members[t.id] || [];
+        const waiting = rows.filter((m) => m.status === "pending");
+        const inTeam = rows.filter((m) => m.status === "approved");
+        return (
+          <div key={t.id} className="room-group">
+            <div className="room-group-label"><span>{t.name} — you lead this</span></div>
+            <div className="adjust-box" style={{ marginBottom: 10 }}>
+              Invite code: <strong className="team-code">{t.inviteCode}</strong>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Give this to people at your gym. Nobody can find the team without it, and you still
+                decide on each person.
+              </div>
+            </div>
+            {waiting.length === 0
+              ? <p className="muted" style={{ fontSize: 12.5, margin: "0 2px 10px" }}>Nobody waiting.</p>
+              : waiting.map((m) => (
+                <div key={m.user_id} className="blocked-row">
+                  <span>{m.member_name || "Someone"}</span>
+                  <span style={{ display: "flex", gap: 8 }}>
+                    <button className="link-btn" disabled={busy === t.id + m.user_id}
+                      onClick={() => decide(t.id, m.user_id, "approved")}>Let in</button>
+                    <button className="link-btn" disabled={busy === t.id + m.user_id}
+                      onClick={() => decide(t.id, m.user_id, "denied")}>No</button>
+                  </span>
+                </div>
+              ))}
+            {inTeam.filter((m) => m.user_id !== userId).map((m) => (
+              <div key={m.user_id} className="blocked-row">
+                <span>{m.member_name || "Member"}{m.role === "leader" ? " — leader" : ""}</span>
+                {m.role !== "leader" && (
+                  <button className="link-btn" disabled={busy === t.id + m.user_id}
+                    onClick={async () => {
+                      setBusy(t.id + m.user_id);
+                      const res = await makeTeamLeader(t.id, m.user_id);
+                      if (res.ok) { await loadMembers(t.id); await onChanged(); }
+                      setBusy("");
+                    }}>Make leader</button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      <div className="room-group">
+        <div className="room-group-label"><span>Join a team</span></div>
+        <label className="labeled-input" style={{ marginBottom: 8 }}>
+          <span>Invite code</span>
+          <input type="text" value={code} placeholder="Six characters"
+            style={{ textTransform: "uppercase" }}
+            onChange={(e) => { setCode(e.target.value); setJoinNote(""); }} />
+        </label>
+        <button className="btn-primary wide" disabled={joining || code.trim().length < 4}
+          onClick={async () => {
+            setJoining(true); setJoinNote("");
+            const res = await requestTeamJoin(code, clientName);
+            if (res.ok) {
+              setCode("");
+              setJoinNote(res.team.status === "approved"
+                ? `You are already in ${res.team.name}.`
+                : `Asked to join ${res.team.name}. Their leader decides from here.`);
+              await onChanged();
+            } else if (res.reason === JOIN_NO_SUCH_CODE) {
+              setJoinNote("No team has that code. Check it with whoever gave it to you.");
+            } else if (res.reason === TEAMS_MISSING) {
+              setJoinNote("Teams aren't switched on yet.");
+            } else {
+              setJoinNote("Couldn't send that just now — check your connection.");
+            }
+            setJoining(false);
+          }}>{joining ? "Asking…" : "Ask to join"}</button>
+        {joinNote && <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>{joinNote}</p>}
+      </div>
+
+      {isCoach && (
+        <div className="room-group">
+          <div className="room-group-label"><span>Start a team</span></div>
+          <label className="labeled-input" style={{ marginBottom: 8 }}>
+            <span>Gym or team name</span>
+            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Spokane BJJ" />
+          </label>
+          <button className="btn-ghost wide" disabled={creating || newName.trim().length < 2}
+            onClick={async () => {
+              setCreating(true);
+              const res = await createTeam(newName, userId, userId);
+              if (res.ok) {
+                setNewName("");
+                await onChanged();
+                emitToast({ kind: "info", autoDismissMs: 9000,
+                  message: `${res.team.name} created. Its code is ${res.team.invite_code} — hand the team over with "Make leader" once they are in.` });
+              } else {
+                emitToast({ kind: "error", message: "Couldn't create that team.", autoDismissMs: 6000 });
+              }
+              setCreating(false);
+            }}>{creating ? "Creating…" : "Create the team"}</button>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
+            You lead it to begin with. Once whoever runs that gym has joined, hand it to them.
+          </p>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel = {} }) {
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
@@ -6028,6 +6478,13 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // default: a room that says 0 because nothing loaded is a lie that stops
   // somebody opening the one room that had something in it.
   const [clipCounts, setClipCounts] = useState(null);
+  // Null means the open rooms. A team object means that team and nothing else
+  // — every query below carries it, and the database refuses anything that
+  // does not match.
+  const [teams, setTeams] = useState([]);
+  const [activeTeam, setActiveTeam] = useState(null);
+  const [teamsOn, setTeamsOn] = useState(true);
+  const [teamPanel, setTeamPanel] = useState(false);
   // The room opens as a wall of clips rather than a column of text, because
   // that is what the rooms are for. General is the exception — it is the room
   // for asking things, and a grid of nothing would be the first thing a new
@@ -6068,10 +6525,27 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // Read by load(), which runs on a timer and must never see a stale value.
   const weekArchiveRef = useRef(false);
   useEffect(() => { weekArchiveRef.current = weekArchive; }, [weekArchive]);
+  const teamRef = useRef(null);
+  useEffect(() => { teamRef.current = activeTeam; }, [activeTeam]);
+
+  const loadTeams = useCallback(async () => {
+    const mine = await fetchMyTeams(userId);
+    if (mine === LOAD_FAILED) return;
+    setTeams(mine);
+    setTeamsOn(teamsReady());
+    // A membership can be revoked while somebody is sitting in the room.
+    setActiveTeam((cur) => {
+      if (!cur) return cur;
+      const still = mine.find((t) => t.id === cur.id && t.status === "approved");
+      return still || null;
+    });
+  }, [userId]);
+  useEffect(() => { loadTeams(); }, [loadTeams]);
   const load = useCallback(async () => {
     const at = mutations.current;
     const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current,
-      feedWindow(channelRef.current, weekArchiveRef.current));
+      { ...(feedWindow(channelRef.current, weekArchiveRef.current) || {}),
+        teamId: teamRef.current ? teamRef.current.id : null });
     if (feed === LOAD_FAILED) { setFailed(true); return; }
     const reacts = await fetchCommunityReactions(feed.posts.map((p) => p.id));
     if (mutations.current !== at) return;
@@ -6122,7 +6596,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setSearching(true);
     // Every room, not the one they happen to be standing in. Each result says
     // which room it came from.
-    const res = await searchCommunityPosts(q, null);
+    const res = await searchCommunityPosts(q, null, activeTeam ? activeTeam.id : null);
     // A slower earlier search must never overwrite a newer one's results.
     if (mine !== searchSeq.current) return;
     setSearching(false);
@@ -6130,7 +6604,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setSearchFailed(false);
     setMatchedRooms(res.rooms || []);
     setResults(res.posts);
-  }, [channel]);
+  }, [channel, activeTeam]);
 
   const clearSearch = () => { searchSeq.current++; setQuery(""); setResults(null); setSearching(false); setSearchFailed(false); setPicked(null); setMatchedRooms([]); };
 
@@ -6159,9 +6633,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // ten minutes ago is counted. It is one query and nobody opens this list on
   // a timer.
   const loadCounts = useCallback(async () => {
-    const res = await fetchClipCounts();
+    const res = await fetchClipCounts(activeTeam ? activeTeam.id : null);
     setClipCounts(res === LOAD_FAILED ? null : res);
-  }, []);
+  }, [activeTeam]);
   useEffect(() => { loadCounts(); }, [loadCounts]);
   useEffect(() => { if (roomPickerOpen) loadCounts(); }, [roomPickerOpen, loadCounts]);
 
@@ -6203,10 +6677,32 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setSavedPosts(await fetchSavedPosts(userId));
   };
 
+  // Moving between the open rooms and a team is a bigger move than changing
+  // room: the feed, the search, the counts and the read marks all belong to
+  // one side or the other, so everything is reset rather than carried across.
+  const switchTeam = (team) => {
+    const sameId = (activeTeam ? activeTeam.id : null) === (team ? team.id : null);
+    if (sameId) return;
+    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, seenKeyFor(channel, activeTeam), null, shownByRoomIn(posts, view)) });
+    markedRef.current = false;
+    mutations.current += 1;
+    pagesRef.current = 1;
+    setPages(1);
+    setPosts(null);
+    setResults(null);
+    setQuery("");
+    setClipCounts(null);
+    weekArchiveRef.current = false;
+    setWeekArchive(false);
+    teamRef.current = team;
+    setActiveTeam(team);
+    setChannel(team ? TEAM_DEFAULT_CHANNEL : LANDING_CHANNEL);
+  };
+
   const switchChannel = (next) => {
     if (next === channel) return;
     // Leaving a channel marks it read, the same as leaving the tab does.
-    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, channel, null, shownByRoomIn(posts, view)) });
+    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, seenKeyFor(channel, activeTeam), null, shownByRoomIn(posts, view)) });
     markedRef.current = false;
     mutations.current += 1;
     pagesRef.current = 1;
@@ -6262,7 +6758,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => {
     if (markedRef.current || !posts || !posts.length) return;
     markedRef.current = true;
-    savePrefs({ lastSeen: seenPatch(prefs, channel, null, shownByRoom) });
+    savePrefs({ lastSeen: seenPatch(prefs, seenKeyFor(channel, activeTeam), null, shownByRoom) });
   }, [posts, savePrefs]); // eslint-disable-line
 
   // And again on the way out, so anything that arrived while you were sitting
@@ -6275,8 +6771,8 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   useEffect(() => { if (posts && posts.length) loadedRef.current = true; }, [posts]);
   const seenOnExitRef = useRef(null);
   useEffect(() => {
-    seenOnExitRef.current = seenPatch(prefs, channel, null, shownByRoom);
-  }, [prefs, channel, shownByRoom]);
+    seenOnExitRef.current = seenPatch(prefs, seenKeyFor(channel, activeTeam), null, shownByRoom);
+  }, [prefs, channel, shownByRoom, activeTeam]);
   useEffect(() => () => {
     if (loadedRef.current && seenOnExitRef.current) savePrefsRef.current({ lastSeen: seenOnExitRef.current });
   }, []);
@@ -6312,6 +6808,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
       // A reply lives in its parent's channel, so a thread can never be split
       // across two tabs.
       channel: parentId ? (posts || []).find((p) => p.id === parentId)?.channel || channel : channel,
+      // Only when there is one. A public post does not mention the column at
+      // all, so posting still works against a database where the teams
+      // migration has not been run.
+      ...(activeTeam ? { team_id: activeTeam.id } : {}),
     };
     mutations.current += 1;
     const res = await createCommunityPost(payload);
@@ -6430,7 +6930,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // mark the part that held it; one line has to carry the whole answer. In
   // Latest there is no elsewhere — every room is already on the screen.
   const unreadElsewhere = !inLatest && COMMUNITY_CHANNELS.some((c) => c.id !== channel && unreadByChannel[c.id]);
-  const barPart = inLatest ? "Every room" : groupLabel(openGroup);
+  const barPart = activeTeam ? activeTeam.name : inLatest ? "Every room" : groupLabel(openGroup);
+  const pendingTeams = teams.filter((t) => t.status === "pending").length;
+  const toApprove = teams.filter((t) => t.status === "approved" && t.leaderId === userId).length;
   const clipHits = clipsForPicker(results);
   const shownResults = Array.isArray(results) && picked
     ? results.filter((p) => p.id === picked)
@@ -6545,6 +7047,23 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             </div>
           ))}
         </div>
+      )}
+
+      {/* Which side of the wall you are standing on. Above the room bar
+          because it is the bigger question: a room called This week means two
+          different things depending on the answer. */}
+      {teamsOn && (
+        <button type="button" className="team-bar" onClick={() => setTeamPanel(true)}
+          aria-haspopup="dialog"
+          aria-label={activeTeam
+            ? `Posting in the team ${activeTeam.name}. Change team.`
+            : "Posting in the rooms everyone shares. Change team."}>
+          <Users size={15} aria-hidden="true" className="team-bar-icon" />
+          <span className="team-bar-name">{activeTeam ? activeTeam.name : "Open Mat — everyone"}</span>
+          {activeTeam ? <span className="team-bar-pill">private</span> : null}
+          {pendingTeams > 0 ? <span className="team-bar-pill">waiting</span> : null}
+          <ChevronRight size={15} className="room-bar-chev" aria-hidden="true" />
+        </button>
       )}
 
       {/* One line instead of two rows of chips. Twenty-nine rooms across six
@@ -6739,6 +7258,28 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             there, and "new" is how many posts and comments have landed since
             you last looked.
           </p>
+          {activeTeam ? (
+            <div className="room-group">
+              <div className="room-group-label"><span>{activeTeam.name}</span></div>
+              {TEAM_CHANNELS.map((c) => (
+                <button key={c.id} type="button"
+                  className={`room-row${c.id === channel ? " current" : ""}`}
+                  aria-current={c.id === channel ? "true" : undefined}
+                  onClick={() => { setRoomPickerOpen(false); switchChannel(c.id); }}>
+                  <span className="room-row-main">
+                    <span className="room-row-name">
+                      {c.label}
+                      {unreadByChannel[seenKeyFor(c.id, activeTeam)] ? (
+                        <span className="room-row-new">{unreadByChannel[seenKeyFor(c.id, activeTeam)]} new</span>
+                      ) : null}
+                    </span>
+                    <span className="room-row-blurb">{c.blurb}</span>
+                  </span>
+                  {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : (<>
           <div className="room-group">
             <div className="room-group-label">
               Everything
@@ -6799,7 +7340,21 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
               })}
             </div>
           ))}
+          </>)}
         </ModalShell>
+      )}
+
+      {teamPanel && (
+        <TeamsPanel
+          teams={teams}
+          activeTeam={activeTeam}
+          isCoach={isCoach}
+          userId={userId}
+          clientName={client?.name || ""}
+          onSwitch={switchTeam}
+          onChanged={loadTeams}
+          onClose={() => setTeamPanel(false)}
+        />
       )}
 
       {failed && (
@@ -13222,6 +13777,18 @@ function GlobalStyle() {
       .waiver-copy-section p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); }
       .waiver-copy-note { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--border);
         font-size: 12px; line-height: 1.5; color: var(--text-dim); }
+      .team-bar { display: flex; align-items: center; gap: 9px; width: 100%; margin: 0 0 8px;
+        padding: 9px 13px; border-radius: 12px; border: 1px solid var(--border);
+        background: transparent; color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+      .team-bar:hover, .team-bar:focus-visible { border-color: var(--belt, var(--accent)); outline: none; }
+      .team-bar-icon { color: var(--text-dim); flex: none; }
+      .team-bar-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .team-bar-pill { flex: none; font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+        text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+        background: var(--belt-fill, var(--accent)); color: var(--belt-on-fill, var(--accent-text)); }
+      .team-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px;
+        letter-spacing: 0.18em; color: var(--accent); }
       .room-row-blurb { font-size: 12px; line-height: 1.45; color: var(--text-dim); }
       /* THE COMPOSER, CLOSED
          One line until somebody wants it, so the room's posts are what the

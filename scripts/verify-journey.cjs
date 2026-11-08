@@ -2311,6 +2311,186 @@ check("the signed waiver reads as a document on screen", () => {
   unmount();
 });
 
+console.log("\nTeams: the wall between gyms");
+
+check("no query that reads posts ever leaves the team filter off", () => {
+  // The leak, stated as a rule. A query with no team filter returns a
+  // member's own team posts mixed into the public feed — a private post shown
+  // to another gym, by omission rather than by anybody deciding it. Inside a
+  // team the filter is that team; outside it is "team_id is null", stated, not
+  // left off.
+  const inTeam = A.teamFilter("team-1");
+  if (!inTeam || inTeam.op !== "eq" || inTeam.value !== "team-1") {
+    throw new Error(`inside a team the filter is ${JSON.stringify(inTeam)}`);
+  }
+  const outside = A.teamFilter(null);
+  if (!outside) throw new Error("the open rooms are fetched with no team filter at all");
+  if (outside.op !== "is" || outside.value !== null) {
+    throw new Error(`the open rooms are fetched with ${JSON.stringify(outside)}`);
+  }
+  [undefined, "", 0, false].forEach((v) => {
+    const f = A.teamFilter(v);
+    if (!f || f.op !== "is") throw new Error(`a falsy team id (${JSON.stringify(v)}) left the filter off`);
+  });
+});
+
+check("a team post is never retried as a post with no room", () => {
+  // The channel column going missing is handled by posting into the one feed
+  // that exists. For a team post that fallback is the leak: a post with no
+  // room is a post everybody can read. It has to fail instead.
+  if (A.canRetryWithoutChannel({ channel: "passing" }) !== true) {
+    throw new Error("an ordinary post lost its fallback");
+  }
+  [{ team_id: "t1", channel: "teamgeneral" }, { team_id: "t1" }].forEach((row) => {
+    if (A.canRetryWithoutChannel(row)) {
+      throw new Error("a team post would be retried without its room, into the public feed");
+    }
+  });
+});
+
+check("a team room and a public room can never be the same room", () => {
+  const publicIds = new Set(A.COMMUNITY_CHANNELS.map((c) => c.id));
+  A.TEAM_CHANNELS.forEach((c) => {
+    if (publicIds.has(c.id)) throw new Error(`${c.id} is both a team room and a public one`);
+    if (!A.isTeamChannel(c.id)) throw new Error(`${c.id} is not recognised as a team room`);
+    if (!c.label || !c.blurb || !c.placeholder) throw new Error(`the team room ${c.id} says nothing about itself`);
+  });
+  A.COMMUNITY_CHANNELS.forEach((c) => {
+    if (A.isTeamChannel(c.id)) throw new Error(`the public room ${c.id} is treated as a team room`);
+  });
+  if (!A.isTeamChannel(A.TEAM_DEFAULT_CHANNEL)) throw new Error("a team opens on a room that is not its own");
+});
+
+check("two gyms do not share a read mark", () => {
+  // Both teams have a room called This week. They are not the same room, and a
+  // single key for both means reading one marks the other read.
+  const a = A.seenKeyFor("teamweek", { id: "team-a" });
+  const b = A.seenKeyFor("teamweek", { id: "team-b" });
+  if (a === b) throw new Error(`both gyms write to ${a}`);
+  // And a team key can never collide with a public room's id.
+  const publicIds = new Set(A.COMMUNITY_CHANNELS.map((c) => c.id));
+  [a, b].forEach((k) => { if (publicIds.has(k)) throw new Error(`${k} is also a public room`); });
+  if (A.seenKeyFor("passing", null) !== "passing") throw new Error("a public room stopped using its own id");
+  // The same key, worked out from a row the database sent back.
+  if (A.rowSeenKey({ team_id: "team-a", channel: "teamweek" }) !== a) {
+    throw new Error("a team post is counted against a different key than the room it is in");
+  }
+  if (A.rowSeenKey({ channel: "passing" }) !== "passing") throw new Error("a public post is counted oddly");
+});
+
+check("read marks survive a build that has never heard of your team", () => {
+  // The map used to be rebuilt from the public room list, so any key not on
+  // that list was dropped on the next save — which would have been every team
+  // room, every time anybody read anything.
+  const prefs = { lastSeen: { passing: "2026-01-01T00:00:00.000Z", "t:team-a:teamweek": "2026-02-02T00:00:00.000Z" } };
+  const after = A.seenPatch(prefs, "passing");
+  if (after["t:team-a:teamweek"] !== "2026-02-02T00:00:00.000Z") {
+    throw new Error("reading a public room wiped a team's read mark");
+  }
+  const inTeam = A.seenPatch(prefs, A.seenKeyFor("teamgeneral", { id: "team-a" }));
+  if (!inTeam["t:team-a:teamgeneral"]) throw new Error("reading a team room recorded nothing");
+  if (inTeam.passing !== "2026-01-01T00:00:00.000Z") throw new Error("reading a team room moved a public mark");
+});
+
+check("teams stay off until the migration has been run", () => {
+  // Every shape the database takes when supabase-teams.sql has not been run.
+  // A half-present teams feature is the one state this must never reach,
+  // because each way it could half-work ends with something private readable.
+  const cases = [
+    { code: "42P01", message: 'relation "teams" does not exist' },
+    { code: "PGRST205", message: "Could not find the table 'public.teams' in the schema cache" },
+    { code: "PGRST202", message: "Could not find the function public.request_team_join" },
+    { code: "42703", message: 'column community_posts.team_id does not exist' },
+    { code: "", message: "Could not find the 'team_id' column in the schema cache" },
+    // Code only. PostgREST does not always populate the message, and with one
+    // there the message half of the detector answered for the code half, so
+    // deleting the code half changed nothing any check could see.
+    { code: "42P01" }, { code: "PGRST205" }, { code: "PGRST202" },
+  ];
+  cases.forEach((e, i) => {
+    if (!A.isMissingTeams(e)) throw new Error(`case ${i} (${e.code || "no code"}) was not recognised as the migration missing`);
+  });
+  // And things that are NOT the migration missing, which must not switch teams
+  // off and send Kyle to run SQL he has already run.
+  [
+    { code: "42501", message: "new row violates row-level security policy" },
+    { code: "23514", message: 'violates check constraint "community_posts_channel_check"' },
+    { code: "PGRST301", message: "JWT expired" },
+    { code: "42703", message: 'column community_posts.nickname does not exist' },
+    null, undefined,
+  ].forEach((e, i) => {
+    if (A.isMissingTeams(e)) throw new Error(`case ${i} was mistaken for the migration missing`);
+  });
+});
+
+check("the database is what keeps one gym out of another", () => {
+  // Not this file. The app hides what it should not show, but hiding is not
+  // privacy — anyone who can open a console can query directly. These are the
+  // lines in supabase-teams.sql that decide what comes back, and a change that
+  // removes one of them should not pass quietly.
+  const fs = require("fs"), path = require("path");
+  const sql = fs.readFileSync(path.join(__dirname, "..", "supabase-teams.sql"), "utf8");
+  // One policy at a time, bounded by its own statement. Searching the whole
+  // file for the thing a policy should contain finds it in the next policy
+  // down, which is how the read policy passed this with its membership test
+  // taken out.
+  const policy = (name) => {
+    const at = sql.indexOf(`create policy "${name}"`);
+    if (at < 0) return "";
+    const end = sql.indexOf(";", at);
+    return sql.slice(at, end < 0 ? sql.length : end);
+  };
+  // Each clause separately. A policy with "using (true)" and a correct
+  // "with check" still contains the guard somewhere in its text, so checking
+  // the statement as a whole passed a read rule that had been opened up.
+  const clauses = (body) => {
+    const u = body.indexOf("using (");
+    const w = body.indexOf("with check (");
+    const out = [];
+    if (u >= 0) out.push(body.slice(u, w > u ? w : body.length));
+    if (w >= 0) out.push(body.slice(w));
+    return out;
+  };
+  [
+    ["Members read the feed", "the read policy does not check team membership"],
+    ["Members post", "the post policy does not check team membership"],
+    ["The leader or the coach decides", "anybody can decide their own membership"],
+  ].forEach(([name, why]) => {
+    const body = policy(name);
+    if (!body) throw new Error(`the policy "${name}" is gone`);
+    const parts = clauses(body);
+    if (!parts.length) throw new Error(`the policy "${name}" has no condition on it at all`);
+    parts.forEach((part) => {
+      if (!/is_team_member\(team_id\)|is_team_leader\(team_id\)/.test(part)) throw new Error(why);
+    });
+  });
+  // Every one of them, not whichever one the file mentions first. These run
+  // inside the policies above; an ordinary function there either recurses or
+  // sees nothing, and either way the rule it was asked to enforce stops being
+  // enforced the way it reads.
+  ["is_team_member", "is_team_leader", "is_coach", "request_team_join"].forEach((fn) => {
+    const at = sql.indexOf(`function ${fn}(`);
+    if (at < 0) throw new Error(`${fn} is gone`);
+    const head = sql.slice(at, sql.indexOf("as $$", at));
+    if (!/security definer/.test(head)) {
+      throw new Error(`${fn} is not a definer function, so what it is asked to enforce stops being enforced`);
+    }
+  });
+  [
+    [/community_posts_team_channel_check[\s\S]*?team_id is null and[\s\S]*?teamgeneral/,
+     "nothing stops a team room holding a post with no team on it"],
+    [/alter table teams\s+enable row level security/, "row level security is not on for teams"],
+    [/alter table team_members enable row level security/, "row level security is not on for team_members"],
+  ].forEach(([re, why]) => { if (!re.test(sql)) throw new Error(why); });
+  // Nobody writes their own membership row — that is how a person would set
+  // their own status to approved.
+  const adds = policy("The leader or the coach adds a member");
+  if (!adds) throw new Error("nothing says who may add a member");
+  if (/auth\.uid\(\) *= *user_id/.test(adds)) {
+    throw new Error("a person can insert their own membership row and set its status");
+  }
+});
+
 check("the app has one name and it is the same everywhere", () => {
   // The name lives in the browser title, the home screen title, the web
   // manifest, the service worker, the share sheet, the waiver and two separate
@@ -2643,6 +2823,22 @@ check("some migration in the repo knows about every room", () => {
     lists.push({ f, ids });
   });
   if (!lists.length) throw new Error("no migration in the repo sets the channel constraint at all");
+
+  // The newest migration to set this constraint is the one that will actually
+  // be in force, and it has to know about the team rooms as well as the public
+  // ones. Without this the check was satisfied by an older file that happened
+  // to still match, while the constraint Kyle is about to run would reject a
+  // room the app ships.
+  const teamsFile = lists.find((l) => l.f === "supabase-teams.sql");
+  if (!teamsFile) throw new Error("supabase-teams.sql no longer sets the channel constraint");
+  const want = new Set([...appIds, ...A.TEAM_CHANNELS.map((c) => c.id)]);
+  const missingTeam = [...want].filter((id) => !teamsFile.ids.has(id));
+  const extraTeam = [...teamsFile.ids].filter((id) => !want.has(id));
+  if (missingTeam.length || extraTeam.length) {
+    throw new Error("supabase-teams.sql does not match the app's rooms"
+      + (missingTeam.length ? `, missing ${missingTeam.join(", ")}` : "")
+      + (extraTeam.length ? `, and listing ${extraTeam.join(", ")} which the app does not have` : ""));
+  }
   const match = lists.find((l) => l.ids.size === appIds.size && [...appIds].every((id) => l.ids.has(id)));
   if (!match) {
     const best = lists.sort((a, b) => b.ids.size - a.ids.size)[0];
