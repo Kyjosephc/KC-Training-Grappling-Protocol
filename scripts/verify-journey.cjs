@@ -2446,5 +2446,39 @@ check("a rough morning actually changes the session", () => {
   if (unchanged.length) throw new Error(`a rough morning left these days exactly as written: ${unchanged.join(", ")}`);
 });
 
+
+check("some migration in the repo knows about every room", () => {
+  // community_posts carries a CHECK constraint listing every room by hand, so
+  // a room added to the app without a matching migration is refused by the
+  // database on every post to it. Three migrations have widened this list so
+  // far and each one was kept in step by remembering to — which is not a
+  // method. At least one file has to match the app exactly.
+  const fs = require("fs"), path = require("path");
+  const root = path.join(__dirname, "..");
+  const appIds = new Set(A.COMMUNITY_CHANNELS.map((c) => c.id));
+  const files = fs.readdirSync(root).filter((f) => f.endsWith(".sql"));
+  const lists = [];
+  files.forEach((f) => {
+    const sql = fs.readFileSync(path.join(root, f), "utf8");
+    const at = sql.indexOf("community_posts_channel_check");
+    if (at < 0) return;
+    const open = sql.indexOf("check (channel in", at);
+    if (open < 0) return;
+    const close = sql.indexOf("));", open);
+    const ids = new Set([...sql.slice(open, close).matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1]));
+    lists.push({ f, ids });
+  });
+  if (!lists.length) throw new Error("no migration in the repo sets the channel constraint at all");
+  const match = lists.find((l) => l.ids.size === appIds.size && [...appIds].every((id) => l.ids.has(id)));
+  if (!match) {
+    const best = lists.sort((a, b) => b.ids.size - a.ids.size)[0];
+    const missing = [...appIds].filter((id) => !best.ids.has(id));
+    const extra = [...best.ids].filter((id) => !appIds.has(id));
+    throw new Error(`no migration matches the app's ${appIds.size} rooms. Closest is ${best.f}`
+      + (missing.length ? `, missing ${missing.join(", ")}` : "")
+      + (extra.length ? `, and listing ${extra.join(", ")} which no longer exists` : ""));
+  }
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);
