@@ -583,62 +583,50 @@ const mountGroup = (over = {}) => {
   }, over)));
 };
 
-check("the room strip marks the room you are in", () => {
-  // Twenty-six rooms do not fit one strip, so the parts of the game are one
-  // row and the rooms inside the open part are the next. Exactly one part and
-  // exactly one room are marked, and the rooms on show are that part's rooms
-  // and no others — otherwise nothing tells you where you are.
+check("the page says which room you are in", () => {
+  // Two rows of chips became one line. Twenty-nine rooms across six parts
+  // cannot be navigated sideways — the Guards part alone is fourteen.
   mountGroup();
-  const groups = [...host.querySelectorAll(".channel-group")];
-  if (groups.length !== A.CHANNEL_GROUPS.length) {
-    throw new Error(`${groups.length} parts on the row, expected ${A.CHANNEL_GROUPS.length}`);
+  const bar = host.querySelector(".room-bar");
+  if (!bar) throw new Error("no room bar on the group page");
+  if (!/general/i.test(bar.textContent)) throw new Error(`the bar reads "${bar.textContent.trim()}"`);
+  if (host.querySelector(".channel-chip") || host.querySelector(".channel-group")) {
+    throw new Error("the old chip rows are still being rendered");
   }
-  const onGroup = groups.filter((g) => g.classList.contains("active"));
-  if (onGroup.length !== 1) throw new Error(`${onGroup.length} parts marked as open, expected 1`);
-
-  const expected = A.channelsInGroup(A.groupOfChannel("general"));
-  const chips = [...host.querySelectorAll(".channel-chip")];
-  if (chips.length !== expected.length) {
-    throw new Error(`${chips.length} rooms on the strip, expected the ${expected.length} in the open part`);
-  }
-  const on = chips.filter((c) => c.classList.contains("active"));
-  if (on.length !== 1) throw new Error(`${on.length} rooms marked as selected, expected 1`);
-  const tabbed = chips.filter((c) => c.getAttribute("aria-selected") === "true");
-  if (tabbed.length !== 1) throw new Error(`${tabbed.length} rooms carry aria-selected`);
-  if (on[0] !== tabbed[0]) throw new Error("the styled room and the announced room are different rooms");
-  chips.forEach((c) => { if (!c.textContent.trim()) throw new Error("a room chip has no label"); });
+  unmount();
 });
 
-check("unread in a part you are not looking at still shows up", () => {
-  // 'passing' lives under Top and the page opens on General, so its chip is
-  // not on screen at all. When the strip was one flat row this was just a dot
-  // on a chip; now an unread room inside a closed part has to mark the part,
-  // or the only people who find out are the ones who were going to look
-  // anyway.
+check("anything new in another room shows from the room you are in", () => {
+  // The old strip could mark the part holding an unread room. One line has to
+  // carry the whole answer or unread posts anywhere else are invisible.
   mountGroup({ unreadByChannel: { passing: 3 } });
-  if (host.querySelector(".channel-chip .channel-dot")) {
-    throw new Error("a chip carried the dot for a room that is not on screen");
-  }
-  const dotted = [...host.querySelectorAll(".channel-group")].filter((g) => g.querySelector(".channel-dot"));
-  if (dotted.length !== 1) throw new Error(`${dotted.length} parts show a dot, expected 1`);
-  if (!/top/i.test(dotted[0].textContent)) {
-    throw new Error(`the dot landed on ${dotted[0].textContent.trim()}`);
-  }
-
-  // A room inside the part you are already in marks its own chip, and the
-  // part does not say it twice.
-  mountGroup({ unreadByChannel: { technique: 2 } });
-  const inOpen = [...host.querySelectorAll(".channel-chip")].filter((c) => c.querySelector(".channel-dot"));
-  if (inOpen.length !== 1) throw new Error(`${inOpen.length} rooms show a dot, expected 1`);
-  if (!/everything else/i.test(inOpen[0].textContent)) {
-    throw new Error(`the dot landed on ${inOpen[0].textContent.trim()}`);
-  }
-  if (host.querySelector(".channel-group .channel-dot")) {
-    throw new Error("the open part doubled up the dot its own chip already carries");
-  }
-
+  if (!host.querySelector(".room-bar-dot")) throw new Error("nothing marks unread posts in another room");
   mountGroup();
-  if (host.querySelector(".channel-dot")) throw new Error("a dot with nothing unread");
+  if (host.querySelector(".room-bar-dot")) throw new Error("a dot with nothing unread anywhere");
+  // What is new in the room already open is not news.
+  mountGroup({ unreadByChannel: { general: 2 } });
+  if (host.querySelector(".room-bar-dot")) throw new Error("the room being read counted as somewhere else");
+  unmount();
+});
+
+check("every room is two taps away, grouped by where it happens", () => {
+  mountGroup();
+  act(() => { host.querySelector(".room-bar").click(); });
+  const rows = [...host.querySelectorAll(".room-row")];
+  const heads = [...host.querySelectorAll(".room-group-label")];
+  if (rows.length !== A.COMMUNITY_CHANNELS.length) {
+    throw new Error(`the list offers ${rows.length} rooms, the app has ${A.COMMUNITY_CHANNELS.length}`);
+  }
+  if (heads.length !== A.CHANNEL_GROUPS.length) {
+    throw new Error(`${heads.length} headings for ${A.CHANNEL_GROUPS.length} parts of the game`);
+  }
+  const current = rows.filter((r) => r.classList.contains("current"));
+  if (current.length !== 1) throw new Error(`${current.length} rooms marked as the one you are in`);
+  // Each room carries the line that used to take two rows on the page itself.
+  rows.forEach((r) => {
+    if (!(r.querySelector(".room-row-blurb") || {}).textContent) throw new Error("a room in the list says nothing about itself");
+  });
+  unmount();
 });
 
 check("every room is reachable from some part of the game", () => {

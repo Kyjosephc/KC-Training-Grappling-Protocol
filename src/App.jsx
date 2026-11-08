@@ -384,6 +384,10 @@ const COMMUNITY_CHANNELS = [
 function channelsInGroup(groupId) {
   return COMMUNITY_CHANNELS.filter((c) => c.group === groupId);
 }
+function groupLabel(groupId) {
+  const g = CHANNEL_GROUPS.find((x) => x.id === groupId);
+  return g ? g.label : CHANNEL_GROUPS[0].label;
+}
 function groupOfChannel(id) {
   const c = COMMUNITY_CHANNELS.find((x) => x.id === id);
   return (c && c.group) || CHANNEL_GROUPS[0].id;
@@ -5826,8 +5830,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // The rooms row scrolls, so the room you are in has to be brought into view —
   // otherwise arriving in a room near the end of a long part looks like no room
   // is selected at all, which is exactly how it looked.
-  const stripRef = useRef(null);
-  const activeChipRef = useRef(null);
   const [reactions, setReactions] = useState([]);
   // The ids are held for every room at once, because a save has to look saved
   // wherever you meet it again. The posts themselves are only fetched when the
@@ -5839,6 +5841,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // going back to it is a state change and not another round trip.
   const [picked, setPicked] = useState(null);
   const [matchedRooms, setMatchedRooms] = useState([]);
+  const [roomPickerOpen, setRoomPickerOpen] = useState(false);
   // Whether saving works at all. False means the migration has not been run,
   // and the honest thing is to stop offering a button that cannot work rather
   // than to let people press it and blame their wifi.
@@ -5858,19 +5861,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [loadingMore, setLoadingMore] = useState(false);
 
   const savePrefs = onPrefs;
-
-  useEffect(() => {
-    const chip = activeChipRef.current;
-    const strip = stripRef.current;
-    if (!chip || !strip) return;
-    // scrollIntoView would scroll the whole page on some browsers; this moves
-    // only the strip.
-    const left = Math.max(0, chip.offsetLeft - (strip.clientWidth - chip.offsetWidth) / 2);
-    // scrollTo is missing in jsdom and in a few older mobile browsers, and an
-    // exception here would take the whole tab down over a cosmetic scroll.
-    if (typeof strip.scrollTo === "function") strip.scrollTo({ left, behavior: "smooth" });
-    else strip.scrollLeft = left;
-  }, [channel]);
 
   // Bumped by every local change. A poll that started before your tap and
   // lands after it is stale by definition, and applying it used to un-fill a
@@ -6190,6 +6180,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
 
   const canPost = (body.trim().length > 0 || embedFor(videoUrl)) && !uploading;
   const openGroup = groupOfChannel(channel);
+  // Anything new in a room other than the one being read. The old strip could
+  // mark the part that held it; one line has to carry the whole answer.
+  const unreadElsewhere = COMMUNITY_CHANNELS.some((c) => c.id !== channel && unreadByChannel[c.id]);
   const clipHits = clipsForPicker(results);
   const shownResults = Array.isArray(results) && picked
     ? results.filter((p) => p.id === picked)
@@ -6306,45 +6299,26 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         </div>
       )}
 
-      {/* Twenty-six rooms will not fit one strip at any font size, so the parts
-          of the game are the first row and the rooms inside the open part are
-          the second. Picking a part moves you to its first room, so the strip
-          and the feed can never be showing two different things. A part with
-          something new in a room you cannot currently see carries the dot, or
-          unread posts in a closed part would be invisible.
-
-          The rooms row still scrolls: the fade says there is more over there,
-          and the selected chip is scrolled into view on arrival so the room
-          you are in is never the one off the edge. */}
-      <div className="channel-groups" role="tablist" aria-label="Parts of the game">
-        {CHANNEL_GROUPS.map((g) => {
-          const rooms = channelsInGroup(g.id);
-          const open = openGroup === g.id;
-          const unread = rooms.some((c) => unreadByChannel[c.id]);
-          return (
-            <button key={g.id} role="tab" aria-selected={open}
-              className={`channel-group${open ? " active" : ""}`}
-              onClick={() => { if (!open && rooms[0]) switchChannel(rooms[0].id); }}>
-              {g.label}
-              {unread && !open ? <span className="channel-dot" aria-label="new posts" /> : null}
-            </button>
-          );
-        })}
-      </div>
-      <div className="channel-strip">
-        <div className="channel-row" role="tablist" aria-label="Rooms" ref={stripRef}>
-          {channelsInGroup(openGroup).map((c) => (
-            <button key={c.id} role="tab" aria-selected={channel === c.id}
-              ref={channel === c.id ? activeChipRef : null}
-              className={`channel-chip${channel === c.id ? " active" : ""}`}
-              onClick={() => switchChannel(c.id)}>
-              {c.label}
-              {unreadByChannel[c.id] ? <span className="channel-dot" aria-label="new posts" /> : null}
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="channel-blurb">{channelMeta(channel).blurb}</p>
+      {/* One line instead of two rows of chips. Twenty-nine rooms across six
+          parts cannot be navigated sideways — a chip strip is only scannable
+          while it fits on the screen, and the Guards part alone is fourteen
+          rooms. This says where you are and opens a list you read top to
+          bottom, which is the shape the content actually has. The blurb moved
+          into that list, beside the room it describes, where it is useful
+          when you are choosing rather than taking two lines every visit. */}
+      <button type="button" className="room-bar" onClick={() => setRoomPickerOpen(true)}
+        aria-haspopup="dialog" aria-label={`Current room: ${channelMeta(channel).label} in ${groupLabel(openGroup)}. Change room.`}>
+        <span className="room-bar-text">
+          {/* The General room sits in the General part, so without this the
+              bar reads "GENERAL" over "General". */}
+          {groupLabel(openGroup) !== channelMeta(channel).label && (
+            <span className="room-bar-part">{groupLabel(openGroup)}</span>
+          )}
+          <span className="room-bar-name">{channelMeta(channel).label}</span>
+        </span>
+        {unreadElsewhere ? <span className="room-bar-dot" aria-label="new posts in other rooms" /> : null}
+        <ChevronRight size={16} className="room-bar-chev" aria-hidden="true" />
+      </button>
 
       <div className="tech-search">
         <Search size={15} className="tech-search-icon" aria-hidden="true" />
@@ -6482,11 +6456,33 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         </Card>
       )}
 
-      <div className="community-prefs" role="group" aria-label="Community settings">
-        <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
-          <LogOut size={14} aria-hidden="true" />Leave the group
-        </button>
-      </div>
+      {roomPickerOpen && (
+        <ModalShell title="Rooms" onClose={() => setRoomPickerOpen(false)}>
+          <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+            Every room, by where it happens. A dot means something new since you last looked.
+          </p>
+          {CHANNEL_GROUPS.map((g) => (
+            <div key={g.id} className="room-group">
+              <div className="room-group-label">{g.label}</div>
+              {channelsInGroup(g.id).map((c) => (
+                <button key={c.id} type="button"
+                  className={`room-row${c.id === channel ? " current" : ""}`}
+                  aria-current={c.id === channel ? "true" : undefined}
+                  onClick={() => { setRoomPickerOpen(false); switchChannel(c.id); }}>
+                  <span className="room-row-main">
+                    <span className="room-row-name">
+                      {c.label}
+                      {unreadByChannel[c.id] ? <span className="channel-dot" aria-label="new posts" /> : null}
+                    </span>
+                    <span className="room-row-blurb">{c.blurb}</span>
+                  </span>
+                  {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>
+          ))}
+        </ModalShell>
+      )}
 
       {failed && (
         <div className="adjust-box" style={{ marginBottom: 12 }}>
@@ -6587,6 +6583,12 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           {loadingMore ? "Loading…" : "Load older posts"}
         </button>
       )}
+
+      <div className="community-prefs" role="group" aria-label="Community settings">
+        <button className="pref-btn quiet" onClick={() => savePrefs({ left: true })}>
+          <LogOut size={14} aria-hidden="true" />Leave the group
+        </button>
+      </div>
 
       {confirmHide && (
         <ModalShell onClose={() => setConfirmHide(null)} title="Remove this post?">
@@ -12594,36 +12596,32 @@ function GlobalStyle() {
          chips sit on the page, the strip fades out at the right so the clip is
          obviously an invitation, and the selected chip is filled rather than
          merely a slightly different grey. */
-      .channel-groups { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
-      .channel-group { position: relative; appearance: none; border: 1px solid var(--line);
-        background: transparent; color: var(--muted); border-radius: 999px;
-        padding: 6px 12px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.01em;
-        cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
-      .channel-group:hover { color: var(--text); border-color: var(--line-strong, var(--line)); }
-      /* A solid fill needs text matched to the fill, not to the page. This was
-         color: var(--text), which on a white belt is white on white. */
-      .channel-group.active { background: var(--belt-fill, var(--accent-soft));
-        border-color: var(--belt, var(--accent)); color: var(--belt-on-fill, var(--text)); }
-      .channel-group .channel-dot { top: 3px; right: 3px; }
-      .channel-strip { position: relative; margin: 0 -16px 10px; }
-      .channel-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
-        padding: 2px 16px 2px; scroll-behavior: smooth; }
-      .channel-row::-webkit-scrollbar { display: none; }
-      .channel-strip::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 34px;
-        pointer-events: none; background: linear-gradient(to right, transparent, var(--bg)); }
-      .channel-chip { flex: 0 0 auto; white-space: nowrap; position: relative; min-height: 38px;
-        padding: 8px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
-        background: var(--card); border: 1px solid var(--border); color: var(--text-dim);
-        transition: background .15s ease, color .15s ease, border-color .15s ease; }
-      .channel-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-      .channel-dot { position: absolute; top: 5px; right: 7px; width: 7px; height: 7px; border-radius: 50%;
-        background: var(--belt-fill); box-shadow: 0 0 0 2px var(--card); }
-      .channel-chip.active .channel-dot { box-shadow: 0 0 0 2px var(--accent); }
-      .channel-blurb { margin: 0 0 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
-      @media (prefers-reduced-motion: reduce) {
-        .channel-row { scroll-behavior: auto; }
-        .channel-chip { transition: none; }
-      }
+      .room-bar { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 12px;
+        padding: 11px 14px; border-radius: 13px; border: 1px solid var(--border);
+        background: var(--card); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+      .room-bar:hover, .room-bar:focus-visible { border-color: var(--belt, var(--accent)); outline: none; }
+      .room-bar-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+      .room-bar-part { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+      .room-bar-name { font-size: 15px; font-weight: 700; }
+      .room-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--belt, var(--accent)); flex: none; }
+      .room-bar-chev { color: var(--text-dim); flex: none; }
+      .room-group { margin-bottom: 18px; }
+      .room-group-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--text-dim); margin: 0 0 6px 2px; }
+      .room-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+        padding: 10px 12px; margin-bottom: 4px; border-radius: 11px; border: 1px solid transparent;
+        background: var(--card); color: var(--text); cursor: pointer; font: inherit; }
+      .room-row:hover, .room-row:focus-visible { border-color: var(--border); outline: none; }
+      .room-row.current { border-color: var(--belt, var(--accent)); }
+      .room-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+      .room-row-name { position: relative; display: inline-flex; align-items: center; gap: 7px;
+        font-size: 14px; font-weight: 700; }
+      .room-row-name .channel-dot { position: static; width: 7px; height: 7px; box-shadow: none; }
+      .room-row-blurb { font-size: 12px; line-height: 1.45; color: var(--text-dim); }
+      /* The two chip rows and their styles went with them. What is left is the
+         dot, which the room list still uses beside a room's name. */
+      .channel-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--belt-fill);
+        box-shadow: 0 0 0 2px var(--card); }
 
       /* THE COMPOSER, CLOSED
          One line until somebody wants it, so the room's posts are what the
