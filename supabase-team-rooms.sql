@@ -26,31 +26,29 @@
 -- off for exactly these three statements and turned back on immediately. The
 -- editor runs this as one transaction, so a failure anywhere rolls the disable
 -- back with everything else — the trigger cannot be left off.
+-- ORDER MATTERS, and getting it wrong looks like something else entirely.
+--
+-- The old constraint only knows the old room names. Moving a post to
+-- t_general while it is still in force is a NEW row violating it — which
+-- reads as the new constraint failing validation, and sends you looking in
+-- completely the wrong place. Five attempts went that way. So: the
+-- constraints come off first, the posts move, the new ones go on last.
+--
+-- The trigger is separate and for a different reason: it refuses any change
+-- to a post's channel at all, because the app may hide a post and never
+-- rewrite one. A migration whose job is moving posts has to step around it.
+
 alter table community_posts disable trigger community_posts_guard_trg;
+alter table community_posts drop constraint if exists community_posts_team_channel_check;
+alter table community_posts drop constraint if exists community_posts_channel_check;
 
 update community_posts set channel = 't_general'   where channel = 'teamgeneral';
 update community_posts set channel = 't_thisweek'  where channel = 'teamweek';
 update community_posts set channel = 't_technique' where channel = 'teamclips';
 
-alter table community_posts enable trigger community_posts_guard_trg;
-
-alter table community_posts drop constraint if exists community_posts_team_channel_check;
-alter table community_posts drop constraint if exists community_posts_channel_check;
-
--- One line each, because this gets pasted into a web editor by hand and a
--- half-finished paste has to be obvious rather than subtle.
---
--- The shape rule: having a team and having a t_ room are the same question.
--- Either both are true or neither is, so a private post cannot sit in a public
--- room and a public post cannot sit in a team one.
 alter table community_posts add constraint community_posts_team_channel_check check ((team_id is null) = (channel not like 't\_%'));
-
--- Every room spelled out. An earlier version derived the team half with
--- replace(channel, 't_', ''), which is correct for all forty-six ids — and the
--- database rejected a row it should have accepted anyway. Rather than keep
--- arguing with it, the list says what it means. It is longer and it is dull,
--- and neither of those has ever broken anything.
 alter table community_posts add constraint community_posts_channel_check check (channel in ('thisweek', 'general', 'technique', 'wrestling', 'footsweeps', 'passing', 'topcontrol', 'closedguard', 'halfguard', 'butterfly', 'dlr', 'spider', 'xguard', 'lapel', 'retention', 'sweeps', 'escapes', 'back', 'attacktop', 'attackbottom', 'attackside', 'legentries', 'leglocks', 't_thisweek', 't_general', 't_technique', 't_wrestling', 't_footsweeps', 't_passing', 't_topcontrol', 't_closedguard', 't_halfguard', 't_butterfly', 't_dlr', 't_spider', 't_xguard', 't_lapel', 't_retention', 't_sweeps', 't_escapes', 't_back', 't_attacktop', 't_attackbottom', 't_attackside', 't_legentries', 't_leglocks'));
+alter table community_posts enable trigger community_posts_guard_trg;
 
 select channel,
        count(*) filter (where team_id is null)     as open_posts,

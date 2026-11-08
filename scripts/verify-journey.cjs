@@ -3020,6 +3020,21 @@ check("a migration that moves posts between rooms turns the guard off first", ()
     const last = sql.lastIndexOf("update community_posts set channel");
     if (!(off < first)) throw new Error(`${f} moves a post before turning the guard off`);
     if (!(on > last)) throw new Error(`${f} turns the guard back on before the last move`);
+
+    // And the constraint has to come off before the move and go back on
+    // after. A post moved into a room the constraint in force has never heard
+    // of is a NEW row violating it — which reads as the new constraint
+    // failing to validate, and sends you looking at the wrong statement
+    // entirely. That cost five attempts.
+    const addsList = sql.search(/add constraint\s+community_posts_channel_check/);
+    if (addsList < 0) return;
+    const dropsList = sql.search(/drop constraint if exists community_posts_channel_check/);
+    if (!(dropsList >= 0 && dropsList < first)) {
+      throw new Error(`${f} moves posts into new rooms while the old room constraint is still on the table`);
+    }
+    if (!(addsList > last)) {
+      throw new Error(`${f} puts the new room constraint on before the posts have moved`);
+    }
   });
 });
 

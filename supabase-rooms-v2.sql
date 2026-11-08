@@ -20,6 +20,11 @@
 -- community_posts_guard_trg refuses any change to a post's channel. These
 -- statements ran clean the first time only because they matched no rows.
 alter table community_posts disable trigger community_posts_guard_trg;
+-- The constraint comes off before the posts move, not after. A post moved
+-- into a room the constraint in force has never heard of is a new row
+-- violating it, and the error reads as though the replacement constraint
+-- failed to validate — which is a long way from where the problem is.
+alter table community_posts drop constraint if exists community_posts_channel_check;
 
 update community_posts set channel = 'halfguard'  where channel in ('kneeshield', 'deephalf');
 update community_posts set channel = 'dlr'        where channel = 'rdlr';
@@ -33,8 +38,6 @@ update community_posts set channel = 'legentries' where channel = 'fiftyfifty';
 update community_posts set channel = 'technique'  where channel = 'submissions';
 
 alter table community_posts enable trigger community_posts_guard_trg;
-
-alter table community_posts drop constraint if exists community_posts_channel_check;
 
 alter table community_posts
   add constraint community_posts_channel_check
