@@ -2990,6 +2990,37 @@ check("a rough morning actually changes the session", () => {
 });
 
 
+check("a migration that moves posts between rooms turns the guard off first", () => {
+  // community_posts_guard_trg refuses any change to a post's channel — the app
+  // may hide a post, never rewrite one. A migration whose job is to move posts
+  // between rooms has to step around it, and one that forgets fails halfway
+  // with a message about editing posts that has nothing to do with rooms.
+  //
+  // This was found the hard way: an earlier migration had the same bug and ran
+  // clean, because it happened to match no rows. The first time it had a row
+  // to move it would have failed.
+  const fs = require("fs"), path = require("path");
+  const dir = path.join(__dirname, "..");
+  fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).forEach((f) => {
+    const sql = fs.readFileSync(path.join(dir, f), "utf8");
+    const moves = /update\s+community_posts\s+set\s+channel\s*=/.test(sql);
+    if (!moves) return;
+    if (!/disable trigger community_posts_guard_trg/.test(sql)) {
+      throw new Error(`${f} moves posts between rooms without turning off the guard that forbids it`);
+    }
+    if (!/enable trigger community_posts_guard_trg/.test(sql)) {
+      throw new Error(`${f} turns the guard off and never turns it back on`);
+    }
+    // Off before the first move, on after the last one.
+    const off = sql.indexOf("disable trigger community_posts_guard_trg");
+    const on = sql.indexOf("enable trigger community_posts_guard_trg", off + 1);
+    const first = sql.search(/update\s+community_posts\s+set\s+channel\s*=/);
+    const last = sql.lastIndexOf("update community_posts set channel");
+    if (!(off < first)) throw new Error(`${f} moves a post before turning the guard off`);
+    if (!(on > last)) throw new Error(`${f} turns the guard back on before the last move`);
+  });
+});
+
 check("some migration in the repo knows about every room", () => {
   // community_posts carries a CHECK constraint listing every room by hand, so
   // a room added to the app without a matching migration is refused by the

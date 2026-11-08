@@ -20,9 +20,19 @@
 -- The three original team rooms move to their equivalents. This runs before
 -- the constraints, because a constraint is checked against the rows already
 -- in the table.
+-- community_posts_guard_trg refuses any change to a post's channel: the app
+-- may hide a post, never rewrite one. That is right for the app and wrong for
+-- a migration whose whole job is to move posts between rooms, so it is turned
+-- off for exactly these three statements and turned back on immediately. The
+-- editor runs this as one transaction, so a failure anywhere rolls the disable
+-- back with everything else — the trigger cannot be left off.
+alter table community_posts disable trigger community_posts_guard_trg;
+
 update community_posts set channel = 't_general'   where channel = 'teamgeneral';
 update community_posts set channel = 't_thisweek'  where channel = 'teamweek';
 update community_posts set channel = 't_technique' where channel = 'teamclips';
+
+alter table community_posts enable trigger community_posts_guard_trg;
 
 alter table community_posts drop constraint if exists community_posts_team_channel_check;
 alter table community_posts

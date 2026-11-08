@@ -17,6 +17,10 @@
 -- post still sits in a retired room would fail the whole migration.
 -- =============================================================================
 
+-- community_posts_guard_trg refuses any change to a post's channel. These
+-- statements ran clean the first time only because they matched no rows.
+alter table community_posts disable trigger community_posts_guard_trg;
+
 update community_posts set channel = 'halfguard'  where channel in ('kneeshield', 'deephalf');
 update community_posts set channel = 'dlr'        where channel = 'rdlr';
 update community_posts set channel = 'spider'     where channel = 'lasso';
@@ -27,6 +31,8 @@ update community_posts set channel = 'legentries' where channel = 'fiftyfifty';
 -- only honest destination — anywhere else would be guessing on the athlete's
 -- behalf about a post we cannot read.
 update community_posts set channel = 'technique'  where channel = 'submissions';
+
+alter table community_posts enable trigger community_posts_guard_trg;
 
 alter table community_posts drop constraint if exists community_posts_channel_check;
 
