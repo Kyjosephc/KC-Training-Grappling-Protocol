@@ -20,3 +20,7 @@ dist
 .balance.cjs
 .a11y.cjs
 src/_*.jsx
+
+# Vite writes this while loading its config and deletes it again. It only ever
+# reaches a commit when a cleanup failed, and it is never worth keeping.
+vite.config.js.timestamp-*.mjs

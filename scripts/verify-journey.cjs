@@ -2499,12 +2499,14 @@ check("the database is what keeps one gym out of another", () => {
   // whichever migration last set it, which is the one that widened a team to
   // every room.
   const roomsSql = fs.readFileSync(path.join(__dirname, "..", "supabase-team-rooms.sql"), "utf8");
-  const shape = (roomsSql.match(/community_posts_team_channel_check[\s\S]*?check \(([\s\S]*?)\);/) || [])[1] || "";
+  const shape = (roomsSql.match(/add constraint\s+community_posts_team_channel_check\s+check\s*\(([\s\S]*?)\);/) || [])[1] || "";
   if (!shape) throw new Error("nothing sets the team/channel shape constraint");
-  if (!/team_id is null/.test(shape) || !/team_id is not null/.test(shape)) {
-    throw new Error("the shape constraint does not speak about team_id at all");
-  }
-  if (!/not like/.test(shape) || (shape.match(/like/g) || []).length < 2) {
+  // What it has to say, not the words it says it in: whether there is a team
+  // and whether the room name carries the prefix are the same question. Two
+  // branches or one equality both state that; demanding the phrase "team_id is
+  // not null" only tested which of them had been written.
+  if (!/team_id/.test(shape)) throw new Error("the shape constraint does not speak about team_id at all");
+  if (!/not like/.test(shape) || !/t\\_%/.test(shape)) {
     throw new Error("the shape constraint no longer ties the room name to whether there is a team");
   }
   // Nobody writes their own membership row — that is how a person would set
@@ -3052,15 +3054,27 @@ check("some migration in the repo knows about every room", () => {
   // ones. Without this the check was satisfied by an older file that happened
   // to still match, while the constraint Kyle is about to run would reject a
   // room the app ships.
-  const teamsFile = lists.find((l) => l.f === "supabase-team-rooms.sql");
-  if (!teamsFile) throw new Error("supabase-team-rooms.sql no longer sets the channel constraint");
-  const want = new Set([...appIds, ...A.TEAM_CHANNELS.map((c) => c.id)]);
-  const missingTeam = [...want].filter((id) => !teamsFile.ids.has(id));
-  const extraTeam = [...teamsFile.ids].filter((id) => !want.has(id));
+  const NEWEST = "supabase-team-rooms.sql";
+  const teamsFile = lists.find((l) => l.f === NEWEST);
+  if (!teamsFile) throw new Error(`${NEWEST} no longer sets the channel constraint`);
+  const roomsSrc = fs.readFileSync(path.join(root, NEWEST), "utf8");
+  // Written once and the team half derived, or written out twice in full.
+  const derived = /replace\s*\(\s*channel\s*,\s*'t_'\s*,\s*''\s*\)/.test(roomsSrc);
+  const want = derived
+    ? new Set(appIds)
+    : new Set([...appIds, ...A.TEAM_CHANNELS.map((c) => c.id)]);
+  const listed = new Set([...teamsFile.ids].filter((id) => id !== "t_"));
+  const missingTeam = [...want].filter((id) => !listed.has(id));
+  const extraTeam = [...listed].filter((id) => !want.has(id));
   if (missingTeam.length || extraTeam.length) {
-    throw new Error("supabase-teams.sql does not match the app's rooms"
+    throw new Error(`${NEWEST} does not match the app's rooms`
       + (missingTeam.length ? `, missing ${missingTeam.join(", ")}` : "")
       + (extraTeam.length ? `, and listing ${extraTeam.join(", ")} which the app does not have` : ""));
+  }
+  // If the list is derived, the prefix it derives with has to be the prefix
+  // the app actually uses, or the two halves quietly stop matching.
+  if (derived && A.teamChannelFor("general") !== "t_general") {
+    throw new Error("the migration strips 't_' but the app no longer uses that prefix");
   }
   const match = lists.find((l) => l.ids.size === appIds.size && [...appIds].every((id) => l.ids.has(id)));
   if (!match) {
