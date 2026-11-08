@@ -2341,14 +2341,28 @@ check("a team post is never retried as a post with no room", () => {
   if (A.canRetryWithoutChannel({ channel: "passing" }) !== true) {
     throw new Error("an ordinary post lost its fallback");
   }
-  [{ team_id: "t1", channel: "teamgeneral" }, { team_id: "t1" }].forEach((row) => {
+  [{ team_id: "t1", channel: "t_general" }, { team_id: "t1" }].forEach((row) => {
     if (A.canRetryWithoutChannel(row)) {
       throw new Error("a team post would be retried without its room, into the public feed");
     }
   });
 });
 
-check("a team room and a public room can never be the same room", () => {
+check("a team has every room the open side has, and none of the same ids", () => {
+  // Same parts of the game, same names, different audience. The ids differ by
+  // a prefix, and the prefix is what the database checks — sharing the ids
+  // would leave team_id as the only thing between a private post and the open
+  // feed.
+  if (A.TEAM_CHANNELS.length !== A.COMMUNITY_CHANNELS.length) {
+    throw new Error(`${A.TEAM_CHANNELS.length} team rooms for ${A.COMMUNITY_CHANNELS.length} open ones`);
+  }
+  A.COMMUNITY_CHANNELS.forEach((c) => {
+    const mirror = A.TEAM_CHANNELS.find((t) => t.id === A.teamChannelFor(c.id));
+    if (!mirror) throw new Error(`no team room for ${c.id}`);
+    if (mirror.label !== c.label) throw new Error(`${c.id} is called something else in a team`);
+    if (mirror.group !== c.group) throw new Error(`${c.id} sits in a different part of the game in a team`);
+    if (A.publicChannelFor(mirror.id) !== c.id) throw new Error(`${mirror.id} does not map back to ${c.id}`);
+  });
   const publicIds = new Set(A.COMMUNITY_CHANNELS.map((c) => c.id));
   A.TEAM_CHANNELS.forEach((c) => {
     if (publicIds.has(c.id)) throw new Error(`${c.id} is both a team room and a public one`);
@@ -2364,15 +2378,15 @@ check("a team room and a public room can never be the same room", () => {
 check("two gyms do not share a read mark", () => {
   // Both teams have a room called This week. They are not the same room, and a
   // single key for both means reading one marks the other read.
-  const a = A.seenKeyFor("teamweek", { id: "team-a" });
-  const b = A.seenKeyFor("teamweek", { id: "team-b" });
+  const a = A.seenKeyFor("t_thisweek", { id: "team-a" });
+  const b = A.seenKeyFor("t_thisweek", { id: "team-b" });
   if (a === b) throw new Error(`both gyms write to ${a}`);
   // And a team key can never collide with a public room's id.
   const publicIds = new Set(A.COMMUNITY_CHANNELS.map((c) => c.id));
   [a, b].forEach((k) => { if (publicIds.has(k)) throw new Error(`${k} is also a public room`); });
   if (A.seenKeyFor("passing", null) !== "passing") throw new Error("a public room stopped using its own id");
   // The same key, worked out from a row the database sent back.
-  if (A.rowSeenKey({ team_id: "team-a", channel: "teamweek" }) !== a) {
+  if (A.rowSeenKey({ team_id: "team-a", channel: "t_thisweek" }) !== a) {
     throw new Error("a team post is counted against a different key than the room it is in");
   }
   if (A.rowSeenKey({ channel: "passing" }) !== "passing") throw new Error("a public post is counted oddly");
@@ -2382,13 +2396,13 @@ check("read marks survive a build that has never heard of your team", () => {
   // The map used to be rebuilt from the public room list, so any key not on
   // that list was dropped on the next save — which would have been every team
   // room, every time anybody read anything.
-  const prefs = { lastSeen: { passing: "2026-01-01T00:00:00.000Z", "t:team-a:teamweek": "2026-02-02T00:00:00.000Z" } };
+  const prefs = { lastSeen: { passing: "2026-01-01T00:00:00.000Z", "t:team-a:t_thisweek": "2026-02-02T00:00:00.000Z" } };
   const after = A.seenPatch(prefs, "passing");
-  if (after["t:team-a:teamweek"] !== "2026-02-02T00:00:00.000Z") {
+  if (after["t:team-a:t_thisweek"] !== "2026-02-02T00:00:00.000Z") {
     throw new Error("reading a public room wiped a team's read mark");
   }
-  const inTeam = A.seenPatch(prefs, A.seenKeyFor("teamgeneral", { id: "team-a" }));
-  if (!inTeam["t:team-a:teamgeneral"]) throw new Error("reading a team room recorded nothing");
+  const inTeam = A.seenPatch(prefs, A.seenKeyFor("t_general", { id: "team-a" }));
+  if (!inTeam["t:team-a:t_general"]) throw new Error("reading a team room recorded nothing");
   if (inTeam.passing !== "2026-01-01T00:00:00.000Z") throw new Error("reading a team room moved a public mark");
 });
 
@@ -2477,11 +2491,22 @@ check("the database is what keeps one gym out of another", () => {
     }
   });
   [
-    [/community_posts_team_channel_check[\s\S]*?team_id is null and[\s\S]*?teamgeneral/,
-     "nothing stops a team room holding a post with no team on it"],
     [/alter table teams\s+enable row level security/, "row level security is not on for teams"],
     [/alter table team_members enable row level security/, "row level security is not on for team_members"],
   ].forEach(([re, why]) => { if (!re.test(sql)) throw new Error(why); });
+
+  // The half of the guarantee that is shape rather than permission lives in
+  // whichever migration last set it, which is the one that widened a team to
+  // every room.
+  const roomsSql = fs.readFileSync(path.join(__dirname, "..", "supabase-team-rooms.sql"), "utf8");
+  const shape = (roomsSql.match(/community_posts_team_channel_check[\s\S]*?check \(([\s\S]*?)\);/) || [])[1] || "";
+  if (!shape) throw new Error("nothing sets the team/channel shape constraint");
+  if (!/team_id is null/.test(shape) || !/team_id is not null/.test(shape)) {
+    throw new Error("the shape constraint does not speak about team_id at all");
+  }
+  if (!/not like/.test(shape) || (shape.match(/like/g) || []).length < 2) {
+    throw new Error("the shape constraint no longer ties the room name to whether there is a team");
+  }
   // Nobody writes their own membership row — that is how a person would set
   // their own status to approved.
   const adds = policy("The leader or the coach adds a member");
@@ -2568,10 +2593,10 @@ check("the panel answers a request rather than letting it vanish", () => {
 check("a room that is a conversation opens as one", () => {
   // A team's Team room is where "who is training Thursday" goes. It opened as
   // a grid of clips, which for that room is a grid of nothing.
-  ["general", A.TEAM_DEFAULT_CHANNEL, "thisweek", "teamweek"].forEach((id) => {
+  ["general", A.TEAM_DEFAULT_CHANNEL, "thisweek", "t_thisweek"].forEach((id) => {
     if (!A.opensAsConversation(id)) throw new Error(`${id} opens as a wall of clips`);
   });
-  ["passing", "leglocks", "teamclips", "halfguard"].forEach((id) => {
+  ["passing", "leglocks", "t_passing", "halfguard"].forEach((id) => {
     if (A.opensAsConversation(id)) throw new Error(`${id} opens as a column of text`);
   });
 });
@@ -2599,10 +2624,10 @@ check("a clip saved out of a team you left says so rather than going nowhere", (
   // can go, and offering to take you there opens a room that is empty by
   // definition, because a team room holds nothing that is not the team's.
   const teams = [{ id: "t1", name: "Infiniti Kryos", status: "approved" }];
-  const mine = A.savedPostHome({ team_id: "t1", channel: "teamclips" }, teams);
+  const mine = A.savedPostHome({ team_id: "t1", channel: "t_technique" }, teams);
   if (!mine.reachable || !mine.team) throw new Error("a clip from your own team was treated as unreachable");
   if (mine.team.name !== "Infiniti Kryos") throw new Error("it points at the wrong team");
-  const gone = A.savedPostHome({ team_id: "t9", channel: "teamclips" }, teams);
+  const gone = A.savedPostHome({ team_id: "t9", channel: "t_technique" }, teams);
   if (gone.reachable || gone.team) throw new Error("a clip from a team you are not in still offered a way in");
   // A public post needs no team and is always reachable.
   const open = A.savedPostHome({ channel: "passing" }, teams);
@@ -2978,12 +3003,15 @@ check("some migration in the repo knows about every room", () => {
   const lists = [];
   files.forEach((f) => {
     const sql = fs.readFileSync(path.join(root, f), "utf8");
-    const at = sql.indexOf("community_posts_channel_check");
+    // The add, not the drop: both mention the constraint by name and only one
+    // of them says what is allowed.
+    const at = sql.search(/add constraint\s+community_posts_channel_check/);
     if (at < 0) return;
-    const open = sql.indexOf("check (channel in", at);
-    if (open < 0) return;
-    const close = sql.indexOf("));", open);
-    const ids = new Set([...sql.slice(open, close).matchAll(/'([a-z0-9]+)'/g)].map((m) => m[1]));
+    const end = sql.indexOf(";", at);
+    const body = sql.slice(at, end < 0 ? sql.length : end);
+    if (!/check\s*\(/.test(body)) return;
+    const ids = new Set([...body.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]));
+    if (!ids.size) return;
     lists.push({ f, ids });
   });
   if (!lists.length) throw new Error("no migration in the repo sets the channel constraint at all");
@@ -2993,8 +3021,8 @@ check("some migration in the repo knows about every room", () => {
   // ones. Without this the check was satisfied by an older file that happened
   // to still match, while the constraint Kyle is about to run would reject a
   // room the app ships.
-  const teamsFile = lists.find((l) => l.f === "supabase-teams.sql");
-  if (!teamsFile) throw new Error("supabase-teams.sql no longer sets the channel constraint");
+  const teamsFile = lists.find((l) => l.f === "supabase-team-rooms.sql");
+  if (!teamsFile) throw new Error("supabase-team-rooms.sql no longer sets the channel constraint");
   const want = new Set([...appIds, ...A.TEAM_CHANNELS.map((c) => c.id)]);
   const missingTeam = [...want].filter((id) => !teamsFile.ids.has(id));
   const extraTeam = [...teamsFile.ids].filter((id) => !want.has(id));

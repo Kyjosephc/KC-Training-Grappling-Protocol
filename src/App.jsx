@@ -321,7 +321,7 @@ const weekStartISO = (now) => weekStart(now).toISOString();
 // "Past weeks" and stay there. A weekly wipe that actually destroyed posts
 // would throw away the best study material in the app, with no undo.
 const THIS_WEEK = "thisweek";
-const isWeekRoom = (id) => id === THIS_WEEK || id === "teamweek";
+const isWeekRoom = (id) => id === THIS_WEEK || id === "t_" + THIS_WEEK;
 // Not a room. Nothing is stored in it, the database never sees this id, and no
 // post can live here — it is a way of reading every room at once, which is
 // what makes twenty-two thin rooms read as a library instead of as a list of
@@ -334,25 +334,7 @@ const VIRTUAL_CHANNELS = [
 ];
 const isVirtualChannel = (id) => VIRTUAL_CHANNELS.some((c) => c.id === id);
 
-// A team's own rooms. Three, not twenty-three: a ten-person gym cannot keep
-// twenty-three rooms alive, and the public side already shows what a wall of
-// empty rooms looks like. These ids exist only inside a team — the database
-// carries a constraint saying a post in one of these rooms must belong to a
-// team, and a post in any other room must not. That is the half of the privacy
-// guarantee that does not depend on anybody writing a correct query.
-const TEAM_CHANNELS = [
-  { id: "teamgeneral", group: "team", label: "Team",
-    blurb: "Your gym. Schedules, who is coming to open mat, anything that is nobody else's business.",
-    placeholder: "Anything for the team — who's training, what time, how a comp went." },
-  { id: "teamweek", group: "team", label: "This week",
-    blurb: "What your gym is covering this week. Goes blank every Sunday, same as the open one — nothing is deleted.",
-    placeholder: "What did we cover tonight? Name the technique and the detail worth remembering." },
-  { id: "teamclips", group: "team", label: "Clips",
-    blurb: "Your team's own film. Rolls, drilling, competition footage that stays in the room.",
-    placeholder: "Say what you want eyes on, then paste the clip." },
-];
-const isTeamChannel = (id) => TEAM_CHANNELS.some((c) => c.id === id);
-const TEAM_DEFAULT_CHANNEL = "teamgeneral";
+
 
 const CHANNEL_GROUPS = [
   { id: "week", label: "This week" },
@@ -450,8 +432,32 @@ const COMMUNITY_CHANNELS = [
     placeholder: "Name the finish and the entanglement you had it from. Say whether their knee line was controlled, because a heel hook without it is just a grip." },
 ];
 
+// A team gets the same rooms the open side has, one for one. The ids are the
+// public id with a "t_" in front, and that prefix is not cosmetic: the
+// database carries a constraint saying a channel starting t_ must belong to a
+// team and a channel that does not must not. Sharing the ids outright would
+// have left team_id as the only thing between a private post and the open
+// feed, and a prefix means the database refuses the mistake rather than
+// trusting the app not to make it.
+const TEAM_PREFIX = "t_";
+const isTeamChannel = (id) => String(id || "").startsWith(TEAM_PREFIX);
+const teamChannelFor = (publicId) => TEAM_PREFIX + publicId;
+const publicChannelFor = (teamId) => String(teamId || "").slice(TEAM_PREFIX.length);
+const TEAM_CHANNELS = COMMUNITY_CHANNELS.map((c) => ({
+  ...c,
+  id: teamChannelFor(c.id),
+  // The room means the same thing; it is the audience that is different, and
+  // the bar above it already says which team you are standing in.
+  blurb: c.blurb,
+  placeholder: c.placeholder,
+}));
+const TEAM_DEFAULT_CHANNEL = teamChannelFor("general");
+
 function channelsInGroup(groupId) {
   return COMMUNITY_CHANNELS.filter((c) => c.group === groupId);
+}
+function teamChannelsInGroup(groupId) {
+  return TEAM_CHANNELS.filter((c) => c.group === groupId);
 }
 // The part of the game an unknown room belongs to. Also by id rather than by
 // position, for the same reason: the first part in the list is This week.
@@ -873,9 +879,10 @@ function clipCountsFrom(rows, ready, now) {
 }
 
 // The whole part of the game, not one room in it.
-function groupClipCount(counts, groupId) {
+function groupClipCount(counts, groupId, team) {
   if (!counts) return null;
-  return channelsInGroup(groupId).reduce((n, c) => n + (counts.byRoom[c.id] || 0), 0);
+  const rooms = team ? teamChannelsInGroup(groupId) : channelsInGroup(groupId);
+  return rooms.reduce((n, c) => n + (counts.byRoom[c.id] || 0), 0);
 }
 
 async function fetchClipCounts(teamId) {
@@ -7517,26 +7524,43 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             you last looked.
           </p>
           {activeTeam ? (
-            <div className="room-group">
-              <div className="room-group-label"><span>{activeTeam.name}</span></div>
-              {TEAM_CHANNELS.map((c) => (
-                <button key={c.id} type="button"
-                  className={`room-row${c.id === channel ? " current" : ""}`}
-                  aria-current={c.id === channel ? "true" : undefined}
-                  onClick={() => { setRoomPickerOpen(false); switchChannel(c.id); }}>
-                  <span className="room-row-main">
-                    <span className="room-row-name">
-                      {c.label}
-                      {unreadByChannel[seenKeyFor(c.id, activeTeam)] ? (
-                        <span className="room-row-new">{unreadByChannel[seenKeyFor(c.id, activeTeam)]} new</span>
-                      ) : null}
-                    </span>
-                    <span className="room-row-blurb">{c.blurb}</span>
-                  </span>
-                  {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
-                </button>
-              ))}
-            </div>
+            /* The same rooms as the open side, grouped the same way, because
+               they are the same parts of the game. Only the audience differs,
+               and the bar above says which team that is. */
+            CHANNEL_GROUPS.map((g) => (
+              <div key={g.id} className="room-group">
+                <div className="room-group-label">
+                  {g.label}
+                  {clipCounts ? <span className="room-group-count">{groupClipCount(clipCounts, g.id, true)}</span> : null}
+                </div>
+                {teamChannelsInGroup(g.id).map((c) => {
+                  const n = clipCounts ? (clipCounts.byRoom[c.id] || 0) : null;
+                  return (
+                    <button key={c.id} type="button"
+                      className={`room-row${c.id === channel ? " current" : ""}`}
+                      aria-current={c.id === channel ? "true" : undefined}
+                      onClick={() => { setRoomPickerOpen(false); switchChannel(c.id); }}>
+                      <span className="room-row-main">
+                        <span className="room-row-name">
+                          {c.label}
+                          {unreadByChannel[seenKeyFor(c.id, activeTeam)] ? (
+                            <span className="room-row-new">{unreadByChannel[seenKeyFor(c.id, activeTeam)]} new</span>
+                          ) : null}
+                        </span>
+                        <span className="room-row-blurb">{c.blurb}</span>
+                      </span>
+                      {n === null ? null : (
+                        <span className={`room-row-count${n ? "" : " none"}`}>
+                          {n}
+                          <span className="sr-only"> {n === 1 ? "clip" : "clips"}</span>
+                        </span>
+                      )}
+                      {c.id === channel ? <Check size={16} aria-hidden="true" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
           ) : (<>
           <div className="room-group">
             <div className="room-group-label">
