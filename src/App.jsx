@@ -9663,7 +9663,12 @@ function ShareModal({ onClose }) {
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
-  const shareText = "Open Mat is a training app built for jiu-jitsu and wrestling. It writes you a twelve-week strength and conditioning program made for grapplers — no tested max needed, and it adjusts to how beaten up you are that day. It tracks every session, lift and personal record you log, gives your gym a private page to break technique down position by position with video, and drills competition scoring across four rulesets. Your first week is free:";
+  const shareText = [
+    "Most lifting programs aren't built for grapplers. This one is.",
+    "Open Mat writes you a twelve-week strength and conditioning block aimed at what jiu-jitsu and wrestling actually demand: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. No tested max needed to start — tell it how beaten up you are and it rewrites the session before you lift.",
+    "Every set you log is kept and every PR tracked. Your gym gets its own private page to break technique down position by position, with video. And the rules game drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
+    "First week is free. Come train:",
+  ].join("\n\n");
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
@@ -9692,7 +9697,7 @@ function ShareModal({ onClose }) {
           in your own name. This is the message, exactly as it goes out. */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ marginBottom: 8 }}>What gets sent</div>
-        <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 8 }}>{shareText}</p>
+        <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 8, whiteSpace: "pre-line" }}>{shareText}</p>
         <p className="muted" style={{ fontSize: 13.5, wordBreak: "break-all", marginBottom: 0 }}>{shareUrl}</p>
       </div>
       {canNativeShare && (
