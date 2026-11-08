@@ -9661,7 +9661,9 @@ function smsHref(text) {
 function ShareModal({ onClose }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const shareText = "Open Mat is a training app for BJJ and wrestling — the strength programming, the technique, and the rules, in one place. Get started here:";
+  // What somebody who has never heard of this reads before deciding whether to
+  // tap the link. It has to say what the app actually does, not that it exists.
+  const shareText = "Open Mat is a training app built for jiu-jitsu and wrestling. It writes you a twelve-week strength and conditioning program made for grapplers, tracks every session and lift you log, gives your team a place to break down technique position by position, and drills competition scoring across four rulesets. Your first week is free:";
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
@@ -9686,8 +9688,11 @@ function ShareModal({ onClose }) {
   return (
     <ModalShell onClose={onClose} title="Share Open Mat">
       <p className="muted" style={{ marginBottom: 16 }}>Invite a friend to train with you — they'll get their own account and can pick their own program.</p>
+      {/* The link on its own told you nothing about what you were about to send
+          in your own name. This is the message, exactly as it goes out. */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title" style={{ marginBottom: 8 }}>Your invite link</div>
+        <div className="card-title" style={{ marginBottom: 8 }}>What gets sent</div>
+        <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.55, marginBottom: 8 }}>{shareText}</p>
         <p className="muted" style={{ fontSize: 13.5, wordBreak: "break-all", marginBottom: 0 }}>{shareUrl}</p>
       </div>
       {canNativeShare && (
