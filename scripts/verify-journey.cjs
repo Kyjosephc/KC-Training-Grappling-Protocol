@@ -2498,6 +2498,26 @@ check("somebody holding a code can see where it goes", () => {
   if (A.teamBarHint([], null) !== "join a team") {
     throw new Error(`with no team it says "${A.teamBarHint([], null)}"`);
   }
+  // Somebody waiting on a decision from you outranks everything else the bar
+  // could say — it is the only one that is a person standing still until you
+  // act, and a request nobody sees is a person left standing there.
+  if (!/2/.test(A.teamBarHint([{ id: "t1", status: "approved" }], null, 2))) {
+    throw new Error(`two people waiting reads as "${A.teamBarHint([{ id: "t1", status: "approved" }], null, 2)}"`);
+  }
+  if (!/approve/i.test(A.teamBarHint([], null, 1))) throw new Error("it does not say what the number is for");
+  // Even standing inside the team, with the panel one tap away.
+  if (!/1/.test(A.teamBarHint([{ id: "t1", status: "approved" }], { id: "t1" }, 1))) {
+    throw new Error("a waiting request is hidden while you are inside the team");
+  }
+  if (A.teamBarHint([], null, 0) !== "join a team") throw new Error("nobody waiting still showed a count");
+  // Your own request is not a decision you owe yourself. Counting it puts a
+  // number on the bar that tapping through can never clear.
+  const rows = [{ user_id: "u" }, { user_id: "other" }, { user_id: "third" }];
+  if (A.pendingOwedTo(rows, "u") !== 2) throw new Error(`counted ${A.pendingOwedTo(rows, "u")} of the two owed`);
+  if (A.pendingOwedTo([{ user_id: "u" }], "u") !== 0) throw new Error("your own request was counted");
+  [null, undefined, []].forEach((v) => {
+    if (A.pendingOwedTo(v, "u") !== 0) throw new Error("nothing at all counted as something");
+  });
   const waiting = [{ id: "t1", status: "pending" }];
   if (A.teamBarHint(waiting, null) !== "waiting") throw new Error("a request in flight is not shown");
   const inOne = [{ id: "t1", status: "approved" }];
@@ -2512,6 +2532,37 @@ check("somebody holding a code can see where it goes", () => {
   [null, undefined].forEach((v) => {
     if (A.teamBarHint(v, null) !== "join a team") throw new Error("no team list at all says nothing");
   });
+});
+
+check("the panel answers a request rather than letting it vanish", () => {
+  // Every status a person can be in has to produce something on the screen.
+  // Denied used to produce nothing at all: the request disappeared and they
+  // could not tell whether it had ever arrived.
+  const teams = [
+    { id: "t1", name: "In", status: "approved", leaderId: "someone" },
+    { id: "t2", name: "Waiting", status: "pending", leaderId: "someone" },
+    { id: "t3", name: "Told no", status: "denied", leaderId: "someone" },
+  ];
+  unmount();
+  mount(React.createElement(A.TeamsPanel, { teams, activeTeam: null, isCoach: false, userId: "u",
+    clientName: "Marcus", onSwitch() {}, onChanged: async () => {}, onClose() {} }));
+  const text = txt();
+  if (!/Waiting on/i.test(text)) throw new Error("a request in flight says nothing");
+  if (!/didn't accept your request/i.test(text)) throw new Error("being turned down says nothing");
+  if (!/Told no/.test(text)) throw new Error("it does not say which team said no");
+  if (!/ask again/i.test(text)) throw new Error("it does not say they can ask again");
+  // A room you can be let into is one you can walk out of.
+  if (!/Leave In/.test(text)) throw new Error("there is no way out of a team you are in");
+  unmount();
+
+  // Except the one you run — a team with nobody running it is worse than a
+  // leader who wanted to leave.
+  mount(React.createElement(A.TeamsPanel, {
+    teams: [{ id: "t1", name: "Mine", status: "approved", leaderId: "u", inviteCode: "ABCDEF" }],
+    activeTeam: null, isCoach: false, userId: "u",
+    clientName: "Marcus", onSwitch() {}, onChanged: async () => {}, onClose() {} }));
+  if (/Leave Mine/.test(txt())) throw new Error("the leader is offered a way to abandon the team");
+  unmount();
 });
 
 check("a room that is a conversation opens as one", () => {

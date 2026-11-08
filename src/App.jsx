@@ -521,7 +521,10 @@ function restorableTeam(teams, teamId) {
 // are standing. Somebody handed a code has to be able to see where it goes:
 // the bar used to say "Open Mat — everyone" and nothing else, which tells a
 // person with a code in their hand nothing at all.
-function teamBarHint(teams, activeTeam) {
+function teamBarHint(teams, activeTeam, waiting) {
+  // Somebody waiting on you outranks everything else the bar could say: it is
+  // the only one of these that is a person standing still until you act.
+  if (waiting > 0) return `${waiting} to approve`;
   if (activeTeam) return "private";
   const list = teams || [];
   if (list.some((t) => t.status === "pending")) return "waiting";
@@ -1011,6 +1014,46 @@ async function createTeam(name, leaderId, userId) {
   if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return { ok: false, reason: TEAMS_MISSING }; }
   if (!outcome.ok) return { ok: false };
   return { ok: true, team: outcome.result };
+}
+
+// How many people are waiting on a decision from you. One query, and the
+// policies do the narrowing: a plain member can only see their own row, a
+// leader sees their team's, the coach sees every team's. Your own request is
+// not something you are waiting on yourself for.
+// Of the pending rows the policies let you see, how many are a decision you
+// owe somebody. Your own request is not one you are waiting on yourself for,
+// and counting it puts a number on the bar that tapping through cannot clear.
+function pendingOwedTo(rows, userId) {
+  return (rows || []).filter((r) => r && r.user_id && r.user_id !== userId).length;
+}
+
+async function fetchPendingJoins(userId) {
+  if (!supabase || !teamsReady()) return 0;
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("team_members")
+      .select("user_id, team_id").eq("status", "pending");
+    if (error) {
+      if (isMissingTeams(error)) return TEAMS_MISSING;
+      throw error;
+    }
+    return pendingOwedTo(data, userId);
+  });
+  if (outcome.ok && outcome.result === TEAMS_MISSING) { markTeamsMissing(); return 0; }
+  return outcome.ok && typeof outcome.result === "number" ? outcome.result : 0;
+}
+
+async function leaveTeam(teamId, userId) {
+  if (!supabase || !teamsReady()) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("team_members")
+      .delete().eq("team_id", teamId).eq("user_id", userId);
+    if (error) throw error;
+  });
+  if (!outcome.ok) {
+    emitToast({ kind: "error", message: "Couldn't leave that team — check your connection.", autoDismissMs: 6000 });
+    return { ok: false };
+  }
+  return { ok: true };
 }
 
 async function fetchTeamMembers(teamId) {
@@ -6352,7 +6395,9 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
 
   const approved = teams.filter((t) => t.status === "approved");
   const pending = teams.filter((t) => t.status === "pending");
+  const denied = teams.filter((t) => t.status === "denied");
   const led = approved.filter((t) => t.leaderId === userId);
+  const [leaving, setLeaving] = useState("");
 
   const loadMembers = useCallback(async (teamId) => {
     const rows = await fetchTeamMembers(teamId);
@@ -6399,6 +6444,30 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
             {activeTeam && activeTeam.id === t.id ? <Check size={16} aria-hidden="true" /> : null}
           </button>
         ))}
+        {/* A room you can be let into is a room you can walk out of. Not
+            offered to the leader, because a team with nobody running it is a
+            worse state than a leader who wanted to leave. */}
+        {approved.filter((t) => t.leaderId !== userId).map((t) => (
+          leaving === t.id ? (
+            <div key={`leave-${t.id}`} className="adjust-box" style={{ marginBottom: 6 }}>
+              Leave {t.name}? You stop seeing its rooms straight away. Nothing you posted is
+              deleted, and you can ask to come back with the code.
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+                  onClick={async () => {
+                    const res = await leaveTeam(t.id, userId);
+                    setLeaving("");
+                    if (res.ok) { if (activeTeam && activeTeam.id === t.id) onSwitch(null); await onChanged(); }
+                  }}>Yes, leave</button>
+                <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
+                  onClick={() => setLeaving("")}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button key={`leave-${t.id}`} type="button" className="link-btn" style={{ marginBottom: 6 }}
+              onClick={() => setLeaving(t.id)}>Leave {t.name}</button>
+          )
+        ))}
         {approved.length === 0 && (
           <p className="muted" style={{ fontSize: 12.5, margin: "4px 2px 0" }}>
             You are not in a team yet. If your gym has one, ask whoever runs it for the code.
@@ -6410,6 +6479,17 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
         <div className="adjust-box" style={{ marginBottom: 14 }}>
           {pending.map((t) => (
             <div key={t.id}>Waiting on <strong>{t.name}</strong> to let you in. Nothing to do — they will see your request.</div>
+          ))}
+        </div>
+      )}
+
+      {/* Said rather than left as silence. Somebody turned down saw their
+          request simply vanish and had no way to tell whether it had even
+          arrived. They can ask again — the code still works. */}
+      {denied.length > 0 && (
+        <div className="adjust-box" style={{ marginBottom: 14 }}>
+          {denied.map((t) => (
+            <div key={t.id}><strong>{t.name}</strong> didn't accept your request. You can ask again with the code below.</div>
           ))}
         </div>
       )}
@@ -6619,6 +6699,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [activeTeam, setActiveTeam] = useState(null);
   const [teamsOn, setTeamsOn] = useState(true);
   const [teamPanel, setTeamPanel] = useState(false);
+  const [waitingOnMe, setWaitingOnMe] = useState(0);
   // The room opens as a wall of clips rather than a column of text, because
   // that is what the rooms are for. General is the exception — it is the room
   // for asking things, and a grid of nothing would be the first thing a new
@@ -6670,6 +6751,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     if (mine === LOAD_FAILED) return;
     setTeams(mine);
     setTeamsOn(teamsReady());
+    setWaitingOnMe(await fetchPendingJoins(userId));
     // A membership can be revoked while somebody is sitting in the room.
     setActiveTeam((cur) => {
       if (cur) {
@@ -6692,6 +6774,15 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     });
   }, [userId, prefs?.teamId]);
   useEffect(() => { loadTeams(); }, [loadTeams]);
+  // Again whenever the list is opened, and whenever the app comes back to the
+  // front. Loading once meant an athlete who had been let in sat looking at a
+  // screen that still said they were waiting until they reloaded the page.
+  useEffect(() => { if (teamPanel) loadTeams(); }, [teamPanel]); // eslint-disable-line
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible") loadTeams(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadTeams]);
   const load = useCallback(async () => {
     const at = mutations.current;
     const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current,
@@ -7228,7 +7319,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             : "Posting in the rooms everyone shares. Change team."}>
           <Users size={15} aria-hidden="true" className="team-bar-icon" />
           <span className="team-bar-name">{activeTeam ? activeTeam.name : "Open Mat — everyone"}</span>
-          <span className="team-bar-pill">{teamBarHint(teams, activeTeam)}</span>
+          <span className="team-bar-pill">{teamBarHint(teams, activeTeam, waitingOnMe)}</span>
           <ChevronRight size={15} className="room-bar-chev" aria-hidden="true" />
         </button>
       )}
