@@ -9663,7 +9663,7 @@ function ShareModal({ onClose }) {
   const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
-  const shareText = "Open Mat is a training app built for jiu-jitsu and wrestling. It writes you a twelve-week strength and conditioning program made for grapplers, tracks every session and lift you log, gives your team a place to break down technique position by position, and drills competition scoring across four rulesets. Your first week is free:";
+  const shareText = "Open Mat is a training app built for jiu-jitsu and wrestling. It writes you a twelve-week strength and conditioning program made for grapplers — no tested max needed, and it adjusts to how beaten up you are that day. It tracks every session, lift and personal record you log, gives your gym a private page to break technique down position by position with video, and drills competition scoring across four rulesets. Your first week is free:";
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
