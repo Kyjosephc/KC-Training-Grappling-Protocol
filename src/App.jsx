@@ -921,6 +921,37 @@ function newInviteCode() {
   return out;
 }
 
+// A code is read off one screen and typed into another, so it is stored the
+// way it will be typed: upper case, letters and digits only. Without that,
+// "Infiniti" and "INFINITI" are two different codes to the unique constraint
+// and the same code to the person typing one in.
+const INVITE_CODE_MAX = 12;
+const INVITE_CODE_MIN = 4;
+function normaliseInviteCode(raw) {
+  return String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, INVITE_CODE_MAX);
+}
+function inviteCodeProblem(raw) {
+  const code = normaliseInviteCode(raw);
+  if (code.length < INVITE_CODE_MIN) return `A code needs at least ${INVITE_CODE_MIN} letters or numbers.`;
+  return null;
+}
+
+const CODE_TAKEN = "code-taken";
+async function setTeamInviteCode(teamId, raw) {
+  if (!supabase || !teamsReady()) return { ok: false };
+  const code = normaliseInviteCode(raw);
+  const problem = inviteCodeProblem(code);
+  if (problem) return { ok: false, reason: problem };
+  // Not retried. A duplicate is a deterministic answer, and asking three times
+  // just makes somebody wait for the same no.
+  const { error } = await supabase.from("teams").update({ invite_code: code }).eq("id", teamId);
+  if (error) {
+    if (String(error.code || "") === "23505") return { ok: false, reason: CODE_TAKEN };
+    return { ok: false };
+  }
+  return { ok: true, code };
+}
+
 async function createTeam(name, leaderId, userId) {
   if (!supabase || !teamsReady()) return { ok: false, reason: TEAMS_MISSING };
   const code = newInviteCode();
@@ -6279,6 +6310,9 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
   const [creating, setCreating] = useState(false);
   const [members, setMembers] = useState({});
   const [busy, setBusy] = useState("");
+  const [editingCode, setEditingCode] = useState("");
+  const [codeDraft, setCodeDraft] = useState("");
+  const [codeNote, setCodeNote] = useState("");
 
   const approved = teams.filter((t) => t.status === "approved");
   const pending = teams.filter((t) => t.status === "pending");
@@ -6357,6 +6391,46 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
                 Give this to people at your gym. Nobody can find the team without it, and you still
                 decide on each person.
               </div>
+              {editingCode === t.id ? (
+                <div style={{ marginTop: 10 }}>
+                  <label className="labeled-input" style={{ marginBottom: 8 }}>
+                    <span>Your own code</span>
+                    <input type="text" value={codeDraft} style={{ textTransform: "uppercase" }}
+                      placeholder="e.g. INFINITI"
+                      onChange={(e) => { setCodeDraft(normaliseInviteCode(e.target.value)); setCodeNote(""); }} />
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+                      disabled={busy === "code" + t.id || !!inviteCodeProblem(codeDraft)}
+                      onClick={async () => {
+                        setBusy("code" + t.id); setCodeNote("");
+                        const res = await setTeamInviteCode(t.id, codeDraft);
+                        if (res.ok) {
+                          setEditingCode(""); setCodeDraft("");
+                          await onChanged();
+                          emitToast({ kind: "info", autoDismissMs: 7000, message: `The code for ${t.name} is now ${res.code}.` });
+                        } else if (res.reason === CODE_TAKEN) {
+                          setCodeNote("Another team already uses that code. Try a different one.");
+                        } else {
+                          setCodeNote(res.reason || "Couldn't change it just now — check your connection.");
+                        }
+                        setBusy("");
+                      }}>{busy === "code" + t.id ? "Saving…" : "Save this code"}</button>
+                    <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
+                      onClick={() => { setEditingCode(""); setCodeNote(""); }}>Cancel</button>
+                  </div>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                    Letters and numbers, {INVITE_CODE_MIN} to {INVITE_CODE_MAX} of them. Anyone still holding the
+                    old code will not be able to use it, so send the new one out.
+                  </p>
+                  {codeNote && <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>{codeNote}</p>}
+                </div>
+              ) : (
+                <button type="button" className="link-btn" style={{ marginTop: 8 }}
+                  onClick={() => { setEditingCode(t.id); setCodeDraft(t.inviteCode); setCodeNote(""); }}>
+                  Choose your own code
+                </button>
+              )}
             </div>
             {waiting.length === 0
               ? <p className="muted" style={{ fontSize: 12.5, margin: "0 2px 10px" }}>Nobody waiting.</p>
@@ -6391,8 +6465,12 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
 
       <div className="room-group">
         <div className="room-group-label"><span>Join a team</span></div>
+        <p className="muted" style={{ fontSize: 12.5, margin: "0 2px 8px" }}>
+          For a code somebody else gave you. To change your own team's code, use
+          "Choose your own code" above it.
+        </p>
         <label className="labeled-input" style={{ marginBottom: 8 }}>
-          <span>Invite code</span>
+          <span>Their invite code</span>
           <input type="text" value={code} placeholder="Six characters"
             style={{ textTransform: "uppercase" }}
             onChange={(e) => { setCode(e.target.value); setJoinNote(""); }} />

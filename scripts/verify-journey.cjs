@@ -2491,6 +2491,33 @@ check("the database is what keeps one gym out of another", () => {
   }
 });
 
+check("an invite code is stored the way it will be typed", () => {
+  // A code is read off one screen and typed into another, often by somebody
+  // standing in a gym. "Infiniti" and "INFINITI" are two different rows to a
+  // unique constraint and the same code to the person typing one in, so there
+  // is one form and everything is put into it before it is stored.
+  if (A.normaliseInviteCode("Infiniti") !== "INFINITI") throw new Error("case is not normalised");
+  if (A.normaliseInviteCode("  inf-init i! ") !== "INFINITI") throw new Error("punctuation and spaces survive");
+  if (A.normaliseInviteCode("abc123") !== "ABC123") throw new Error("digits are not kept");
+  const long = A.normaliseInviteCode("ABCDEFGHIJKLMNOPQRST");
+  if (long.length !== A.INVITE_CODE_MAX) throw new Error(`a long code came out ${long.length} characters`);
+  [null, undefined, "", "!!!"].forEach((v) => {
+    if (A.normaliseInviteCode(v) !== "") throw new Error(`${JSON.stringify(v)} produced something`);
+  });
+  // Too short is refused with a reason, not silently accepted.
+  if (!A.inviteCodeProblem("ABC")) throw new Error("a three-character code was accepted");
+  if (!A.inviteCodeProblem("")) throw new Error("an empty code was accepted");
+  if (A.inviteCodeProblem("INFINITI")) throw new Error(`a good code was refused: ${A.inviteCodeProblem("INFINITI")}`);
+  // And the generated ones have to pass the same rule they are checked by.
+  for (let i = 0; i < 200; i++) {
+    const code = A.newInviteCode();
+    if (A.inviteCodeProblem(code)) throw new Error(`a generated code "${code}" fails its own rule`);
+    if (A.normaliseInviteCode(code) !== code) throw new Error(`a generated code "${code}" is not already in stored form`);
+    // Nothing that reads as something else off a screen.
+    if (/[OIL01]/.test(code)) throw new Error(`"${code}" contains a character that misreads as another`);
+  }
+});
+
 check("teams switching themselves off tells the one person who can fix it", () => {
   // The fail-safe is right and the silence was not: the feature hid itself and
   // the only person able to act on it got no reason why.
