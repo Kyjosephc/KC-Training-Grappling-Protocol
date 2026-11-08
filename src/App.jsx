@@ -16,6 +16,15 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 const coachVenmo = import.meta.env.VITE_COACH_VENMO || "";
+// Where this app actually lives, as opposed to whichever URL happens to be in
+// the address bar. Those are the same thing on the real domain and very much
+// not the same thing on a per-deployment preview URL, which is pinned to one
+// build, can be taken down, and may sit behind Vercel's deployment protection.
+// A link somebody saves has to outlive the deploy it was copied from — and a
+// password-reset email that lands on a dead preview is worse than no link.
+// Unset, this behaves exactly as before.
+const PUBLIC_URL = String(import.meta.env.VITE_PUBLIC_URL || "").trim().replace(/\/+$/, "");
+const siteUrl = () => PUBLIC_URL || (typeof window !== "undefined" ? window.location.origin : "");
 // Handles get typed with and without their sigil, and with stray spaces. Take
 // whatever is in the variable and produce a URL that works either way.
 const venmoHandle = (h) => `@${String(h || "").trim().replace(/^@/, "")}`;
@@ -9660,7 +9669,7 @@ function smsHref(text) {
 }
 function ShareModal({ onClose }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const shareUrl = siteUrl();
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
@@ -15147,7 +15156,7 @@ function AuthScreen() {
           setInfo("Account created. If we ask you to confirm your email, open the link we just sent you and then come back and sign in. Otherwise you'll be taken straight to your program.");
         }
       } else if (mode === "forgot") {
-        const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+        const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: siteUrl() });
         if (err) setError(friendlyAuthError(err.message));
         else setInfo("Check your email for a link to reset your password.");
       } else {
