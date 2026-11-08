@@ -2241,5 +2241,95 @@ check("an injury swap keeps a demo when one exists", () => {
   if (unique.length) throw new Error(`replacements shown with no demo despite one existing: ${unique.slice(0, 5).join(", ")}`);
 });
 
+
+console.log("\nSession shape");
+const everySession = (fn) => ["A", "B", "C", "D"].forEach((v) => {
+  const p = A.buildProgramVariant(v);
+  const per = p.sessionsPerWeek || 3;
+  for (let w = 1; w <= 12; w++) for (let d = 0; d < per; d++) {
+    const pos = A.positionAtIndex(p, (w - 1) * per + d);
+    fn(v, w, d + 1, A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, {}));
+  }
+});
+
+check("no session is longer than the rest of the app", () => {
+  // Program B's day three ran to thirteen exercises and thirty working sets
+  // while every other program topped out at ten. The old Program C was retired
+  // for being the densest session in the catalogue, so this is the thing that
+  // notices it happening again.
+  const big = [];
+  everySession((v, w, d, secs) => {
+    const n = secs.reduce((t, s) => t + (s.exercises || []).length, 0);
+    if (n > 11) big.push(`${v} wk${w} day${d}: ${n} exercises`);
+  });
+  if (big.length) throw new Error(`sessions past eleven exercises: ${big.slice(0, 4).join(", ")}`);
+});
+
+check("a floor never puts a main lift behind the isolation tail", () => {
+  // The vertical press floor appended two sets of barbell overhead press to
+  // the end of the longest session in the app, after the triceps pushdowns.
+  // Where a floor puts its work is not cosmetic when the work is a barbell
+  // press overhead.
+  // These three qualities are exactly what the weekly floors produce when they
+  // add a missing pattern — a barbell overhead press, a Romanian deadlift, a
+  // supported row — so this check is about where the floor puts its work.
+  const MAIN = /^(Posterior Chain|Vertical Press|Pull)$/i;
+  // Prehab and Durability are deliberately not here. Two broader versions were
+  // tried and both flagged orders that are correct: "Accessory" labels real
+  // compound work like a four-by-five Bulgarian split squat, and a face pull
+  // ahead of pulling is activation somebody put there on purpose. What a
+  // barbell lift must not sit behind is the isolation and carry tail.
+  const ACC = /^(Arms|Core|Trunk|Grip)/i;
+  const bad2 = [];
+  everySession((v, w, d, secs) => secs.forEach((sec) => {
+    let seenAcc = null;
+    (sec.exercises || []).forEach((e) => {
+      const q = e.quality || "";
+      if (ACC.test(q)) { seenAcc = seenAcc || e.name; return; }
+      if (seenAcc && MAIN.test(q)) bad2.push(`${v} wk${w} day${d}: ${e.name} after ${seenAcc}`);
+    });
+  }));
+  if (bad2.length) throw new Error(`main lifts behind the isolation tail: ${[...new Set(bad2)].slice(0, 4).join(", ")}`);
+});
+
+check("a superset is never split by something else", () => {
+  // Paired lifts carry the same number with an A and a B and are meant to run
+  // back to back. Inserting a floor's lift between 1A and 1B is how that pair
+  // quietly stops being a pair.
+  const split = [];
+  everySession((v, w, d, secs) => secs.forEach((sec) => {
+    const seen = new Map();
+    (sec.exercises || []).forEach((e, i) => {
+      const g = String(e.supersetLabel || "").replace(/[^0-9]/g, "");
+      if (!g) return;
+      if (seen.has(g) && i - seen.get(g) > 1) split.push(`${v} wk${w} day${d}: group ${g}`);
+      seen.set(g, i);
+    });
+  }));
+  if (split.length) throw new Error(`supersets split apart: ${[...new Set(split)].slice(0, 4).join(", ")}`);
+});
+
+check("a second block is not the first block again", () => {
+  // Program B carried every rotation pool and referenced none of them, so the
+  // block number did nothing and an athlete running it twice got the same
+  // twelve weeks movement for movement.
+  const same = [];
+  ["A", "B", "C", "D"].forEach((v) => {
+    const p = A.buildProgramVariant(v);
+    const per = p.sessionsPerWeek || 3;
+    const sig = (block) => {
+      const out = [];
+      for (let w = 1; w <= 12; w++) for (let d = 0; d < per; d++) {
+        const pos = A.positionAtIndex(p, (w - 1) * per + d);
+        A.resolveDaySections(pos.day, pos.weekNumber, p, pos.phase, false, { blockNumber: block })
+          .forEach((sec) => (sec.exercises || []).forEach((e) => out.push(e.name)));
+      }
+      return out.join("|");
+    };
+    if (sig(1) === sig(2)) same.push(v);
+  });
+  if (same.length) throw new Error(`block two is identical to block one in: ${same.join(", ")}`);
+});
+
 console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
 process.exit(bad === 0 ? 0 : 1);

@@ -3622,7 +3622,8 @@ function ssPair(num, aName, aPre, bName, bPre) {
   ];
 }
 function ssSingle(num, name, pre, quality) {
-  return ex({ name, supersetLabel: String(num), rpeWave: (quality || "Strength") === "Strength", cues: pre.cues || rpeProgramCues[name] || "", purpose: pre.purpose || rpeProgramPurpose[name] || "", load: pre.load || "", sets: pre.sets, reps: pre.reps, tempo: pre.tempo || "", rir: 10 - pre.rpe, rest: "90 seconds to 2 minutes", quality: quality || "Strength", pct1rmFlat: takesPercentTarget(name, pre.reps) ? pctFromRpeReps(pre.rpe, pre.reps) : null });
+  return ex({ name, supersetLabel: String(num),
+    ...(pre.rotatingPool ? { rotatingPool: pre.rotatingPool } : {}), rpeWave: (quality || "Strength") === "Strength", cues: pre.cues || rpeProgramCues[name] || "", purpose: pre.purpose || rpeProgramPurpose[name] || "", load: pre.load || "", sets: pre.sets, reps: pre.reps, tempo: pre.tempo || "", rir: 10 - pre.rpe, rest: "90 seconds to 2 minutes", quality: quality || "Strength", pct1rmFlat: takesPercentTarget(name, pre.reps) ? pctFromRpeReps(pre.rpe, pre.reps) : null });
 }
 
 function buildProgramCPhase(nameLabel, weekStart, weekEnd, objective, dayDefs) {
@@ -3645,7 +3646,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Bench Press", { sets: 3, reps: "6", tempo: "1/2/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
           ...ssPair(3, "Bent Over Single Arm Dumbbell Row", { sets: 3, reps: "8 each side", tempo: "1/2/X", rpe: 8 }, "Scapular Push-Up", { sets: 3, reps: "10", tempo: "1/3/1", rpe: 7 }),
           ssSingle(4, "6-Way Isometric Neck Holds", { sets: 3, reps: "20 seconds each direction", rpe: 6 }, "Durability"),
-          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
+          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7, rotatingPool: "hipPool" }, "Durability"),
         ]},
       ]},
       { name: "Zercher & Overhead — Grip & Trunk", intent: "Zercher squat and overhead press pattern, with a longer accessory chain for grip and trunk.", sections: [
@@ -3682,7 +3683,7 @@ function buildProgramCContent() {
           ...ssPair(2, "Dumbbell Glute Bridge Floor Press", { sets: 3, reps: "6", tempo: "2/0/X", rpe: 8 }, "Supine Y, T, W", { sets: 3, reps: "5", tempo: "2/1/1", rpe: 7 }),
           ...ssPair(3, "Pull-Up Hold", { sets: 3, reps: "20 seconds", rpe: 8 }, "Medicine Ball Abdominal Extension", { sets: 3, reps: "10", rpe: 7 }),
           ssSingle(4, "6-Way Isometric Neck Holds", { sets: 2, reps: "15 seconds each way", rpe: 6 }, "Durability"),
-          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7 }, "Durability"),
+          ssSingle(5, "Hip Adduction Machine", { sets: 3, reps: "12", rpe: 7, rotatingPool: "hipPool" }, "Durability"),
         ]},
       ]},
       { name: "Front Squat & Landmine Press", intent: "Front squat and landmine press pattern.", sections: [
@@ -3693,14 +3694,18 @@ function buildProgramCContent() {
           ssSingle(4, "Toes to Bar", { sets: 3, reps: "10", tempo: "2/0/1", rpe: 8 }, "Trunk"),
         ]},
       ]},
-      { name: "Split Squat & Offset Pressing", intent: "Rear-foot-elevated split squat and offset pressing, ending on an arm isolation set.", sections: [
+      { name: "Split Squat & Offset Pressing", intent: "Rear-foot-elevated split squat and offset pressing.", sections: [
         { id: uid(), type: "strength", name: "Working Sets", exercises: [
           ...ssPair(1, "Bulgarian Split Squat (rear foot elevated, dumbbells)", { sets: 4, reps: "5 each side", tempo: "2/1/X", rpe: 8 }, "Valslide Hamstring Curls", { sets: 4, reps: "8", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(2, "Offset Single Arm Dumbbell Press", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Band Pull-Apart", { sets: 3, reps: "10", tempo: "2/2/2", rpe: 7 }),
           ...ssPair(3, "Renegade Row", { sets: 3, reps: "6 each side", tempo: "2/1/X", rpe: 8 }, "Cable Lat Row", { sets: 3, reps: "10", tempo: "2/1/X", rpe: 7 }),
           ssSingle(4, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "20 seconds each side", tempo: "", rpe: 6 }, "Core"),
-          ...armSuperset(5, 2),
-          ssSingle(6, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
+          // The arm superset came out. This was thirteen exercises and thirty
+          // working sets, the densest session in the app by a distance — every
+          // other program tops out at ten — and direct arm work is the only
+          // thing in it that is not a grappling pattern. Programs C and D
+          // carry none at all.
+          ssSingle(5, "Suitcase Carry (each side)", { sets: 2, reps: "30 meters each side", rpe: 7 }, "Grip/Trunk"),
         ]},
         { id: uid(), type: "conditioning", name: "Grappling Conditioning", exercises: [
           ex({ name: conditioningIntervalPool[0].name, rotatingPool: "conditioningIntervalPool", sets: 1, reps: conditioningIntervalPool[0].reps, load: "", rir: 4, rest: "none", purpose: "Conditioning follows the block rather than rotating at random — an aerobic base first, because that is what you recover between rounds with, then repeated-effort tempo for the gap between exchanges, then aerobic power to raise the ceiling, and match-length rounds in the final block.", quality: "Conditioning" }),
@@ -3729,7 +3734,7 @@ function buildProgramCContent() {
           ...ssPair(1, "Front Squat", { sets: 5, reps: "3", tempo: "2/0/X", rpe: 7 }, "Banded Terminal Knee Extension", { sets: 3, reps: "10 each side", tempo: "3/2/1", rpe: 7 }),
           ssSingle(2, "Incline Close Grip Bench Press", { sets: 3, reps: "5", tempo: "2/0/X", rpe: 8 }, "Strength"),
           ssSingle(3, "Renegade Row", { sets: 3, reps: "5 each side", tempo: "2/0/X", rpe: 8 }, "Strength"),
-          ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7 }, "Durability"),
+          ssSingle(4, "Copenhagen Plank (each side)", { sets: 2, reps: "20 to 25 seconds per side", rpe: 7, rotatingPool: "hipPool" }, "Durability"),
           ssSingle(5, "Heavy Pallof Press Hold (each side)", { sets: 2, reps: "15 seconds each side", rpe: 6 }, "Core"),
           // The arm superset comes out here. In a block whose whole premise is
           // that the main lifts land on fresh legs, curls are the first thing
@@ -4170,18 +4175,18 @@ const WEEKLY_FLOORS = [
   // sprinting every week. In the peak block the sprinting is already reduced and
   // the point of the block is freshness, so two maintenance sets is the honest
   // dose — which is exactly what that phase's own text promises.
-  { key: "post", min: 3, deloadMin: 0, peakMin: 2, match: /romanian deadlift|trap bar deadlift|rack pull|valslide|hip thrust|supine hamstring|glute ham/i,
+  { key: "post", min: 3, deloadMin: 0, peakMin: 2, mainPattern: true, match: /romanian deadlift|trap bar deadlift|rack pull|valslide|hip thrust|supine hamstring|glute ham/i,
     make: () => ex({ name: "Barbell Romanian Deadlift", sets: 2, reps: "8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Posterior Chain",
       purpose: "Hip extension under load, which is the pattern the sport runs on and the one a squat-heavy week under-trains. Hamstrings and glutes also hold the knee together in a scramble.",
       cues: "Push the hips back rather than bending the knees. The bar stays against the legs the whole way. Go down as far as the hamstrings allow with a flat back and no further — the depth is set by your hamstrings, not by the floor." }) },
-  { key: "vpress", min: 2, deloadMin: 0, match: /overhead press|shoulder press|landmine press|landmine rotational press|plate lifts/i,
+  { key: "vpress", min: 2, deloadMin: 0, mainPattern: true, match: /overhead press|shoulder press|landmine press|landmine rotational press|plate lifts/i,
     make: () => ex({ name: "Standing Barbell Overhead Press", sets: 2, reps: "6 to 8", load: "moderate — leave two reps in the tank", rir: 2,
       rest: "2 minutes", quality: "Vertical Press",
       videoUrl: "https://www.youtube.com/watch?v=cGnhixvC8uA",
       purpose: "Pressing overhead is the pattern a pull-dominant week leaves out, and a shoulder does not stay healthy on pulling alone. It is also the pattern behind every frame and post from the bottom: a shoulder that can hold load overhead is a shoulder that holds a frame under somebody passing.",
       cues: "Squeeze the glutes and keep the ribs down so the lower back does not arch to get the bar up. Head moves back out of the way, then through at the top. Stop two reps short of a grind." }) },
-  { key: "pull", min: 2, deloadMin: 2, match: /pull-up|row\b|lat row|pulldown/i,
+  { key: "pull", min: 2, deloadMin: 2, mainPattern: true, match: /pull-up|row\b|lat row|pulldown/i,
     make: () => ex({ name: "Chest-Supported Dumbbell Row", sets: 2, reps: "10", load: "moderate", rir: 2,
       rest: "90 seconds", quality: "Pull",
       purpose: "Kept in the deload at a reduced dose rather than cut. Pulling volume is what balances a sport spent gripping and framing, and the week it disappears is the week the shoulder notices.",
@@ -4223,13 +4228,43 @@ function weeklyFloorPass(program) {
       // Round-robin across the week rather than always the first day. Hosting
       // every missing pattern on day one is how day one grew to eleven
       // exercises while day three sat at eight.
-      const hosts = days.map((d) => (d.sections || []).find((sec) => sec.type === "durability")
-        || (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0]).filter(Boolean);
+      // A barbell overhead press is not durability work. The floors that add a
+      // main pattern go to the strength section and sit with the other main
+      // lifts; the rest keep going where they went. Without this the vertical
+      // press floor appended two sets of barbell overhead press to the end of
+      // the longest session in the app, twenty-eight sets in and immediately
+      // after the triceps pushdowns, which is not a set anybody is pressing
+      // well.
+      const pick = (d) => (floor.mainPattern
+        ? (d.sections || []).find((sec) => sec.type === "strength")
+        : null)
+        || (d.sections || []).find((sec) => sec.type === "durability")
+        || (d.sections || []).filter((sec) => sec.type !== "conditioning").slice(-1)[0];
+      const hosts = days.map(pick).filter(Boolean);
       if (!hosts.length) return;
       const host = hosts[FLOOR_HOST_ROTATION.n++ % hosts.length];
       const added = floor.make();
       added.sets = Math.max(1, want);
-      host.exercises = [...(host.exercises || []), added];
+      const list = host.exercises || [];
+      // Ahead of the accessories rather than after them. Anything tagged as
+      // arms, grip, core or durability is what a main lift should precede.
+      let at = -1;
+      if (floor.mainPattern) {
+        // "Accessory" is deliberately not in this list. It is the label on
+        // real compound work like a four-by-five Bulgarian split squat, and a
+        // Romanian deadlift after one of those is a normal session. What a
+        // main lift must not land behind is the isolation and prehab tail.
+        at = list.findIndex((x) => /^(Prehab|Durability|Arms|Trunk|Grip|Core|Grip\/Trunk)/i.test(x.quality || ""));
+        // Paired lifts carry the same number with an A and a B, and the first
+        // accessory is often the B half of a superset — dropping a barbell
+        // overhead press between 1A and 1B splits a pair that is meant to be
+        // run back to back. Walk to the end of whichever group it lands in.
+        const group = (x) => String((x && x.supersetLabel) || "").replace(/[^0-9]/g, "");
+        while (at > 0 && at < list.length && group(list[at]) && group(list[at]) === group(list[at - 1])) at++;
+      }
+      host.exercises = at < 0
+        ? [...list, added]
+        : [...list.slice(0, at), added, ...list.slice(at)];
     });
   });
   return program;
