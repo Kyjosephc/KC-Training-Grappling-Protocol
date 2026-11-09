@@ -64,7 +64,7 @@ function PayHandle({ label, handle, href, size = 14.5, gap = 6 }) {
     <div style={{ fontSize: size, marginBottom: gap }}>
       {label}:{" "}
       {href
-        ? <a href={href} target="_blank" rel="noopener noreferrer">{inner}</a>
+        ? <a className="pay-handle" href={href} target="_blank" rel="noopener noreferrer">{inner}</a>
         : inner}
     </div>
   );
@@ -8804,7 +8804,6 @@ function OnboardingScreen({ onSubmit }) {
   const [programVariant, setProgramVariant] = useState("B");
   const [injuryNotes, setInjuryNotes] = useState("");
   const [injuryAreas, setInjuryAreas] = useState([]);
-  const [logoImageOk, setLogoImageOk] = useState(true);
   const [showTerms, setShowTerms] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
   const [uploadingPic, setUploadingPic] = useState(false);
@@ -8853,7 +8852,6 @@ function OnboardingScreen({ onSubmit }) {
   return (
     <div className="pad" style={{ paddingTop: 40, maxWidth: 420, margin: "0 auto" }}>
       <div className="logo-block">
-        {logoImageOk && <img src="/kc-logo.png" alt="" className="logo-image" onError={() => setLogoImageOk(false)} />}
         <BrandLockup />
       </div>
       <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Open Mat</div>
@@ -9027,22 +9025,12 @@ function OnboardingScreen({ onSubmit }) {
 }
 
 function PaymentModal({ onClose, userId }) {
-  const [qrOk, setQrOk] = useState(true);
-  const hasAnything = coachVenmo || coachCashApp || coachPaymentLink || qrOk;
+  const hasAnything = coachVenmo || coachCashApp || coachPaymentLink;
   return (
     <ModalShell onClose={onClose} title="Payment">
       {hasAnything ? (
         <Card title="Unlock the program">
           <div style={{ textAlign: "center" }}>
-            {qrOk && (
-              coachPaymentLink ? (
-                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
-                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
-                </a>
-              ) : (
-                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 200, height: 200, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
-              )
-            )}
             <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} />
             <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} gap={coachPaymentLink ? 12 : 0} />
             {coachPaymentLink && <a className="btn-primary wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open payment link</a>}
@@ -14159,10 +14147,14 @@ function GlobalStyle() {
       .bjj-focus-row { display: flex; align-items: center; gap: 10px; min-height: 44px; border-top: 1px solid var(--border); }
       .bjj-focus-row:first-of-type { border-top: none; }
       .bjj-focus-row.done .bjj-focus-text { color: var(--text-dim); text-decoration: line-through; }
-      .bjj-focus-box { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--field-border); background: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--accent-text); }
-      .bjj-focus-box.on { background: var(--accent); border-color: var(--accent); }
+      /* The box stays 22px because that is what it should look like. The
+         button around it is 40, because that is what a thumb needs. */
+      .bjj-focus-box { position: relative; width: 40px; height: 40px; margin: -9px; flex-shrink: 0; background: none; border: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--accent-text); }
+      .bjj-focus-box::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--field-border); background: var(--bg); }
+      .bjj-focus-box.on::before { background: var(--accent); border-color: var(--accent); }
+      .bjj-focus-box svg { position: relative; }
       .bjj-focus-text { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.4; color: var(--text); }
-      .bjj-focus-x { flex-shrink: 0; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-dim); cursor: pointer; }
+      .bjj-focus-x { flex-shrink: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: none; border: none; color: var(--text-dim); cursor: pointer; }
       .bjj-focus-toggle { margin-top: 8px; font-size: 12px; }
       .bjj-tagrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
       .bjj-tag { background: var(--bg); border: 1px solid var(--field-border); border-radius: 999px; padding: 8px 12px; min-height: 36px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
@@ -14246,7 +14238,7 @@ function GlobalStyle() {
       .today-label.first { border-top: none; padding-top: 0; }
       .today-line { font-size: 13.5px; line-height: 1.5; margin: 0 0 4px; color: var(--text); }
       .today-line.dim { color: var(--text-dim); }
-      .today-link { display: block; width: 100%; text-align: left; background: none; border: none; padding: 6px 0 2px; cursor: pointer; color: var(--text-dim); font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; }
+      .today-link { display: flex; align-items: center; width: 100%; min-height: 40px; text-align: left; background: none; border: none; padding: 6px 0 2px; cursor: pointer; color: var(--text-dim); font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px; }
       .today-more { margin: 2px 0 4px; }
       .today-more > summary { list-style: none; cursor: pointer; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-family: 'Oswald', sans-serif; font-weight: 600; padding: 4px 0; }
       .today-more > summary::-webkit-details-marker { display: none; }
@@ -14483,7 +14475,7 @@ function GlobalStyle() {
       .reply-composer .btn-primary { width: auto; padding: 7px 16px; margin-top: 8px; }
       .nav-badge { position: absolute; top: 2px; left: 50%; margin-left: 2px; min-width: 15px; height: 15px; border-radius: 999px; background: var(--accent); color: #04211c; font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
       .success-box { background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid var(--green); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
-      .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; }
+      .link-btn { background: none; border: none; color: var(--accent); text-decoration: underline; font-size: 13px; cursor: pointer; padding: 8px 0; min-height: 40px; }
       .jump-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 12px; max-height: 240px; overflow-y: auto; }
       .jump-week-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--border); }
       .jump-week-row:last-child { border-bottom: none; }
@@ -14623,7 +14615,7 @@ function GlobalStyle() {
       .sig-pad-wrap { position: relative; margin-bottom: 18px; }
       .sig-pad-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
       .sig-clear { flex: none; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 8px;
-        font-size: 11.5px; font-weight: 600; padding: 5px 11px; cursor: pointer; min-height: 32px; }
+        font-size: 11.5px; font-weight: 600; padding: 5px 14px; cursor: pointer; min-height: 40px; }
       .sig-clear:disabled { opacity: 0.4; cursor: default; }
       .sig-clear:not(:disabled):hover { color: var(--text); border-color: var(--text-dim); }
       /* The pad is the surface, not the record — but it still has to feel like
@@ -14650,8 +14642,8 @@ function GlobalStyle() {
       .sig-signed { font-family: 'Caveat', 'Snell Roundhand', 'Segoe Script', 'Bradley Hand', cursive; font-size: 36px; line-height: 1.3; color: var(--text); padding: 0 2px 6px; min-height: 48px; word-break: break-word; }
       .sig-rule { height: 1px; background: var(--border); margin-bottom: 8px; transition: background 0.15s ease; }
       .sig-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-dim); }
-      .bjj-toggle { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 16px; cursor: pointer; }
-      .bjj-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+      .bjj-toggle { display: flex; align-items: center; gap: 10px; font-size: 13.5px; margin-bottom: 16px; cursor: pointer; min-height: 40px; }
+      .bjj-toggle input { accent-color: var(--accent); width: 20px; height: 20px; flex: none; }
       .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50; display: flex;
         align-items: center; justify-content: center; padding: 16px; }
       .modal-box { background: var(--bg); width: 100%; max-width: 480px; max-height: calc(100dvh - 32px);
@@ -14913,7 +14905,7 @@ function GlobalStyle() {
       .board-you { background: var(--card); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
       .board-you .board-name { color: var(--accent); }
       .rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 14px; font-weight: 700; }
-      .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 10px; margin: -4px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .icon-btn-sm { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 12px; margin: -6px; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .icon-btn-sm:hover { color: var(--accent); }
       .coaching-notes { margin-top: 8px; }
       .coaching-notes > summary { font-size: 12.5px; color: var(--text-dim); cursor: pointer; padding: 6px 0; min-height: 32px;
@@ -14929,7 +14921,8 @@ function GlobalStyle() {
       .quality-tag { color: var(--accent); background: none; border: 1.5px solid var(--accent); }
       .pct-1rm-row { font-size: 13px; color: var(--accent); margin: 4px 0 5px 2px; font-style: italic; }
       .ex-links-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-      .video-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; }
+      .pay-handle { display: inline-flex; align-items: center; min-height: 40px; padding: 0 4px; }
+      .video-link { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 0 14px; min-height: 40px; min-width: 44px; }
       .link-x-btn { background: var(--bg); border: 1px solid var(--field-border); border-radius: 999px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); cursor: pointer; }
       .link-edit-btn { background: none; border: none; color: var(--text-dim); font-size: 12px; text-decoration: underline; cursor: pointer; }
       .add-link-btn { background: none; border: 1px dashed var(--border); border-radius: 999px; color: var(--text-dim); font-size: 12px; padding: 3px 10px; cursor: pointer; margin-top: 8px; }
@@ -15124,7 +15117,6 @@ function AuthScreen() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
-  const [qrOk, setQrOk] = useState(true);
   const duePrice = PROGRAM_PRICE;
   const hasPaymentInfo = coachVenmo || coachCashApp || coachPaymentLink;
 
@@ -15181,15 +15173,6 @@ function AuthScreen() {
             <div className="card-title" style={{ marginBottom: 6 }}>Payment</div>
             <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--accent)", marginBottom: 6 }}>{`Your First Week Of Sessions Free / One-Time $${duePrice} Fee After That For Unlimited Access`}</p>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>No payment today — your first week of sessions is on the house. Once you've finished them, you'll be asked for the fee here before the next session unlocks. It's a one-time fee, not a subscription: you're never charged again, on this block or any future one.</p>
-            {qrOk && (
-              coachPaymentLink ? (
-                <a href={coachPaymentLink} target="_blank" rel="noopener noreferrer">
-                  <img src="/payment-qr.png" alt="Payment QR code — tap to pay" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
-                </a>
-              ) : (
-                <img src="/payment-qr.png" alt="Payment QR code" style={{ width: 180, height: 180, objectFit: "contain", margin: "0 auto 12px", display: "block", borderRadius: 8, background: "#fff" }} onError={() => setQrOk(false)} />
-              )
-            )}
             <PayHandle label="Venmo" handle={coachVenmo} href={venmoUrl(coachVenmo)} size={13.5} gap={4} />
             <PayHandle label="Cash App" handle={coachCashApp} href={cashAppUrl(coachCashApp)} size={13.5} gap={coachPaymentLink ? 10 : 0} />
             {coachPaymentLink && <a className="btn-ghost wide" style={{ textDecoration: "none", display: "block" }} href={coachPaymentLink} target="_blank" rel="noopener noreferrer">Open Payment Link</a>}

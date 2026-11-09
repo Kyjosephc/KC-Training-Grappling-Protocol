@@ -357,6 +357,17 @@ console.log(`\n=== stylesheet ===\n  ${declared.size} classes declared, ${unreac
 unreachable.slice(0, 12).forEach((cl) => console.log(`    .${cl}`));
 if (unreachable.length) process.exitCode = 1;
 
+// --- assets the app asks the browser for -----------------------------------
+// A <img src="/thing.png"> for a file that is not in public/ does not throw.
+// It fires a 404 and, if somebody wrote an onError, hides itself — so the app
+// looks fine while quietly promising a logo or a payment code that can never
+// arrive. Two of those were live at once.
+const referenced = [...new Set([...src.matchAll(/(?:src|href)="(\/[A-Za-z0-9._-]+\.[a-z0-9]{2,5})"/g)].map((m) => m[1]))];
+const missingAssets = referenced.filter((p) => !fs.existsSync("public" + p));
+console.log(`\n=== assets ===\n  ${referenced.length} file(s) referenced from the app, ${missingAssets.length} not in public/`);
+missingAssets.forEach((p) => console.log(`    ${p} — referenced but not shipped`));
+if (missingAssets.length) process.exitCode = 1;
+
 console.log(`\n${total} accessibility problem(s), ${colourFails} colour pair(s) under the bar.`);
 if (total || colourFails) process.exitCode = 1;
 else console.log("Every screen names every control, and both themes clear the contrast bar.");
