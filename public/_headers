@@ -1,0 +1,13 @@
+# Cache rules for Cloudflare Pages — the same ones vercel.json sets, in the
+# format Cloudflare reads. Order matters: the specific rule comes first.
+#
+# Vite fingerprints everything under /assets with a content hash, so those
+# files can never change behind a given name and are safe to keep forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Everything else — index.html, the service worker, the manifest, the icons —
+# must be re-checked on every load. A cached index.html is how an athlete ends
+# up running last month's build for weeks without knowing it.
+/*
+  Cache-Control: no-cache, no-store, must-revalidate
