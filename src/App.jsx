@@ -5631,6 +5631,30 @@ const MENTAL_COACHING_LIBRARY = [
   { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
 ];
 
+// Quotes earn their place by being rare. They used to sit on every exercise
+// as well, which meant eight of them in a single session — at which point they
+// stop being something you read and become something you scroll past. Three
+// places now: the home screen, the top of a workout, and mobility. Every quote
+// in the app goes through this component, so that list is enforceable rather
+// than a thing somebody remembers.
+const QUOTE_PLACES = ["home", "session", "mobility"];
+// Plus the browse-all list, which is a list OF the quotes rather than a place
+// one turns up at you. It goes through the same component so that nothing in
+// the app renders a quote by hand and slips past the count.
+const QUOTE_PLACES_ALL = [...QUOTE_PLACES, "library"];
+/* QUOTE-RENDER-START — the one place a quote is turned into markup. The
+   check in verify-journey cuts this region out before looking for anything
+   that renders a quote by hand, so leave the markers where they are. */
+function Quote({ where, tip, onClick, current }) {
+  if (!tip || !tip.quote) return null;
+  const cls = "quote quote-" + where + (current ? " quote-current" : "");
+  const inner = (<><p>{tip.quote}</p><span>{tip.author}</span></>);
+  return onClick
+    ? <button className={cls} onClick={onClick} aria-label="Browse all quotes">{inner}</button>
+    : <div className={cls}>{inner}</div>;
+}
+/* QUOTE-RENDER-END */
+
 function mentalTipFor(key) {
   const str = String(key || "");
   let hash = 0;
@@ -5638,21 +5662,6 @@ function mentalTipFor(key) {
   return MENTAL_COACHING_LIBRARY[hash % MENTAL_COACHING_LIBRARY.length];
 }
 const mentalTipForDate = (dateStr) => mentalTipFor(dateStr);
-function mentalTipsForSession(dayKey, ids) {
-  let h = 0;
-  const k = String(dayKey || "");
-  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-  const rnd = () => { h = (h * 1664525 + 1013904223) >>> 0; return h / 4294967296; };
-  const deck = [...MENTAL_COACHING_LIBRARY];
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  const out = {};
-  (ids || []).forEach((id, i) => { if (id) out[id] = deck[i % deck.length]; });
-  return out;
-}
-
 /* ============================== READINESS ============================== */
 
 // Every read of READINESS_COPY goes through here. A check-in saved before the
@@ -11435,10 +11444,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
 
   return (
     <div className="pad">
-      <button className="today-hero-quote" onClick={() => setShowMentalLibrary(true)} aria-label="Browse all quotes">
-        <p>{todaysMentalTip.quote}</p>
-        <span>{todaysMentalTip.author}</span>
-      </button>
+      <Quote where="home" tip={todaysMentalTip} onClick={() => setShowMentalLibrary(true)} />
 
       {showDebrief && (
         <div className="nudge-card" style={{ borderColor: "var(--accent)" }}>
@@ -11754,10 +11760,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
         <ModalShell onClose={() => setShowMentalLibrary(false)} title="Motivational Quotes">
           <p className="muted" style={{ marginBottom: 14 }}>Every quote in the rotation — today's is highlighted.</p>
           {MENTAL_COACHING_LIBRARY.map((tip) => (
-            <div key={tip.quote} className="card" style={{ marginBottom: 10, borderColor: tip.quote === todaysMentalTip.quote ? "var(--accent)" : "var(--border)" }}>
-              <p style={{ fontSize: 14, fontStyle: "italic", marginBottom: 6 }}>"{tip.quote}"</p>
-              <p className="muted" style={{ marginBottom: 0 }}>— {tip.author}</p>
-            </div>
+            <Quote key={tip.quote} where="library" tip={tip} current={tip.quote === todaysMentalTip.quote} />
           ))}
         </ModalShell>
       )}
@@ -12038,11 +12041,6 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
   const [complete, setComplete] = useState(() => (restored && restored.complete) || {});
   const [manualPRs, setManualPRs] = useState(() => (restored && restored.manualPRs) || {});
   const [entriesBySection, setEntriesBySection] = useState(() => mergeDraftEntries(buildFreshEntries(), restored && restored.entries));
-  // One line per exercise, dealt from a shuffle seeded by the day, so no two
-  // exercises in the same session show the same quote.
-  const sessionTips = useMemo(() => mentalTipsForSession(
-    dayId, Object.keys(entriesBySection).flatMap((secId) => (entriesBySection[secId] || []).map((en) => en.exerciseId))
-  ), [entriesBySection, dayId]);
   const [notes, setNotes] = useState(() => (restored && restored.notes) || "");
   const [rpe, setRpe] = useState(() => (restored && typeof restored.rpe === "number" ? restored.rpe : 7));
   const [restoredNotice, setRestoredNotice] = useState(!!restored);
@@ -12321,6 +12319,8 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
           <button className="rest-dismiss" onClick={() => setShowFirstSetHelp(false)}><X size={14} /></button>
         </div>
       )}
+      {/* Once, at the top, before the first set — not eight times on the way down. */}
+      <Quote where="session" tip={mentalTipFor(`${dayId}:${todayStr()}`)} />
       {day.intent && <div className="intent-box" style={{ marginBottom: 12 }}>{day.intent}</div>}
       {adjustedNote && <div className="adjust-box" style={{ marginBottom: 12 }}>{adjustedNote}</div>}
 
@@ -12399,18 +12399,6 @@ function DaySessionScreen({ client, isCoach, phaseId, dayId, onClose, onSave, on
                   </div>
                   {collapsedSummary && <div className="last-logged" style={{ marginTop: 2 }}>{collapsedSummary}</div>}
                   {exOpen && (<>
-                  {/* Keyed on the day and the lift, so each exercise carries its
-                      own line and a different one next block — and it never
-                      reshuffles while somebody is part-way through their sets. */}
-                  {(() => {
-                    const exTip = sessionTips[en.exerciseId] || mentalTipFor(`${dayId}:${displayName}`);
-                    return (
-                      <div className="ex-quote">
-                        <p>{exTip.quote}</p>
-                        <span>{exTip.author}</span>
-                      </div>
-                    );
-                  })()}
                   {sec.type === "conditioning" ? (
                     <ConditioningPlan target={en.target} name={displayName} />
                   ) : (
@@ -12839,6 +12827,9 @@ function MobilitySession({ client, isCoach, onClose, onSave, onUpdateProgram }) 
 
   return (
     <ModalShell onClose={onClose} dismissOnEscape={false} title="Recovery & Mobility" fullscreen>
+      {/* Keyed on the day, not the segment — one line for the whole session,
+          so it does not flick to a new quote every time the timer rolls over. */}
+      <Quote where="mobility" tip={mentalTipFor(`mobility:${todayStr()}`)} />
       <div className="muted" style={{ marginBottom: 8 }}>Segment {idx + 1} of {segments.length} — {Math.round(elapsedBefore / 60)} of {Math.round(totalSeconds / 60)} minutes elapsed</div>
       <div className="card" style={{ textAlign: "center" }}>
         <div className="mobility-type-tag">{seg.type === "breath" ? "Breathwork" : "Stretch"}</div>
@@ -14265,12 +14256,18 @@ function GlobalStyle() {
       .today-milestone span { font-size: 11.5px; color: var(--text-dim); text-align: right; min-width: 0; }
       .today-track { height: 2px; background: var(--border); margin-bottom: 9px; }
       .today-track-fill { height: 100%; background: var(--text); }
-      .today-hero-quote { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border); padding: 0 0 16px; margin-bottom: 16px; cursor: pointer; }
-      .today-hero-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 20px; line-height: 1.25; color: var(--text); margin: 0 0 8px; text-wrap: balance; }
-      .today-hero-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.2em; font-size: 10px; font-weight: 600; color: var(--text-dim); }
-      .ex-quote { border-left: 2px solid var(--accent); padding: 3px 0 3px 10px; margin: 0 0 12px; }
-      .ex-quote p { font-family: 'Oswald', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.35; color: var(--text); margin: 0 0 3px; }
-      .ex-quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.16em; font-size: 10.5px; font-weight: 600; color: var(--text-dim); }
+      .quote p { font-family: 'Oswald', sans-serif; font-weight: 500; color: var(--text); text-wrap: balance; }
+      .quote span { font-family: 'Oswald', sans-serif; text-transform: uppercase; font-weight: 600; color: var(--text-dim); }
+      .quote-home { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--border); padding: 0 0 16px; margin-bottom: 16px; cursor: pointer; }
+      .quote-home p { font-size: 20px; line-height: 1.25; margin: 0 0 8px; }
+      .quote-home span { letter-spacing: 0.2em; font-size: 10px; }
+      .quote-session, .quote-mobility { border-left: 2px solid var(--accent); padding: 3px 0 3px 12px; margin: 0 0 14px; }
+      .quote-session p, .quote-mobility p { font-size: 16px; line-height: 1.35; margin: 0 0 4px; }
+      .quote-session span, .quote-mobility span { letter-spacing: 0.16em; font-size: 10.5px; }
+      .quote-library { display: block; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+      .quote-library p { font-size: 15px; line-height: 1.35; margin: 0 0 5px; }
+      .quote-library span { letter-spacing: 0.16em; font-size: 10.5px; }
+      .quote-current { border-color: var(--accent); }
       /* ---- Title block: emblem + wordmark + ruled subtitle ---- */
       .brand-block { display: flex; align-items: center; gap: 11px; min-width: 0; }
       .brand-stack { min-width: 0; }

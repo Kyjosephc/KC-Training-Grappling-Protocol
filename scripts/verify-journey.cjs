@@ -11,6 +11,7 @@
 //
 // Run through scripts/verify-journey.sh, which does the bundling first.
 // =============================================================================
+const fs = require("fs");
 const { JSDOM } = require("jsdom");
 const dom = new JSDOM("<!doctype html><div id=root></div>", { pretendToBeVisual: true, url: "https://x.test" });
 global.window = dom.window; global.document = dom.window.document;
@@ -1227,20 +1228,59 @@ check("every quote is attributed to a real person", () => {
   if (authors.size < 15) throw new Error(`only ${authors.size} distinct voices`);
 });
 
-check("a session's exercises never draw the same quote twice", () => {
-  // Two exercises on one screen showing the same line reads as a bug, and
-  // hashing each name on its own cannot prevent it. The session deals them.
-  for (let d = 0; d < 50; d++) {
-    const ids = Array.from({ length: 12 }, (_, i) => `ex-${i}`);
-    const tips = A.mentalTipsForSession(`day-${d}`, ids);
-    const quotes = ids.map((id) => tips[id] && tips[id].quote);
-    if (quotes.some((q) => !q)) throw new Error(`day ${d}: an exercise got no quote`);
-    if (new Set(quotes).size !== quotes.length) throw new Error(`day ${d}: a quote was dealt twice in one session`);
-  }
-  // And a different day deals a different hand.
-  const a = A.mentalTipsForSession("day-1", ["x"])["x"].quote;
-  const b = A.mentalTipsForSession("day-2", ["x"])["x"].quote;
-  if (a === b) throw new Error("every session opens on the same quote");
+check("quotes appear in three places and nowhere else", () => {
+  // A quote on every exercise meant eight a session, which is how something
+  // worth reading becomes something you scroll past. Three places: the home
+  // screen, the top of a workout, and mobility. Every one of them renders
+  // through <Quote>, so this is a list that can be checked rather than a rule
+  // somebody has to remember.
+  const src = fs.readFileSync("src/App.jsx", "utf8");
+  const used = [...src.matchAll(/<Quote\b[^>]*?\bwhere="([a-z]+)"/g)].map((m) => m[1]);
+  if (!used.length) throw new Error("no quotes are rendered anywhere");
+  const places = A.QUOTE_PLACES;
+  const allowed = A.QUOTE_PLACES_ALL;
+  used.forEach((w) => {
+    if (!allowed.includes(w)) throw new Error(`a quote was added somewhere new: "${w}"`);
+  });
+  places.forEach((w) => {
+    const n = used.filter((x) => x === w).length;
+    if (n !== 1) throw new Error(`the ${w} quote appears ${n} times, expected exactly 1`);
+  });
+  if (used.length !== allowed.length) throw new Error(`${used.length} quote blocks for ${allowed.length} places`);
+  // The old per-exercise block and its styling are gone, not just unmounted.
+  if (/ex-quote/.test(src)) throw new Error("the per-exercise quote is still in the source");
+  // And nothing renders a quote by hand, going around the component. The
+  // component's own body is cut out first — it is the one place allowed to.
+  const marked = src.match(/QUOTE-RENDER-START[\s\S]*?QUOTE-RENDER-END/);
+  if (!marked) throw new Error("the Quote component's markers are gone, so this check is not checking anything");
+  const outside = src.replace(marked[0], "");
+  // A quote sitting in a JSX child position: <p>{tip.quote}</p>, with or
+  // without quotation marks around it. key={tip.quote} and a comparison are
+  // not renders, and both follow an "=" rather than a ">".
+  const byHand = [...outside.matchAll(/>[\s"'\u201c\u201d]*\{[a-zA-Z.]*[Tt]ip\.quote\}/g)].map((m) => m[0]);
+  if (byHand.length) throw new Error(`a quote is rendered outside <Quote>: ${byHand[0]}`);
+});
+
+check("a workout opens on one quote, and the exercises carry none", () => {
+  // The source check above says where quotes are written. This says what an
+  // athlete actually sees with every exercise on the screen open.
+  const c = A.buildClient({ id: "q1", firstName: "Quinn", lastName: "Reyes", weight: 170,
+    heightFeet: 5, heightInches: 10, beltLevel: "white", programVariant: "A",
+    injuryNotes: "", injuryAreas: [], weeklySchedule: {}, waiver: { version: "v" } });
+  unmount();
+  mount(React.createElement(A.DaySessionScreen, {
+    client: c, isCoach: false, phaseId: c.program.phases[0].id, dayId: c.program.phases[0].days[0].id,
+    onClose: () => {}, onSave: () => ({ ok: true }), onStartMobility: () => {},
+    onUpdateProgram: () => {}, onRestartProgram: () => {}, onRecordPR: () => {}, onRemovePR: () => {},
+  }));
+  const opener = host.querySelectorAll(".quote-session");
+  if (opener.length !== 1) throw new Error(`${opener.length} quotes at the top of the session, expected 1`);
+  // Open every exercise on the screen; none of them may bring a quote with it.
+  const chevrons = [...host.querySelectorAll("button[aria-expanded=false]")];
+  if (!chevrons.length) throw new Error("no collapsed exercises to open");
+  chevrons.forEach((b) => hit(b));
+  const after = host.querySelectorAll(".quote").length;
+  if (after !== 1) throw new Error(`${after} quotes once every exercise is open, expected 1`);
 });
 
 check("every loaded lift has a demonstration video", () => {
