@@ -362,7 +362,14 @@ if (unreachable.length) process.exitCode = 1;
 // It fires a 404 and, if somebody wrote an onError, hides itself — so the app
 // looks fine while quietly promising a logo or a payment code that can never
 // arrive. Two of those were live at once.
-const referenced = [...new Set([...src.matchAll(/(?:src|href)="(\/[A-Za-z0-9._-]+\.[a-z0-9]{2,5})"/g)].map((m) => m[1]))];
+const indexHtml = fs.existsSync("index.html") ? fs.readFileSync("index.html", "utf8") : "";
+const scanned = src + "\n" + indexHtml;
+const referenced = [...new Set([
+  ...[...scanned.matchAll(/(?:src|href)="(\/[A-Za-z0-9._-]+\.[a-z0-9]{2,5})"/g)].map((m) => m[1]),
+  // Preview-card images are absolute URLs, because the server fetching them is
+  // not ours. Check the path part against public/ all the same.
+  ...[...indexHtml.matchAll(/content="https?:\/\/[^"]*?(\/[A-Za-z0-9._-]+\.(?:png|jpg|jpeg|webp|svg))"/g)].map((m) => m[1]),
+].map((p) => p.split("?")[0]))];
 const missingAssets = referenced.filter((p) => !fs.existsSync("public" + p));
 console.log(`\n=== assets ===\n  ${referenced.length} file(s) referenced from the app, ${missingAssets.length} not in public/`);
 missingAssets.forEach((p) => console.log(`    ${p} — referenced but not shipped`));
