@@ -1180,8 +1180,10 @@ check("a two-day session does not get any longer than it already is", () => {
   // decision, not a code one: either the sessions get shorter or the intent
   // changes. Until Kyle decides which, this holds the line where it actually
   // is, so the number cannot quietly drift up any further.
+  // Kyle's call, made deliberately: the sessions stay as they are and the app
+  // stops implying they are short. So this is a ratchet, not a target — it
+  // holds seventy so the number cannot creep up unnoticed.
   const CEILING = 70;
-  const INTENT = 45;
   ["C", "D"].forEach((v) => {
     const p = A.buildProgramVariant(v);
     let worst = 0, where = "";
@@ -1192,10 +1194,52 @@ check("a two-day session does not get any longer than it already is", () => {
     if (worst > CEILING) {
       throw new Error(`program ${v}: ${where} now estimates ${worst} minutes, past the ${CEILING} it was already at`);
     }
-    if (worst <= INTENT) {
-      throw new Error(`program ${v} is down to ${worst} minutes — it meets the ${INTENT}-minute intent now, so tighten this check to match`);
-    }
   });
+});
+
+check("the hours the app quotes are the hours the programs actually ask for", () => {
+  // The note on the sign-up calendar compares the two-day and three-day
+  // programs in hours a week. Somebody picks a program off that sentence
+  // because they are short of time, so it has to be measured rather than
+  // remembered. It said ninety minutes for a two-day week that really runs to
+  // two hours ten — wrong by forty minutes, in front of the person least able
+  // to absorb them.
+  const claimed = A.WEEKLY_LIFTING_MINUTES;
+  if (!claimed || !claimed.two || !claimed.three) throw new Error("no weekly figures are stated at all");
+  const weekly = (v) => {
+    const p = A.buildProgramVariant(v);
+    const per = p.sessionsPerWeek || 3;
+    const weeks = [];
+    for (let w = 1; w <= 12; w++) {
+      let mins = 0;
+      for (let d = 0; d < per; d++) {
+        const at = A.positionAtIndex(p, (w - 1) * per + d);
+        const sections = A.resolveDaySections(at.day, at.weekNumber, p, at.phase, false, {});
+        mins += A.sessionShape(sections, p.warmup).liftMinutes;
+      }
+      weeks.push(mins);
+    }
+    return weeks.sort((a, b) => a - b)[Math.floor(weeks.length / 2)];
+  };
+  const TOLERANCE = 20;
+  const two = Math.round((weekly("C") + weekly("D")) / 2);
+  const three = Math.round((weekly("A") + weekly("B")) / 2);
+  if (Math.abs(two - claimed.two) > TOLERANCE) {
+    throw new Error(`the two-day programs ask for ${two} minutes a week, and the app is quoting ${claimed.two}`);
+  }
+  if (Math.abs(three - claimed.three) > TOLERANCE) {
+    throw new Error(`the three-day programs ask for ${three} minutes a week, and the app is quoting ${claimed.three}`);
+  }
+  // And the sentence itself has to agree with the number beside it.
+  const src = fs.readFileSync("src/App.jsx", "utf8");
+  const note = src.match(/That is \{mat \+ lifts\} sessions in a week[\s\S]{0,600}?knowing before you do/);
+  if (!note) throw new Error("the load note has moved, so this check is not checking anything");
+  if (/ninety minutes|90 minutes/i.test(note[0])) {
+    throw new Error("the note still says ninety minutes a week");
+  }
+  if (claimed.two >= 115 && !/two hours/i.test(note[0])) {
+    throw new Error(`the two-day week is ${claimed.two} minutes but the note does not say two hours`);
+  }
 });
 check("neither two-day block deloads more than twice", () => {
   const p = A.buildProgramVariant("D");

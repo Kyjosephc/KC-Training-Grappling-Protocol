@@ -4795,6 +4795,17 @@ const PROGRAM_CHOICES = [
     blurb: "Program B's method on 2 days. No percentages and no maximal singles — every set is prescribed by how hard it should feel, the lifts are paired, and the load climbs while the sets stay put. Best for a genuine offseason with nothing on the calendar. It builds strength and holds the muscle you have; adding size takes three days." },
 ];
 // At signup the schedule picks the program rather than the other way round.
+// What the note above tells somebody who is choosing a program, in minutes of
+// lifting a week with the warm-up counted. These are claims about real
+// programs, so verify:journey measures the programs and fails if either drifts
+// away from the number printed here.
+//
+// "About ninety minutes a week" sat in that note for a long time while the
+// two-day programs actually ran to two hours ten. It was wrong by forty
+// minutes, and it was wrong in front of exactly the person reading it because
+// they are short of time.
+const WEEKLY_LIFTING_MINUTES = { two: 130, three: 195 };
+
 // Two lifting days on the calendar means the two-day program; three or more
 // means the three-day ones. Running a three-day program on two days is the
 // most common way one quietly stops working, and the two-day program on three
@@ -4826,7 +4837,7 @@ function CombinedLoadNote({ schedule }) {
       <strong>That is {mat + lifts} sessions in a week.</strong> The three-day programs ask for
       roughly three hours of lifting on top of your mat time, which is a lot next to {mat} days
       of jiu-jitsu — most people find the mat work suffers first. The two-day programs cover the
-      same patterns in about ninety minutes a week and are the usual answer during a hard
+      same patterns in a little over two hours a week and are the usual answer during a hard
       training block or a competition camp. You can pick whichever you want; this is worth
       knowing before you do.
     </div>
