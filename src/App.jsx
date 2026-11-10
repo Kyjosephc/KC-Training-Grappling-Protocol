@@ -3282,6 +3282,13 @@ const VIDEO_LIBRARY = {
   "split stance trap bar deadlift": "https://www.youtube.com/shorts/7mB2Ct6WRTU",
   "weighted neck bridge": "https://www.youtube.com/shorts/_M6zOSJrZNo",
   "dumbbell glute bridge floor press": "https://www.youtube.com/shorts/UABeQA4iIGM",
+  // The injury replacements. Somebody training around a sore shoulder, back or
+  // knee is the last person who should be working out a new movement from a
+  // paragraph of text, and these four had no demonstration at all.
+  "neutral-grip dumbbell floor press": "https://www.youtube.com/shorts/i7XMjIDFYUI",
+  "leg press": "https://www.youtube.com/shorts/nDh_BlnLCGc",
+  "supine hamstring curl": "https://www.youtube.com/watch?v=bvs-Y_qgghE",
+  "step-down to a low box": "https://www.youtube.com/shorts/ZPwGP7ljRHc",
   "single leg glute bridge dumbbell floor press": "https://www.youtube.com/shorts/7ABRskqokUE",
   "single leg glute bridge": "https://www.youtube.com/shorts/ZC9NpfMU5AI",
   "bent over single arm dumbbell row": "https://www.youtube.com/shorts/rO4Q7nW0ygo",
