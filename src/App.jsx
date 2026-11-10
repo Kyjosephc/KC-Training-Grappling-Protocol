@@ -9354,51 +9354,123 @@ const esc = (x) => String(x == null ? "" : x)
 function waiverCopyHTML(name, waiver) {
   const doc = waiverDocumentFor(waiver);
   const who = (name || waiver.name || "Athlete").trim();
+  const printed = (waiver.signature || "").trim();
   const d = sigPathData(waiver.drawn);
   const vw = (waiver.drawn && Number(waiver.drawn.w)) || PAD_W;
   const vh = (waiver.drawn && Number(waiver.drawn.h)) || PAD_H;
+  const when = new Date(waiver.at);
+  const dated = when.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
+  const shortDate = when.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+
+  // The execution block, laid out the way a paper form lays it out: the
+  // signature as it was drawn, the name in print beside it, the date beside
+  // that, each over its own rule with the field named underneath. Somebody
+  // reading this should recognise it as a signed document at a glance rather
+  // than having to be told what they are looking at.
   const ink = d
     ? '<svg class="ink" viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="xMinYMid meet" role="img" aria-label="Handwritten signature">'
-      + '<path d="' + esc(d) + '" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    : '<p class="note">' + (waiver.drawnSkipped
-        ? "No drawn signature is on file: the athlete reported being unable to draw one on their device."
-        : "No drawn signature is on file for this signature.") + '</p>';
+      + '<path d="' + esc(d) + '" fill="none" stroke="#111318" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '<div class="ink ink-none">' + (waiver.drawnSkipped
+        ? "No drawn signature &mdash; the athlete reported being unable to draw one on their device."
+        : "No drawn signature is on file for this signature.") + '</div>';
+
+  const execution =
+    '<section class="exec">'
+    + '<div class="exec-col exec-sign"><div class="exec-ink">' + ink + '</div>'
+      + '<div class="exec-rule"></div><div class="exec-label">Signature of athlete</div></div>'
+    + '<div class="exec-col exec-print"><div class="exec-value">' + esc(printed || who) + '</div>'
+      + '<div class="exec-rule"></div><div class="exec-label">Print name</div></div>'
+    + '<div class="exec-col exec-date"><div class="exec-value exec-value-sm">' + esc(shortDate) + '</div>'
+      + '<div class="exec-rule"></div><div class="exec-label">Date signed</div></div>'
+    + '</section>';
+
+  const mismatch = printed && waiver.name
+    && printed.toLowerCase() !== String(waiver.name).trim().toLowerCase()
+    ? '<p class="warn">Signed as <strong>' + esc(printed) + '</strong> against the profile name <strong>' + esc(waiver.name) + '</strong>.</p>'
+    : "";
+
   const body = !doc
     ? '<div class="warn"><strong>The wording of this agreement is not on file.</strong><p>This signature predates the app keeping a copy of the wording with it, and version '
       + esc(waiver.version || "unversioned")
       + ' is no longer the one in use. The signature, its date and its version above are a complete record that this athlete accepted that version. Showing today\'s wording over an older signature would be representing it as something it is not, so it is not shown.</p></div>'
-    : '<h2>' + esc(doc.title) + '</h2>'
-      + doc.sections.map((sec) => '<h3>' + esc(sec.heading) + '</h3><p>' + esc(sec.body) + '</p>').join("")
+    : '<h2 class="agreement-title">' + esc(doc.title) + '</h2><ol class="clauses">'
+      + doc.sections.map((sec) => '<li><h3>' + esc(sec.heading) + '</h3><p>' + esc(sec.body) + '</p></li>').join("")
+      + '</ol>'
       + '<p class="note">' + (doc.source === "signed"
         ? "The wording above is the copy stored with this signature at the moment it was given. It is not regenerated from the current version of the app."
         : "This signature was given before the app stored the wording alongside it. The text above is version " + esc(doc.version) + ", which is the version recorded against the signature and is still the version in use, so it is the wording that was agreed to.") + '</p>';
-  const mismatch = waiver.signature && waiver.name
-    && waiver.signature.trim().toLowerCase() !== waiver.name.trim().toLowerCase()
-    ? '<p class="warn">Signed as <strong>' + esc(waiver.signature) + '</strong> against the profile name <strong>' + esc(waiver.name) + '</strong>.</p>'
-    : "";
+
+  const provider = (doc && doc.provider) || PROVIDER;
+
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'
-    + '<title>Signed waiver — ' + esc(who) + '</title><style>'
-    + 'body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;max-width:46em;margin:0 auto;padding:32px 20px 64px}'
-    + 'h1{font-size:19px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 20px}'
-    + 'h2{font-size:17px;margin:28px 0 14px}h3{font-size:14px;margin:20px 0 4px}'
-    + 'p{margin:0 0 10px}dl{margin:0 0 20px}dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin-top:10px}'
-    + 'dd{margin:1px 0 0;font-weight:600}.ink{display:block;width:100%;max-width:340px;height:110px;margin:4px 0 2px}'
-    + '.rule{border-top:1px solid #111;max-width:340px;margin:0 0 4px}.cap{font-size:11px;color:#666;max-width:340px}'
-    + '.lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#666;margin:0 0 2px}'
-    + '.note{font-size:12.5px;color:#555;margin-top:18px}.warn{font-size:13px;border-left:3px solid #b45309;padding-left:12px;margin:18px 0}'
-    + 'hr{border:none;border-top:1px solid #ddd;margin:26px 0}@media print{body{padding:0}}'
-    + '</style></head><body>'
-    + '<h1>' + esc(((doc && doc.provider) || PROVIDER)) + ' &mdash; Signed liability waiver</h1>'
-    + '<dl><dt>Athlete</dt><dd>' + esc(who) + '</dd>'
-    + '<dt>Dated</dt><dd>' + esc(new Date(waiver.at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })) + '</dd>'
-    + '<dt>Timestamp</dt><dd>' + esc(waiver.at) + '</dd>'
-    + '<dt>Version</dt><dd>' + esc(waiver.version || "unversioned") + '</dd></dl>'
+    + '<title>Signed waiver &mdash; ' + esc(who) + '</title><style>'
+    + ':root{--ink:#111318;--dim:#5b6068;--line:#d6d9de;--accent:#00705f}'
+    + '*{box-sizing:border-box}'
+    + 'body{font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;'
+      + 'color:var(--ink);background:#f4f5f7;margin:0;padding:28px 16px 56px}'
+    + '.sheet{max-width:46em;margin:0 auto;background:#fff;padding:44px 48px 40px;'
+      + 'box-shadow:0 1px 3px rgba(0,0,0,.09),0 8px 28px rgba(0,0,0,.06);border-radius:3px}'
+    /* Letterhead */
+    + '.head{border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:26px}'
+    + '.brand{font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}'
+    + 'h1{font-size:23px;font-weight:700;letter-spacing:-.01em;margin:0;line-height:1.25}'
+    + '.head-sub{font-size:12.5px;color:var(--dim);margin:7px 0 0}'
+    /* Details */
+    + '.meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 32px;margin:0 0 30px}'
+    + '.meta div{min-width:0}'
+    + '.meta dt{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}'
+    + '.meta dd{margin:0;font-size:14.5px;font-weight:600;word-break:break-word}'
+    /* Execution block */
+    + '.exec{display:flex;flex-wrap:wrap;gap:24px 26px;align-items:flex-end;margin:0 0 30px;'
+      + 'padding:24px 24px 20px;border:1px solid var(--line);border-radius:4px;background:#fcfcfd;break-inside:avoid}'
+    + '.exec-col{min-width:0}'
+    /* These bases have to fit the sheet's inner width on one line, or the date
+       wraps to a row of its own and leaves a hole under the signature. */
+    + '.exec-sign{flex:1 1 200px}.exec-print{flex:1 1 160px}.exec-date{flex:0 1 112px}'
+    + '.exec-ink{height:68px;display:flex;align-items:flex-end}'
+    + '.ink{display:block;width:100%;height:68px}'
+    + '.ink-none{font-size:11.5px;line-height:1.45;color:var(--dim);font-style:italic;padding-bottom:4px}'
+    /* Sized so an ordinary full name and a long-form date each sit on one
+       line. They still wrap rather than overflow if somebody's name is long. */
+    + '.exec-value{font-size:18px;font-weight:600;height:68px;display:flex;align-items:flex-end;'
+      + 'padding-bottom:5px;word-break:break-word;line-height:1.25}'
+    + '.exec-value-sm{font-size:13.5px;font-weight:600}'
+    + '.exec-rule{border-top:1px solid var(--ink);margin:0 0 6px}'
+    + '.exec-label{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}'
+    /* Agreement */
+    + '.agreement-title{font-size:16px;letter-spacing:.02em;margin:0 0 4px}'
+    + '.clauses{counter-reset:c;list-style:none;margin:16px 0 0;padding:0}'
+    + '.clauses>li{counter-increment:c;position:relative;padding-left:30px;margin:0 0 17px;break-inside:avoid}'
+    + '.clauses>li::before{content:counter(c) ".";position:absolute;left:0;top:1px;font-size:12.5px;'
+      + 'font-weight:700;color:var(--accent)}'
+    + '.clauses h3{font-size:13px;font-weight:700;letter-spacing:.03em;margin:0 0 4px}'
+    + '.clauses p{margin:0;font-size:14px;line-height:1.6}'
+    + 'p{margin:0 0 10px}'
+    + '.note{font-size:12px;line-height:1.55;color:var(--dim);margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}'
+    + '.warn{font-size:13px;line-height:1.55;border-left:3px solid #b45309;padding:2px 0 2px 13px;margin:0 0 22px;color:#5b4310}'
+    + '.foot{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);'
+      + 'font-size:11px;color:var(--dim);display:flex;flex-wrap:wrap;gap:4px 18px}'
+    + '@media print{@page{margin:16mm}body{background:#fff;padding:0}'
+      + '.sheet{box-shadow:none;max-width:none;padding:0;border-radius:0}}'
+    + '@media (max-width:560px){.sheet{padding:28px 22px 30px}.meta{grid-template-columns:1fr}}'
+    + '</style></head><body><main class="sheet">'
+    + '<header class="head"><p class="brand">' + esc(provider) + '</p>'
+      + '<h1>Signed Liability Waiver</h1>'
+      + '<p class="head-sub">A record of the agreement accepted by the athlete named below, reproduced in full.</p></header>'
+    + '<dl class="meta">'
+      + '<div><dt>Athlete</dt><dd>' + esc(who) + '</dd></div>'
+      + '<div><dt>Date signed</dt><dd>' + esc(dated) + '</dd></div>'
+      + '<div><dt>Agreement version</dt><dd>' + esc(waiver.version || "unversioned") + '</dd></div>'
+      + '<div><dt>Timestamp</dt><dd>' + esc(waiver.at) + '</dd></div>'
+    + '</dl>'
     + mismatch
-    + '<p class="lbl">Signed by hand</p>' + ink + '<div class="rule"></div><p class="cap">Drawn signature</p>'
-    + '<p style="font-size:26px;margin:18px 0 2px">' + esc(waiver.signature || "(no typed signature on file)") + '</p>'
-    + '<div class="rule"></div><p class="cap">Typed signature</p>'
-    + '<hr>' + body + '</body></html>';
+    + execution
+    + body
+    + '<footer class="foot"><span>' + esc(provider) + '</span>'
+      + '<span>Version ' + esc(waiver.version || "unversioned") + '</span>'
+      + '<span>' + esc(waiver.at) + '</span></footer>'
+    + '</main></body></html>';
 }
 
 function downloadWaiverCopy(name, waiver) {
