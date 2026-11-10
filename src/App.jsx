@@ -3580,6 +3580,81 @@ function exerciseUnitLabel(name, repsText) {
 function needsWeight(name) {
   return !NO_WEIGHT_EXERCISES.has(normalizeExerciseKey(name));
 }
+/* ===================== HOW LONG THIS SESSION TAKES =====================
+   The tutorial already tells an athlete to shorten a session rather than skip
+   it when they only have forty minutes. It never told them how long the
+   session was, which made that advice hard to act on standing in the gym with
+   class in an hour.
+
+   Everything below is read out of the program itself — the warm-up blocks
+   carry their own stated durations, every exercise carries its sets, reps and
+   rest, and the conditioning pieces describe their intervals in words. Nothing
+   here is a constant somebody has to remember to update when a session
+   changes.
+
+   It leans LOW on purpose. Every range resolves to its lower bound, so the
+   number is closer to "at least this long" than to a promise. An estimate that
+   runs over is a broken promise; one that runs under is a pleasant surprise.
+*/
+
+// The first number in a phrase, with its unit, in seconds. "2 to 3 minutes"
+// is 120 — the low end of a range, every time.
+function firstDuration(text) {
+  // The "to" branch is the whole point: in "2 to 3 minutes" the 2 is not
+  // followed by a unit, so a naive match walks past it and reads three. That
+  // is the upper bound of the range, which is the opposite of leaning low.
+  const m = String(text || "").match(/(\d+(?:\.\d+)?)\s*(?:to\s*\d+(?:\.\d+)?\s*)?(second|sec|minute|min)/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return /min/i.test(m[2]) ? n * 60 : n;
+}
+
+function restSecondsFor(rest) {
+  const t = String(rest || "").trim().toLowerCase();
+  if (!t || t.startsWith("none") || /^0\s*second/.test(t)) return 0;
+  const d = firstDuration(t);
+  return d == null ? 60 : d;
+}
+
+// What one set costs, before rest. A rep under control is about four seconds;
+// a rep prescribed in seconds says so itself.
+const SECONDS_PER_REP = 4;
+function workSecondsPerSet(reps) {
+  const t = String(reps || "").trim();
+  if (!t) return 30;
+  const perSide = /each (side|direction|way|arm|leg)|per side|a side/i.test(t) ? 2 : 1;
+  const held = firstDuration(t);
+  if (held != null) return held * perSide;
+  const count = t.match(/(\d+)/);
+  if (!count) return 30;
+  return Number(count[1]) * SECONDS_PER_REP * perSide;
+}
+
+// Conditioning describes itself in prose: rounds, work, recovery. Read it
+// rather than guessing, and fall back to the first duration mentioned.
+function conditioningSeconds(reps) {
+  const t = String(reps || "").trim();
+  if (!t) return 0;
+  const unit = (u) => (/min/i.test(u) ? 60 : 1);
+  // "12 rounds of 15 seconds hard effort, 45 seconds easy recovery between rounds"
+  // "3 rounds of 5 minutes hard, 10 to 12 minutes easy between rounds"
+  const rounds = t.match(/(\d+)\s*rounds?\s*of\s*(\d+)(?:\s*to\s*\d+)?\s*(second|sec|minute|min)[^,]*,\s*(?:equal time|(\d+)(?:\s*to\s*\d+)?\s*(second|sec|minute|min))/i);
+  if (rounds) {
+    const n = Number(rounds[1]);
+    const work = Number(rounds[2]) * unit(rounds[3]);
+    const easy = rounds[4] ? Number(rounds[4]) * unit(rounds[5]) : work;
+    // The recovery after the final round is not part of the session.
+    return n * work + Math.max(0, n - 1) * easy;
+  }
+  const d = firstDuration(t);
+  return d == null ? 0 : d;
+}
+
+// The warm-up states its own block durations. Reading them beats assuming.
+function warmupSeconds(blocks) {
+  return (blocks || []).reduce((n, b) => n + (firstDuration(b && b.duration) || 0), 0);
+}
+
 // Whether an estimated one-rep max means anything for this movement.
 //
 // needsWeight only answers "is there a number to type". A medicine ball slam, a
@@ -11161,28 +11236,37 @@ function suggestFromHistory(client, exerciseName, target, isDeload) {
 
 // Working sets, build-up sets, and a time estimate built from the actual rest
 // prescriptions rather than a guess per section.
-function sessionShape(sections) {
+function sessionShape(sections, warmupBlocks) {
   let working = 0, buildUps = 0, seconds = 0, condSeconds = 0;
   (sections || []).forEach((sec) => (sec.exercises || []).forEach((e) => {
     if (/Conditioning/.test(e.quality || "")) {
       // Conditioning carries its own duration in the reps field, and is counted
       // separately: an easy twenty-five minute ride is not twenty-five minutes
       // of the same thing as the lifting, and does not have to be done with it.
-      const m = String(e.reps || "").match(/(\d+)\s*(?:to\s*(\d+)\s*)?minutes?/i);
-      if (m) condSeconds += (Number(m[2] || m[1]) || 0) * 60;
+      //
+      // This used to look only for the word "minutes", so a piece written as
+      // "12 rounds of 15 seconds hard, 45 seconds easy" counted as nothing at
+      // all — eleven real minutes reported as zero.
+      condSeconds += conditioningSeconds(e.reps);
       return;
     }
     const targets = e.perSetTargets || null;
     const hard = targets ? targets.filter((t) => !/^(Warm-up|Build)$/.test(t.note || "")).length : (e.sets || 0);
     const build = targets ? targets.length - hard : 0;
     working += hard; buildUps += build;
-    const restM = String(e.rest || "").match(/(\d+)\s*(?:to\s*\d+\s*)?(second|minute)/i);
-    const rest = restM ? Number(restM[1]) * (/minute/i.test(restM[2]) ? 60 : 1) : 75;
+    const rest = restSecondsFor(e.rest) || 75;
+    // A set of twenty does not cost what a set of three costs, and a set
+    // prescribed in seconds says how long it takes.
+    const work = workSecondsPerSet(e.reps);
     // Build-ups are moved through briskly, so they cost about a third as much.
-    seconds += hard * (rest + 35) + build * Math.round((rest + 35) / 3);
+    seconds += hard * (rest + work) + build * Math.round((rest + work) / 3);
   }));
   const to5 = (sec) => Math.round(sec / 60 / 5) * 5;
-  const liftMinutes = Math.max(10, to5(seconds + 8 * 60));
+  // The warm-up is fifteen real minutes of banded work, neck holds and bike.
+  // A flat eight-minute allowance quietly took seven minutes off every
+  // session in the app, which is the difference between making class and not.
+  const warm = warmupSeconds(warmupBlocks) || 8 * 60;
+  const liftMinutes = Math.max(10, to5(seconds + warm));
   const conditioningMinutes = condSeconds ? Math.max(5, to5(condSeconds)) : 0;
   return { working, buildUps, liftMinutes, conditioningMinutes, minutes: liftMinutes + conditioningMinutes };
 }
@@ -11337,7 +11421,7 @@ function TodayTab({ client, onPersist, onStartLog, onStartMobility, onRefreshPro
   const isCurrent = viewIndex === (client.sessionsCompleted || 0);
   const mainLift = primaryLiftName(pos.day, pos.weekNumber, client.program, pos.phase, resolveOptsFor(client));
   const resolvedRaw = useMemo(() => resolveDaySections(pos.day, pos.weekNumber, client.program, pos.phase, false, resolveOptsFor(client)), [pos.day, pos.weekNumber, client.program, pos.phase, client.blockNumber, client.excludedExercises, client.injuryAreas]);
-  const shape = useMemo(() => sessionShape(resolvedRaw), [resolvedRaw]);
+  const shape = useMemo(() => sessionShape(resolvedRaw, client.program && client.program.warmup), [resolvedRaw, client.program]);
   // Third number on the day's strip. Sets and minutes say how long it is;
   // this says how much there is to move between.
   const exerciseCount = useMemo(
