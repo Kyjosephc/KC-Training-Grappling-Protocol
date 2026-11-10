@@ -1288,6 +1288,52 @@ check("every quote is attributed to a real person", () => {
   if (authors.size < 15) throw new Error(`only ${authors.size} distinct voices`);
 });
 
+check("no query sends more ids than a URL can carry", () => {
+  // Supabase puts .in() lists in the query string. A uuid costs about 39
+  // characters there, so a few hundred ids makes a URL the server refuses
+  // outright — a 414, which arrives looking like a network failure rather
+  // than a data problem. The coach dashboard chunked for this; the feed's
+  // reactions and the saved list did not, and those are the two that grow on
+  // their own as a gym uses the app.
+  const src = fs.readFileSync("src/App.jsx", "utf8");
+  // Every .in(...) call, with the few lines above it for context.
+  const calls = [...src.matchAll(/\.in\(\s*"([a-z_]+)"\s*,\s*([^)]+)\)/g)];
+  if (calls.length < 4) throw new Error(`only found ${calls.length} .in() calls, so this check has stopped finding them`);
+  const unbounded = calls.filter((m) => {
+    const arg = m[2];
+    // Safe when the list is a chunk, or sliced to a small fixed size, or
+    // built from a single page of posts.
+    if (/chunk/i.test(arg)) return false;
+    // The captured argument stops at the first ")", so a trailing one is not
+    // there to match against — slice(0, 50) arrives as "slice(0, 50".
+    const sliced = arg.match(/slice\(\s*0\s*,\s*(\d+)/);
+    if (sliced && Number(sliced[1]) <= 100) return false;
+    if (/page\.map/.test(arg)) return false;
+    if (/wantRooms/.test(arg)) return false;
+    return true;
+  });
+  if (unbounded.length) {
+    throw new Error(`.in("${unbounded[0][1]}", ${unbounded[0][2].trim().slice(0, 40)}) can send an unbounded id list`);
+  }
+  // And the helper actually splits, rather than being a pass-through.
+  if (A.ID_CHUNK > 100) throw new Error(`ids are chunked ${A.ID_CHUNK} at a time, which is still a long URL`);
+  const all = Array.from({ length: 213 }, (_, i) => `id-${i}`);
+  const chunks = A.chunkIds(all);
+  if (chunks.some((c) => c.length > A.ID_CHUNK)) {
+    throw new Error(`a request of ${Math.max(...chunks.map((c) => c.length))} ids would go out`);
+  }
+  if (chunks.length !== Math.ceil(213 / A.ID_CHUNK)) throw new Error(`213 ids split into ${chunks.length} requests`);
+  if (chunks.reduce((n, c) => n + c.length, 0) !== 213) throw new Error("ids were dropped in the split");
+  // Duplicates and blanks cost URL length for nothing.
+  const tidy = A.chunkIds(["a", "a", "b", null, "", "b"]);
+  if (tidy.length !== 1 || tidy[0].length !== 2) {
+    throw new Error(`duplicate and empty ids are not dropped (${JSON.stringify(tidy)})`);
+  }
+  if (A.chunkIds([]).length !== 0 || A.chunkIds(null).length !== 0) {
+    throw new Error("an empty list still produces a request");
+  }
+});
+
 check("quotes appear in three places and nowhere else", () => {
   // A quote on every exercise meant eight a session, which is how something
   // worth reading becomes something you scroll past. Three places: the home

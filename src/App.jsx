@@ -1160,16 +1160,44 @@ async function makeTeamLeader(teamId, memberUserId) {
   return { ok: true };
 }
 
+// Supabase sends .in() as a query string, so a long list of ids becomes a
+// long URL, and a long enough URL is refused by the server before it reaches
+// the database — a 414 rather than anything that looks like a data problem.
+// A uuid costs about 39 characters in that list, so a few hundred ids is all
+// it takes. The coach dashboard already chunked for this reason; the feed and
+// the saved list did not, and they are the two that grow without anybody
+// deciding to grow them.
+//
+// Nothing here is slow at the sizes a gym reaches. It is a ceiling being
+// removed, not a speed-up.
+const ID_CHUNK = 50;
+// Split separately from the fetching so the splitting can be checked without
+// a database: it is the part with the arithmetic in it.
+function chunkIds(ids) {
+  const list = [...new Set(ids || [])].filter(Boolean);
+  const out = [];
+  for (let i = 0; i < list.length; i += ID_CHUNK) out.push(list.slice(i, i + ID_CHUNK));
+  return out;
+}
+async function inChunks(ids, run) {
+  const out = [];
+  for (const chunk of chunkIds(ids)) {
+    const rows = await run(chunk);
+    if (rows && rows.length) out.push(...rows);
+  }
+  return out;
+}
+
 async function fetchCommunityReactions(postIds) {
   if (!supabase) return LOAD_FAILED;
   const ids = (postIds || []).slice(0, COMMUNITY_PAGE * COMMUNITY_MAX_PAGES * 6);
   if (!ids.length) return [];
-  const outcome = await withRetry(async () => {
+  const outcome = await withRetry(async () => inChunks(ids, async (chunk) => {
     const { data, error } = await supabase.from("community_reactions")
-      .select("post_id, user_id").in("post_id", ids);
+      .select("post_id, user_id").in("post_id", chunk);
     if (error) throw error;
     return data || [];
-  });
+  }));
   return outcome.ok ? outcome.result : LOAD_FAILED;
 }
 
@@ -1297,9 +1325,11 @@ async function fetchSavedPosts(userId) {
     }
     const ids = (rows || []).map((r) => r.post_id);
     if (!ids.length) return [];
-    const { data: posts, error: postsErr } = await supabase.from("community_posts")
-      .select("*").in("id", ids);
-    if (postsErr) throw postsErr;
+    const posts = await inChunks(ids, async (chunk) => {
+      const { data, error } = await supabase.from("community_posts").select("*").in("id", chunk);
+      if (error) throw error;
+      return data || [];
+    });
     const byId = {};
     (posts || []).forEach((p) => { byId[p.id] = p; });
     // Newest save first, not newest post: the order you kept them in is the
