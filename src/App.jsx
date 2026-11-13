@@ -558,20 +558,7 @@ function restorableTeam(teams, teamId) {
 // out of a team you have since left is still yours to look at — it was saved —
 // but its room is not somewhere you can go, and offering to take you there
 // lands in a room that is empty by definition.
-// What the bar at the top of the Group tab says about teams, beyond where you
-// are standing. Somebody handed a code has to be able to see where it goes:
-// the bar used to say the app's name and nothing else, which tells a
-// person with a code in their hand nothing at all.
-function teamBarHint(teams, activeTeam, waiting) {
-  // Somebody waiting on you outranks everything else the bar could say: it is
-  // the only one of these that is a person standing still until you act.
-  if (waiting > 0) return `${waiting} to approve`;
-  if (activeTeam) return "private";
-  const list = teams || [];
-  if (list.some((t) => t.status === "pending")) return "waiting";
-  if (list.some((t) => t.status === "approved")) return "switch team";
-  return "join a team";
-}
+const NO_TEAMS = [];
 
 function savedPostHome(post, teams) {
   if (!post || !post.team_id) return { team: null, reachable: true };
@@ -6707,291 +6694,15 @@ function ReplyComposer({ userId, onSend }) {
   );
 }
 
-// Teams: switching between them, asking to join one, and — if you lead one —
-// deciding who gets in. Kept in one place because they are one idea, and split
-// across the page they read as four unrelated controls.
-function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, onChanged, onClose }) {
-  const [code, setCode] = useState("");
-  const [joining, setJoining] = useState(false);
-  const [joinNote, setJoinNote] = useState("");
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [members, setMembers] = useState({});
-  const [busy, setBusy] = useState("");
-  const [editingCode, setEditingCode] = useState("");
-  const [codeDraft, setCodeDraft] = useState("");
-  const [codeNote, setCodeNote] = useState("");
-
-  const approved = teams.filter((t) => t.status === "approved");
-  const pending = teams.filter((t) => t.status === "pending");
-  const denied = teams.filter((t) => t.status === "denied");
-  const led = approved.filter((t) => t.leaderId === userId);
-  const [leaving, setLeaving] = useState("");
-
-  const loadMembers = useCallback(async (teamId) => {
-    const rows = await fetchTeamMembers(teamId);
-    if (rows !== LOAD_FAILED) setMembers((m) => ({ ...m, [teamId]: rows }));
-  }, []);
-  useEffect(() => { led.forEach((t) => loadMembers(t.id)); }, [teams.length]); // eslint-disable-line
-
-  const decide = async (teamId, memberId, status) => {
-    setBusy(teamId + memberId);
-    const res = await decideTeamMember(teamId, memberId, status, userId);
-    if (res.ok) await loadMembers(teamId);
-    setBusy("");
-  };
-
-  return (
-    <ModalShell title="Teams" onClose={onClose}>
-      <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
-        A team is a private room for one gym. Only people its leader has let in can read
-        anything posted there, and no other team can see it at all. Kyle can read team posts
-        so he can remove something if he has to — that is the only exception, and it is
-        written here rather than left for anyone to find out later.
-      </p>
-
-      <div className="room-group">
-        <div className="room-group-label"><span>Where you are posting</span></div>
-        <button type="button" className={`room-row${!activeTeam ? " current" : ""}`}
-          onClick={() => { onSwitch(null); onClose(); }}>
-          <span className="room-row-main">
-            <span className="room-row-name">Everyone at the gym</span>
-            <span className="room-row-blurb">The rooms every member shares, across every gym.</span>
-          </span>
-          {!activeTeam ? <Check size={16} aria-hidden="true" /> : null}
-        </button>
-        {approved.map((t) => (
-          <button key={t.id} type="button" className={`room-row${activeTeam && activeTeam.id === t.id ? " current" : ""}`}
-            onClick={() => { onSwitch(t); onClose(); }}>
-            <span className="room-row-main">
-              <span className="room-row-name">
-                {t.name}
-                {t.leaderId === userId ? <span className="room-row-count"> — you lead this</span> : null}
-              </span>
-              <span className="room-row-blurb">Private to this team. Three rooms: Team, This week, Clips.</span>
-            </span>
-            {activeTeam && activeTeam.id === t.id ? <Check size={16} aria-hidden="true" /> : null}
-          </button>
-        ))}
-        {/* A room you can be let into is a room you can walk out of. Not
-            offered to the leader, because a team with nobody running it is a
-            worse state than a leader who wanted to leave. */}
-        {approved.filter((t) => t.leaderId !== userId).map((t) => (
-          leaving === t.id ? (
-            <div key={`leave-${t.id}`} className="adjust-box" style={{ marginBottom: 6 }}>
-              Leave {t.name}? You stop seeing its rooms straight away. Nothing you posted is
-              deleted, and you can ask to come back with the code.
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
-                  onClick={async () => {
-                    const res = await leaveTeam(t.id, userId);
-                    setLeaving("");
-                    if (res.ok) { if (activeTeam && activeTeam.id === t.id) onSwitch(null); await onChanged(); }
-                  }}>Yes, leave</button>
-                <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
-                  onClick={() => setLeaving("")}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button key={`leave-${t.id}`} type="button" className="link-btn" style={{ marginBottom: 6 }}
-              onClick={() => setLeaving(t.id)}>Leave {t.name}</button>
-          )
-        ))}
-        {approved.length === 0 && (
-          <p className="muted" style={{ fontSize: 12.5, margin: "4px 2px 0" }}>
-            You are not in a team yet. If your gym has one, ask whoever runs it for the code.
-          </p>
-        )}
-      </div>
-
-      {pending.length > 0 && (
-        <div className="adjust-box" style={{ marginBottom: 14 }}>
-          {pending.map((t) => (
-            <div key={t.id}>Waiting on <strong>{t.name}</strong> to let you in. Nothing to do — they will see your request.</div>
-          ))}
-        </div>
-      )}
-
-      {/* Said rather than left as silence. Somebody turned down saw their
-          request simply vanish and had no way to tell whether it had even
-          arrived. They can ask again — the code still works. */}
-      {denied.length > 0 && (
-        <div className="adjust-box" style={{ marginBottom: 14 }}>
-          {denied.map((t) => (
-            <div key={t.id}><strong>{t.name}</strong> didn't accept your request. You can ask again with the code below.</div>
-          ))}
-        </div>
-      )}
-
-      {led.map((t) => {
-        const rows = members[t.id] || [];
-        const waiting = rows.filter((m) => m.status === "pending");
-        const inTeam = rows.filter((m) => m.status === "approved");
-        return (
-          <div key={t.id} className="room-group">
-            <div className="room-group-label"><span>{t.name} — you lead this</span></div>
-            <div className="adjust-box" style={{ marginBottom: 10 }}>
-              Invite code: <strong className="team-code">{t.inviteCode}</strong>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                Give this to people at your gym. Nobody can find the team without it, and you still
-                decide on each person.
-              </div>
-              {editingCode === t.id ? (
-                <div style={{ marginTop: 10 }}>
-                  <label className="labeled-input" style={{ marginBottom: 8 }}>
-                    <span>Your own code</span>
-                    <input type="text" value={codeDraft} style={{ textTransform: "uppercase" }}
-                      placeholder="e.g. INFINITI"
-                      onChange={(e) => { setCodeDraft(normaliseInviteCode(e.target.value)); setCodeNote(""); }} />
-                  </label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
-                      disabled={busy === "code" + t.id || !!inviteCodeProblem(codeDraft)}
-                      onClick={async () => {
-                        setBusy("code" + t.id); setCodeNote("");
-                        const res = await setTeamInviteCode(t.id, codeDraft);
-                        if (res.ok) {
-                          setEditingCode(""); setCodeDraft("");
-                          await onChanged();
-                          emitToast({ kind: "info", autoDismissMs: 7000, message: `The code for ${t.name} is now ${res.code}.` });
-                        } else if (res.reason === CODE_TAKEN) {
-                          setCodeNote("Another team already uses that code. Try a different one.");
-                        } else {
-                          setCodeNote(res.reason || "Couldn't change it just now — check your connection.");
-                        }
-                        setBusy("");
-                      }}>{busy === "code" + t.id ? "Saving…" : "Save this code"}</button>
-                    <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
-                      onClick={() => { setEditingCode(""); setCodeNote(""); }}>Cancel</button>
-                  </div>
-                  <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                    Letters and numbers, {INVITE_CODE_MIN} to {INVITE_CODE_MAX} of them. Anyone still holding the
-                    old code will not be able to use it, so send the new one out.
-                  </p>
-                  {codeNote && <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>{codeNote}</p>}
-                </div>
-              ) : (
-                <button type="button" className="link-btn" style={{ marginTop: 8 }}
-                  onClick={() => { setEditingCode(t.id); setCodeDraft(t.inviteCode); setCodeNote(""); }}>
-                  Choose your own code
-                </button>
-              )}
-            </div>
-            {waiting.length === 0
-              ? <p className="muted" style={{ fontSize: 12.5, margin: "0 2px 10px" }}>Nobody waiting.</p>
-              : waiting.map((m) => (
-                <div key={m.user_id} className="blocked-row">
-                  <span>{m.member_name || "Someone"}</span>
-                  <span style={{ display: "flex", gap: 8 }}>
-                    <button className="link-btn" disabled={busy === t.id + m.user_id}
-                      onClick={() => decide(t.id, m.user_id, "approved")}>Let in</button>
-                    <button className="link-btn" disabled={busy === t.id + m.user_id}
-                      onClick={() => decide(t.id, m.user_id, "denied")}>No</button>
-                  </span>
-                </div>
-              ))}
-            {inTeam.filter((m) => m.user_id !== userId).map((m) => (
-              <div key={m.user_id} className="blocked-row">
-                <span>{m.member_name || "Member"}{m.role === "leader" ? " — leader" : ""}</span>
-                {m.role !== "leader" && (
-                  <button className="link-btn" disabled={busy === t.id + m.user_id}
-                    onClick={async () => {
-                      setBusy(t.id + m.user_id);
-                      const res = await makeTeamLeader(t.id, m.user_id);
-                      if (res.ok) { await loadMembers(t.id); await onChanged(); }
-                      setBusy("");
-                    }}>Make leader</button>
-                )}
-              </div>
-            ))}
-          </div>
-        );
-      })}
-
-      <div className="room-group">
-        <div className="room-group-label"><span>Join a team</span></div>
-        <p className="muted" style={{ fontSize: 12.5, margin: "0 2px 8px" }}>
-          For a code somebody else gave you. To change your own team's code, use
-          "Choose your own code" above it.
-        </p>
-        <label className="labeled-input" style={{ marginBottom: 8 }}>
-          <span>Their invite code</span>
-          <input type="text" value={code} placeholder="Six characters"
-            style={{ textTransform: "uppercase" }}
-            onChange={(e) => { setCode(e.target.value); setJoinNote(""); }} />
-        </label>
-        <button className="btn-primary wide" disabled={joining || code.trim().length < 4}
-          onClick={async () => {
-            setJoining(true); setJoinNote("");
-            const res = await requestTeamJoin(code, clientName);
-            if (res.ok) {
-              setCode("");
-              setJoinNote(res.team.status === "approved"
-                ? `You are already in ${res.team.name}.`
-                : `Asked to join ${res.team.name}. Their leader decides from here.`);
-              await onChanged();
-            } else if (res.reason === JOIN_NO_SUCH_CODE) {
-              setJoinNote("No team has that code. Check it with whoever gave it to you.");
-            } else if (res.reason === TEAMS_MISSING) {
-              setJoinNote("Teams aren't switched on yet.");
-            } else {
-              setJoinNote("Couldn't send that just now — check your connection.");
-            }
-            setJoining(false);
-          }}>{joining ? "Asking…" : "Ask to join"}</button>
-        {joinNote && <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>{joinNote}</p>}
-      </div>
-
-      {isCoach && (
-        <div className="room-group">
-          <div className="room-group-label"><span>Start a team</span></div>
-          <label className="labeled-input" style={{ marginBottom: 8 }}>
-            <span>Gym or team name</span>
-            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Spokane BJJ" />
-          </label>
-          <button className="btn-ghost wide" disabled={creating || newName.trim().length < 2}
-            onClick={async () => {
-              setCreating(true);
-              const res = await createTeam(newName, userId, userId);
-              if (res.ok) {
-                setNewName("");
-                await onChanged();
-                emitToast({ kind: "info", autoDismissMs: 9000,
-                  message: `${res.team.name} created. Its code is ${res.team.invite_code} — hand the team over with "Make leader" once they are in.` });
-              } else {
-                emitToast({ kind: "error", message: "Couldn't create that team.", autoDismissMs: 6000 });
-              }
-              setCreating(false);
-            }}>{creating ? "Creating…" : "Create the team"}</button>
-          <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>
-            You lead it to begin with. Once whoever runs that gym has joined, hand it to them.
-          </p>
-        </div>
-      )}
-    </ModalShell>
-  );
-}
-
-// Teams switch themselves off when the database has not got them yet, which is
-// right — a half-present teams feature is the one shape this must never take.
-// Switching off silently was not: the only person who can do anything about it
-// had no way of knowing why the thing he had just built was not on the screen.
-// An athlete is shown nothing, because there is nothing they can do with a
-// migration filename.
-function TeamsOffNote({ isCoach }) {
-  if (!isCoach) return null;
-  return (
-    <div className="adjust-box" style={{ marginBottom: 10 }}>
-      <strong>Teams aren't switched on yet.</strong>
-      <p style={{ margin: "4px 0 0" }}>
-        Run supabase-rooms-v2.sql and then supabase-teams.sql in the Supabase SQL editor.
-        Until then nobody sees teams at all — which is deliberate, because half a private
-        room is not a private room.
-      </p>
-    </div>
-  );
-}
-
+// Teams are gone from the app. This is one gym's app now — the gym code at
+// signup is what decides who gets in, so the twenty-three rooms everyone shares
+// ARE the gym's private space, and a second private room inside it was a
+// division with nothing on the other side of it. Nothing creates or joins a
+// team any more, and verify:journey holds that: "no screen can create or join
+// a team". The filter machinery below stays exactly as it was, because the open
+// rooms are still fetched as "team_id is null" rather than by leaving the
+// filter off, and the policies in supabase-teams.sql still stand behind any
+// rows that already exist.
 function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel = {} }) {
   // Which channel is open. Remembered per person so somebody who lives in
   // Technique does not land in General every time they open the tab.
@@ -7021,14 +6732,11 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // default: a room that says 0 because nothing loaded is a lie that stops
   // somebody opening the one room that had something in it.
   const [clipCounts, setClipCounts] = useState(null);
-  // Null means the open rooms. A team object means that team and nothing else
-  // — every query below carries it, and the database refuses anything that
-  // does not match.
-  const [teams, setTeams] = useState([]);
-  const [activeTeam, setActiveTeam] = useState(null);
-  const [teamsOn, setTeamsOn] = useState(true);
-  const [teamPanel, setTeamPanel] = useState(false);
-  const [waitingOnMe, setWaitingOnMe] = useState(0);
+  // Always the open rooms. Constants, not state: there is no team to be in
+  // and no control that could put you in one, so every query below carries
+  // "team_id is null" and nothing can make it carry anything else.
+  const teams = NO_TEAMS;
+  const activeTeam = null;
   // The room opens as a wall of clips rather than a column of text, because
   // that is what the rooms are for. General is the exception — it is the room
   // for asking things, and a grid of nothing would be the first thing a new
@@ -7069,54 +6777,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // Read by load(), which runs on a timer and must never see a stale value.
   const weekArchiveRef = useRef(false);
   useEffect(() => { weekArchiveRef.current = weekArchive; }, [weekArchive]);
-  const teamRef = useRef(null);
-  useEffect(() => { teamRef.current = activeTeam; }, [activeTeam]);
-  // Once per visit. Without it, every poll would drag somebody back into the
-  // team they had just stepped out of.
-  const restoredRef = useRef(false);
-
-  const loadTeams = useCallback(async () => {
-    const mine = await fetchMyTeams(userId);
-    if (mine === LOAD_FAILED) return;
-    setTeams(mine);
-    setTeamsOn(teamsReady());
-    setWaitingOnMe(await fetchPendingJoins(userId));
-    // A membership can be revoked while somebody is sitting in the room.
-    setActiveTeam((cur) => {
-      if (cur) {
-        const still = mine.find((t) => t.id === cur.id && t.status === "approved");
-        return still || null;
-      }
-      // Back where you left off. Only if the membership is still good — a
-      // stored id is not permission, and the check is the same one as above.
-      if (!restoredRef.current && prefs?.teamId) {
-        const saved = restorableTeam(mine, prefs.teamId);
-        if (saved) {
-          restoredRef.current = true;
-          teamRef.current = saved;
-          setChannel(TEAM_DEFAULT_CHANNEL);
-          return saved;
-        }
-      }
-      restoredRef.current = true;
-      return cur;
-    });
-  }, [userId, prefs?.teamId]);
-  useEffect(() => { loadTeams(); }, [loadTeams]);
-  // Again whenever the list is opened, and whenever the app comes back to the
-  // front. Loading once meant an athlete who had been let in sat looking at a
-  // screen that still said they were waiting until they reloaded the page.
-  useEffect(() => { if (teamPanel) loadTeams(); }, [teamPanel]); // eslint-disable-line
-  useEffect(() => {
-    const onVis = () => { if (document.visibilityState === "visible") loadTeams(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [loadTeams]);
   const load = useCallback(async () => {
     const at = mutations.current;
     const feed = await fetchCommunityFeed(pagesRef.current, channelRef.current,
-      { ...(feedWindow(channelRef.current, weekArchiveRef.current) || {}),
-        teamId: teamRef.current ? teamRef.current.id : null });
+      { ...(feedWindow(channelRef.current, weekArchiveRef.current) || {}), teamId: null });
     if (feed === LOAD_FAILED) { setFailed(true); return; }
     const reacts = await fetchCommunityReactions(feed.posts.map((p) => p.id));
     if (mutations.current !== at) return;
@@ -7246,29 +6910,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
     setShowSaved(true);
     setSavedPosts(null);
     setSavedPosts(await fetchSavedPosts(userId));
-  };
-
-  // Moving between the open rooms and a team is a bigger move than changing
-  // room: the feed, the search, the counts and the read marks all belong to
-  // one side or the other, so everything is reset rather than carried across.
-  const switchTeam = (team) => {
-    const sameId = (activeTeam ? activeTeam.id : null) === (team ? team.id : null);
-    if (sameId) return;
-    if (loadedRef.current) savePrefs({ lastSeen: seenPatch(prefs, seenKeyFor(channel, activeTeam), null, shownByRoomIn(posts, view)) });
-    markedRef.current = false;
-    mutations.current += 1;
-    pagesRef.current = 1;
-    setPages(1);
-    setPosts(null);
-    setResults(null);
-    setQuery("");
-    setClipCounts(null);
-    weekArchiveRef.current = false;
-    setWeekArchive(false);
-    teamRef.current = team;
-    setActiveTeam(team);
-    setChannel(team ? TEAM_DEFAULT_CHANNEL : LANDING_CHANNEL);
-    if (savePrefs) savePrefs({ teamId: team ? team.id : null, channel: team ? TEAM_DEFAULT_CHANNEL : LANDING_CHANNEL });
   };
 
   const switchChannel = (next) => {
@@ -7568,23 +7209,21 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                     <Bookmark size={15} aria-hidden="true" /><span>Saved</span>
                   </button>
                   {p.channel && (() => {
-                    // A saved clip can be from a team. Opening its room without
-                    // opening the team lands in a room that is empty by
-                    // definition, because a team room holds nothing that is not
-                    // the team's. If the membership has gone, so has the way
-                    // back — the post is still here because it was saved, and
-                    // that is the honest thing to say.
-                    const { team: home, reachable } = savedPostHome(p, teams);
+                    // A clip saved out of a team before teams were removed is
+                    // still here, because being saved is why it is here. Its
+                    // room is not: that room only ever held the team's posts and
+                    // there is no team left to open. Said plainly rather than
+                    // offered as a button that lands somewhere empty.
+                    const { reachable } = savedPostHome(p, teams);
                     if (!reachable) {
-                      return <span className="muted" style={{ fontSize: 12 }}>In a team you are no longer in</span>;
+                      return <span className="muted" style={{ fontSize: 12 }}>In a team that no longer exists</span>;
                     }
                     return (
                       <button className="post-act" onClick={() => {
                         setShowSaved(false);
-                        if (home) switchTeam(home);
                         switchChannel(p.channel);
                       }}>
-                        <span>Go to {channelMeta(p.channel).label}{home ? ` in ${home.name}` : ""}</span>
+                        <span>Go to {channelMeta(p.channel).label}</span>
                       </button>
                     );
                   })()}
@@ -7633,24 +7272,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             </div>
           ))}
         </div>
-      )}
-
-      {/* Which side of the wall you are standing on. Above the room bar
-          because it is the bigger question: a room called This week means two
-          different things depending on the answer. */}
-      {!teamsOn && <TeamsOffNote isCoach={isCoach} />}
-
-      {teamsOn && (
-        <button type="button" className="team-bar" onClick={() => setTeamPanel(true)}
-          aria-haspopup="dialog"
-          aria-label={activeTeam
-            ? `Posting in the team ${activeTeam.name}. Change team.`
-            : "Posting in the rooms everyone shares. Change team."}>
-          <Users size={15} aria-hidden="true" className="team-bar-icon" />
-          <span className="team-bar-name">{activeTeam ? activeTeam.name : "Everyone at the gym"}</span>
-          <span className="team-bar-pill">{teamBarHint(teams, activeTeam, waitingOnMe)}</span>
-          <ChevronRight size={15} className="room-bar-chev" aria-hidden="true" />
-        </button>
       )}
 
       {/* One line instead of two rows of chips. Twenty-nine rooms across six
@@ -7946,19 +7567,6 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           ))}
           </>)}
         </ModalShell>
-      )}
-
-      {teamPanel && (
-        <TeamsPanel
-          teams={teams}
-          activeTeam={activeTeam}
-          isCoach={isCoach}
-          userId={userId}
-          clientName={client?.name || ""}
-          onSwitch={switchTeam}
-          onChanged={loadTeams}
-          onClose={() => setTeamPanel(false)}
-        />
       )}
 
       {failed && (
