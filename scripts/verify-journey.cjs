@@ -116,10 +116,15 @@ const drawSignature = (travel = 240) => {
   }
   at("mouseup", 20 + travel, 90);
 };
+// Born comfortably over eighteen. The app refuses anyone younger, so every
+// journey through sign-up has to give a date now.
+const ADULT_DOB = "1996-04-12";
+const setDob = (value) => setVal(host.querySelector("input[type=date]"), value);
 const signWaiver = (name = "Marcus Hale") => {
   click(/sign the liability waiver/i);
   act(() => { host.querySelector("input[type=checkbox]").click(); });
   drawSignature();
+  setDob(ADULT_DOB);
   setVal(host.querySelector("input[placeholder='Your full name']"), name);
   click(/sign and continue/i);
 };
@@ -140,6 +145,51 @@ check("the waiver will not accept a whitespace signature", () => {
   click(/sign and continue/i);
   has(/sign and continue/i, "still on the waiver");
 });
+check("nobody under eighteen gets through the waiver", () => {
+  // A tick box saying "I am 18 or older" is the easiest thing in the world for
+  // a sixteen-year-old to tick, and in most states a minor cannot waive their
+  // own claims however many boxes they tick. So the age is worked out from a
+  // date, and the date is kept with the signature.
+  //
+  // The arithmetic is what matters here. Somebody whose eighteenth birthday is
+  // tomorrow is seventeen today, and an app that rounds that the wrong way
+  // lets in exactly the person this is for.
+  const onDay = "2026-11-13T12:00:00.000Z";
+  if (A.ageOn("2008-11-14", onDay) !== 17) throw new Error("the day before an 18th birthday is not 17");
+  if (A.ageOn("2008-11-13", onDay) !== 18) throw new Error("an 18th birthday is not 18 on the day");
+  if (A.ageOn("2008-11-12", onDay) !== 18) throw new Error("the day after an 18th birthday is not 18");
+  if (A.dobProblem("2008-11-14", onDay) == null) throw new Error("a seventeen-year-old is allowed to sign");
+  if (A.dobProblem("2008-11-13", onDay) != null) throw new Error("somebody who turned 18 today is refused");
+  if (A.dobProblem("", onDay) == null) throw new Error("no date of birth at all is allowed through");
+  if (A.dobProblem("2030-01-01", onDay) == null) throw new Error("a date in the future is accepted");
+  if (A.dobProblem("1850-01-01", onDay) == null) throw new Error("an impossible year is accepted");
+  if (A.MIN_AGE !== 18) throw new Error(`the minimum age is set to ${A.MIN_AGE}`);
+
+  // And on the screen: a minor cannot press the button.
+  openOnboarding();
+  click(/sign the liability waiver/i);
+  act(() => { host.querySelector("input[type=checkbox]").click(); });
+  drawSignature();
+  setVal(host.querySelector("input[placeholder='Your full name']"), "Young Hale");
+  setDob("2012-01-01");
+  click(/sign and continue/i);
+  has(/sign and continue/i, "still on the waiver");
+  has(/18 or older/i, "a reason they cannot continue");
+  // Correcting it lets them through, so the block is about the age and not
+  // about some other field being wrong.
+  setDob(ADULT_DOB);
+  click(/sign and continue/i);
+  hasNot(/sign and continue/i, "the waiver");
+
+  // This check signed its way off the waiver, so put the next one back where
+  // it expects to start: a fresh waiver, ticked, with a valid date of birth
+  // filled in, so what follows is testing the signature and nothing else.
+  openOnboarding();
+  click(/sign the liability waiver/i);
+  act(() => { host.querySelector("input[type=checkbox]").click(); });
+  setDob(ADULT_DOB);
+});
+
 check("a typed name alone will not sign it", () => {
   // Two signatures are asked for, so one of them is not enough — and the screen
   // has to say WHICH is missing, or the button just looks broken.
@@ -205,6 +255,8 @@ check("a complete profile submits, and carries the signed waiver with it", () =>
   if (!signedUp.waiver) throw new Error("the signed waiver did not travel with the profile");
   // Both signatures, or the record is only half of what the athlete gave.
   if (!A.hasDrawnSignature(signedUp.waiver.drawn)) throw new Error("the drawn signature did not travel with the profile");
+  if (signedUp.waiver.dob !== ADULT_DOB) throw new Error("the date of birth did not travel with the profile");
+  if (!(signedUp.waiver.ageAtSigning >= 18)) throw new Error(`age at signing recorded as ${signedUp.waiver.ageAtSigning}`);
   if (!signedUp.waiver.signature) throw new Error("the typed signature did not travel with the profile");
   if (!A.sigPathData(signedUp.waiver.drawn)) throw new Error("the stored strokes do not render to a path");
   if (signedUp.firstName !== "Marcus") throw new Error("the name did not come through");

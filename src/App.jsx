@@ -8768,12 +8768,13 @@ function MainApp({ userId, onSignOut }) {
         <WaiverModal
           dismissible={false}
           defaultName={client.name && client.name !== "Athlete" ? client.name : [client.firstName, client.lastName].filter(Boolean).join(" ")}
-          onAccept={async ({ signature, drawn, drawnSkipped }) => {
+          onAccept={async ({ signature, drawn, drawnSkipped, dob, ageAtSigning }) => {
             // A signed release that only exists in local state is not a record.
             // If the write fails the gate stays shut and the modal stays open.
             const signed = { ...client, waiver: {
               at: new Date().toISOString(), version: WAIVER_VERSION, signature,
               drawn: drawn || null, drawnSkipped: !!drawnSkipped,
+              dob: dob || null, ageAtSigning: ageAtSigning == null ? null : ageAtSigning,
               name: client.name || "", document: waiverDocument(),
               // Re-signing a new version must not quietly destroy the signature
               // they gave against the old one. That older release still stood
@@ -9140,7 +9141,7 @@ function OnboardingScreen({ onSubmit }) {
           onClose={() => setShowWaiver(false)}
           accepted={waiver}
           defaultName={`${firstName.trim()} ${lastName.trim()}`.trim()}
-          onAccept={({ signature, drawn, drawnSkipped }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, drawn: drawn || null, drawnSkipped: !!drawnSkipped, name: `${firstName.trim()} ${lastName.trim()}`.trim(), document: waiverDocument() }); setShowWaiver(false); }}
+          onAccept={({ signature, drawn, drawnSkipped, dob, ageAtSigning }) => { setWaiver({ at: new Date().toISOString(), version: WAIVER_VERSION, signature, drawn: drawn || null, drawnSkipped: !!drawnSkipped, dob: dob || null, ageAtSigning: ageAtSigning == null ? null : ageAtSigning, name: `${firstName.trim()} ${lastName.trim()}`.trim(), document: waiverDocument() }); setShowWaiver(false); }}
         />
       )}
     </div>
@@ -9250,7 +9251,36 @@ const TUTORIAL_PAGES = [
 // Bump WAIVER_VERSION at the same time so athletes re-sign against the new name.
 const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Open Mat";
 
-const WAIVER_VERSION = "2026-11-08";
+const WAIVER_VERSION = "2026-11-13";
+
+// Eighteen, worked out from a date rather than taken on trust from a tick box.
+// A checkbox saying "I am 18 or older" is the easiest thing in the world for a
+// sixteen-year-old to tick, and in most states a minor cannot waive their own
+// claims however many boxes they tick — so the strongest protection in this
+// file would not have applied to exactly the person most likely to get hurt
+// doing a near-maximal single on their own.
+const MIN_AGE = 18;
+function ageOn(dobStr, whenStr) {
+  if (!dobStr) return null;
+  const dob = new Date(String(dobStr) + "T00:00:00");
+  const when = whenStr ? new Date(whenStr) : new Date();
+  if (Number.isNaN(dob.getTime()) || Number.isNaN(when.getTime())) return null;
+  let age = when.getFullYear() - dob.getFullYear();
+  const m = when.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && when.getDate() < dob.getDate())) age -= 1;
+  return age;
+}
+// A date in the future, or one implying somebody older than anyone alive, is a
+// typo rather than an answer. Saying so beats silently refusing them.
+function dobProblem(dobStr, whenStr) {
+  if (!dobStr) return "Enter your date of birth.";
+  const age = ageOn(dobStr, whenStr);
+  if (age == null) return "That date does not look right.";
+  if (age < 0) return "That date is in the future.";
+  if (age > 120) return "Check the year — that date would make you over 120.";
+  if (age < MIN_AGE) return `You have to be ${MIN_AGE} or older to use this app.`;
+  return null;
+}
 const WAIVER_TITLE = "Assumption of Risk and Release of Liability";
 const WAIVER_SECTIONS = [
   { heading: "What you are agreeing to",
@@ -9265,8 +9295,10 @@ const WAIVER_SECTIONS = [
     body: `To the fullest extent the law allows, you release ${PROVIDER}, together with its owner, employees and anyone acting on its behalf, from any claim, demand, or cause of action for injury, illness, disability, death, or property loss arising out of your use of this app or your participation in the training it prescribes, including claims based on ordinary negligence. You agree not to bring such a claim, and you accept responsibility for your own losses. This release does not cover gross negligence, recklessness, or intentional misconduct, and it does not waive any right that cannot lawfully be waived.` },
   { heading: "If part of this does not hold",
     body: "If a court finds any part of this agreement unenforceable, the rest of it stays in force. This agreement is governed by the laws of the State of Washington and binds your heirs and anyone acting on your behalf." },
+  { heading: "Your information",
+    body: `To run your program this app stores what you type into it: your name, your date of birth, your bodyweight entries, your training logs, your daily check-ins, your personal records, any injury notes you write, and the profile picture you upload. That information is used to run your training and is not sold. Anything you post in the group feed is different and is visible to every other athlete using the app, and any video you upload there is stored at a public web address that works for anyone given the link. Treat the feed as public. You can download everything you have logged at any time, and you can ask for your account and its data to be deleted.` },
   { heading: "Signing it",
-    body: `You sign this agreement twice below: once by drawing your signature with your mouse, your finger or a stylus, and once by typing your full legal name. The two together are your signature on this agreement, and you intend them to have the same effect as signing it by hand on paper. By signing, you confirm that you are at least 18 years old, that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your drawn signature, your typed name, the date and time you sign, and the version of this wording are all recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
+    body: `You sign this agreement twice below: once by drawing your signature with your mouse, your finger or a stylus, and once by typing your full legal name. The two together are your signature on this agreement, and you intend them to have the same effect as signing it by hand on paper. You also give your date of birth, and you confirm it is true: this app is for adults aged ${MIN_AGE} and over only, it is not offered to anyone younger, and giving a false date of birth to get access is a misrepresentation you are responsible for. By signing, you confirm that you have read and understood this agreement, that nobody pressured you into it, and that you are knowingly giving up substantial legal rights. Your drawn signature, your typed name, your date of birth, your age on the day you signed, the date and time you signed, and the version of this wording are all recorded against your profile, and ${PROVIDER} keeps a copy of that record.` },
 ];
 
 // The wording itself, as an object that can be stored. A version string says
@@ -9326,6 +9358,9 @@ function waiverCopyLines(name, waiver) {
   lines.push("");
   lines.push("Athlete:   " + who);
   lines.push("Signed:    " + (waiver.signature || "(no signature on file)"));
+  lines.push("Age:       " + (waiver.ageAtSigning != null
+    ? waiver.ageAtSigning + " on the day they signed" + (waiver.dob ? " (born " + waiver.dob + ")" : "")
+    : "(not recorded — signed before a date of birth was asked for)"));
   lines.push("By hand:   " + (hasDrawnSignature(waiver.drawn)
     ? "yes — a drawn signature is on file (shown in the app, and in the printable copy)"
     : waiver.drawnSkipped
@@ -9451,6 +9486,7 @@ function waiverCopyHTML(name, waiver) {
     + '.meta div{min-width:0}'
     + '.meta dt{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}'
     + '.meta dd{margin:0;font-size:14.5px;font-weight:600;word-break:break-word}'
+    + '.meta-sub{font-weight:400;color:var(--dim);font-size:13px}'
     /* Execution block */
     + '.exec{display:flex;flex-wrap:wrap;gap:24px 26px;align-items:flex-end;margin:0 0 30px;'
       + 'padding:24px 24px 20px;border:1px solid var(--line);border-radius:4px;background:#fcfcfd;break-inside:avoid}'
@@ -9491,6 +9527,9 @@ function waiverCopyHTML(name, waiver) {
     + '<dl class="meta">'
       + '<div><dt>Athlete</dt><dd>' + esc(who) + '</dd></div>'
       + '<div><dt>Date signed</dt><dd>' + esc(dated) + '</dd></div>'
+      + '<div><dt>Age at signing</dt><dd>' + (waiver.ageAtSigning != null
+        ? esc(String(waiver.ageAtSigning)) + (waiver.dob ? ' <span class="meta-sub">born ' + esc(waiver.dob) + '</span>' : '')
+        : '<span class="meta-sub">Not recorded</span>') + '</dd></div>'
       + '<div><dt>Agreement version</dt><dd>' + esc(waiver.version || "unversioned") + '</dd></div>'
       + '<div><dt>Timestamp</dt><dd>' + esc(waiver.at) + '</dd></div>'
     + '</dl>'
@@ -9754,8 +9793,13 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
   // the program they are paying for, so there is a way past it — one that is
   // recorded, not hidden, so the record never claims a mark that was not made.
   const [drawnSkipped, setDrawnSkipped] = useState(false);
+  const [dob, setDob] = useState("");
+  const [dobTouched, setDobTouched] = useState(false);
   const signedName = signature.trim();
   const drawnOk = drawnSkipped || hasDrawnSignature(drawn);
+  const dobIssue = dobProblem(dob);
+  const dobOk = !dobIssue;
+  const signerAge = ageOn(dob);
   // Two words, or one long enough to be a name. Enough to stop an empty stroke
   // or a stray keypress counting as a signature, without turning away anyone
   // whose legal name is short or spelled a way we did not anticipate.
@@ -9797,27 +9841,46 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
         <>
           <label className="bjj-toggle" style={{ marginTop: 6, alignItems: "flex-start" }}>
             <input type="checkbox" checked={ticked} onChange={() => setTicked((v) => !v)} />
-            <span>I am 18 or older. I have read and understood this agreement, I accept the risks, and I agree to the release above.</span>
+            <span>I have read and understood this agreement, the date of birth I gave is true, I accept the risks, and I agree to the release above.</span>
           </label>
+          <label className="labeled-input dob-field">
+            <span>Date of birth</span>
+            <input
+              type="date"
+              className="edit-input"
+              value={dob}
+              max={toLocalDateStr(new Date())}
+              onChange={(e) => { setDob(e.target.value); setDobTouched(true); }}
+              onBlur={() => setDobTouched(true)}
+              aria-describedby="dob-help" />
+          </label>
+          <p className="sig-hint" id="dob-help">
+            {dobTouched && dobIssue
+              ? dobIssue
+              : signerAge != null && !dobIssue
+                ? `You are ${signerAge}. This app is for adults ${MIN_AGE} and over.`
+                : `This app is for adults ${MIN_AGE} and over. Your date of birth is recorded with your signature.`}
+          </p>
           <SignatureBlock
             value={signature} onChange={setSignature}
             drawn={drawn} onDrawnChange={setDrawn}
             drawnSkipped={drawnSkipped}
             onSkipDrawn={(v) => { setDrawnSkipped(v); if (v) setDrawn(null); }}
             dated={today} />
-          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk || !drawnOk || signing}
+          <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={!ticked || !signatureOk || !drawnOk || !dobOk || signing}
             onClick={async () => {
               setSigning(true);
-              const ok = await onAccept({ signature: signedName, drawn: drawnSkipped ? null : drawn, drawnSkipped });
+              const ok = await onAccept({ signature: signedName, drawn: drawnSkipped ? null : drawn, drawnSkipped,
+                dob, ageAtSigning: ageOn(dob) });
               // `false` means the write failed — stay on this screen so the
               // athlete can retry rather than believing they've signed.
               if (ok === false) setSigning(false);
             }}>
             {signing ? "Saving…" : "Sign and continue"}
           </button>
-          {!(ticked && signatureOk && drawnOk) && (
+          {!(ticked && signatureOk && drawnOk && dobOk) && (
             <p className="muted" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>
-              {[!ticked && "tick the box above", !drawnOk && "sign your name in the box", !signatureOk && "type your full legal name"]
+              {[!ticked && "tick the box above", !dobOk && "give your date of birth", !drawnOk && "sign your name in the box", !signatureOk && "type your full legal name"]
                 .filter(Boolean)
                 .reduce((out, part, i, all) => out + (i === 0 ? "Still to do: " : i === all.length - 1 ? " and " : ", ") + part, "") + "."}
             </p>
@@ -11227,6 +11290,9 @@ function WaiverCopy({ name, waiver }) {
         <div><dt>Athlete</dt><dd>{(name || waiver.name || "Athlete").trim()}</dd></div>
         <div><dt>Typed</dt><dd className="waiver-copy-sig">{waiver.signature || "(no signature on file)"}</dd></div>
         <div><dt>Dated</dt><dd>{fmtDateTime(waiver.at)}</dd></div>
+        <div><dt>Age</dt><dd>{waiver.ageAtSigning != null
+          ? `${waiver.ageAtSigning} when signed${waiver.dob ? ` · born ${waiver.dob}` : ""}`
+          : "Not recorded"}</dd></div>
         <div><dt>Version</dt><dd>{waiver.version || "unversioned"}</dd></div>
       </dl>
       <div className="waiver-copy-ink">
@@ -14832,6 +14898,8 @@ function GlobalStyle() {
       .sig-pad-hint { position: absolute; left: 0; right: 0; bottom: 64px; text-align: center; pointer-events: none;
         font-family: 'Caveat', cursive; font-size: 22px; color: var(--text-dim); opacity: 0.5; }
       .sig-hint { margin: 8px 0 0; font-size: 12px; color: var(--text-dim); }
+      .dob-field { margin-top: 16px; }
+      .dob-field input { max-width: 220px; }
       .sig-hint-skip { margin-bottom: 20px; }
       .sig-hint .link-btn { font-size: 12px; padding: 2px 0; }
       .sig-ink { display: block; width: 100%; max-width: 300px; height: 92px; color: var(--text); }

@@ -57,6 +57,7 @@ const signTheWaiver = (name = "Test One") => {
   click(/read and sign/i);
   act(() => { host.querySelector("input[type=checkbox]").click(); });
   drawSignature();
+  setVal(host.querySelector("input[type=date]"), "1996-04-12");
   setVal(host.querySelector("input[placeholder='Your full name']"), name);
   click(/sign and continue/i);
   if (byText(/sign and continue/i)) throw new Error("the waiver would not sign");
