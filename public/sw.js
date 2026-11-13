@@ -1,4 +1,4 @@
-// Open Mat service worker.
+// Infiniti Kryos service worker.
 //
 // The reason this exists: the app is installed to a home screen with display
 // "standalone", which means no address bar and no reload button. Without a

@@ -24,3 +24,8 @@ src/_*.jsx
 # Vite writes this while loading its config and deletes it again. It only ever
 # reaches a commit when a cleanup failed, and it is never worth keeping.
 vite.config.js.timestamp-*.mjs
+
+# Throwaway browser bundle, built by hand when a change has to be looked at
+# rather than asserted (the top bar, the sign-in lockup). Same idea as the
+# src/_*.jsx copies the harnesses make.
+.vis/

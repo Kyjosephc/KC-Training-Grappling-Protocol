@@ -1,4 +1,4 @@
-# Open Mat — where to go next
+# Infiniti Kryos — where to go next
 
 Written after driving three simulated athletes through the real code for 26
 weeks: 175 logged sessions, every one of them produced by the app's own

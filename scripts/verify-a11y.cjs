@@ -366,7 +366,13 @@ if (unreachable.length) process.exitCode = 1;
 const indexHtml = fs.existsSync("index.html") ? fs.readFileSync("index.html", "utf8") : "";
 const scanned = src + "\n" + indexHtml;
 const referenced = [...new Set([
-  ...[...scanned.matchAll(/(?:src|href)="(\/[A-Za-z0-9._-]+\.[a-z0-9]{2,5})"/g)].map((m) => m[1]),
+  // The ?v= on an icon or a logo is how a phone is made to let go of the old
+  // one, so every asset worth versioning carries a query string — and the
+  // pattern that matched a bare path matched none of them. This check was
+  // reporting three files while the app referenced eleven: the favicons, the
+  // touch icon and the mark were all going unchecked, which is exactly the
+  // kind of path that ships broken. The query is matched and then dropped.
+  ...[...scanned.matchAll(/(?:src|href)="(\/[A-Za-z0-9._-]+\.[a-z0-9]{2,5}(?:\?[A-Za-z0-9._=&-]*)?)"/g)].map((m) => m[1]),
   // Preview-card images are absolute URLs, because the server fetching them is
   // not ours. Check the path part against public/ all the same.
   ...[...indexHtml.matchAll(/content="https?:\/\/[^"]*?(\/[A-Za-z0-9._-]+\.(?:png|jpg|jpeg|webp|svg))"/g)].map((m) => m[1]),

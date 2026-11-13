@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { createClient } from "@supabase/supabase-js";
 import RulesGame, { emptyRulesProgress } from "./RulesGame.jsx";
 import { toLocalDateStr, todayStr, yesterdayStr } from "./dates.js";
-import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search, Bookmark, Users } from "lucide-react";
+import { Home, CalendarDays, History as HistoryIcon, TrendingUp, Trophy, Plus, ChevronRight, ChevronLeft, Check, ArrowLeft, Pencil, Trash2, Scale, Info, Settings as SettingsIcon, Sun, Moon, X, RotateCcw, Calculator, HelpCircle, BookOpen, LogOut, Mail, Lock, Download, LayoutDashboard, Share2, DollarSign, Heart, MessageCircle, Link as LinkIcon, Video, Flag, ShieldOff, Search, Bookmark } from "lucide-react";
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -8806,13 +8806,17 @@ function PaymentModal({ onClose, userId }) {
   );
 }
 
-// A plain barbell glyph — a generic strength symbol drawn from scratch, so the
-// header reads as a brand mark without borrowing anyone else's.
-// The wordmark, centred, for the sign-in and profile-setup screens. The header
-// lays the same pieces out inline instead, because it sits on one line.
+// The gym's mark above the wordmark, centred, for the sign-in and
+// profile-setup screens. The top bar lays the same two pieces out side by side
+// instead, because it sits on one line.
+//
+// alt is empty on purpose, both here and in the top bar: the words "Infiniti
+// Kryos" are set in text immediately beside the mark, so a screen reader that
+// also announced the image would say the name twice.
 function BrandLockup() {
   return (
     <div className="brand-lockup">
+      <img className="brand-lockup-plate" src="/mark.png?v=1" alt="" />
       <div className="brand-lockup-word">Infiniti</div>
       <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Kryos</span><span className="brand-rule-line" /></div>
     </div>
@@ -8823,6 +8827,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
   return (
     <div className="topbar">
       <div className="brand-block">
+        <img className="brand-plate" src="/mark.png?v=1" alt="" />
         <div className="brand-stack">
           <div className="brand-word">Infiniti</div>
           <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Kryos</span><span className="brand-rule-line" /></div>
@@ -13977,13 +13982,24 @@ function ModalShell({ title, children, onClose, fullscreen, headerRight, headerL
   return (
     <div className={`modal-overlay ${fullscreen ? "fullscreen" : ""}`}>
       <div className="modal-box" ref={boxRef} role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : (typeof title === "object" ? "Dialog" : undefined)}>
+        {/* Two rows rather than one. The controls and the gym's mark sit on
+            top; the title gets the whole width underneath. In one row the
+            title had 172px between the buttons, which wrapped "Day B2 —
+            Close-Grip Bench Press" onto two lines before the mark was there
+            and four lines after it. On its own row it fits on one. */}
         <div className="modal-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: hideClose ? 42 : undefined }}>
-            {!hideClose && <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>}
-            {headerLeftExtra}
+          <div className="modal-head-row">
+            <div className="modal-head-left">
+              {!hideClose && <button className="icon-btn" ref={closeRef} onClick={onClose} aria-label="Close"><ArrowLeft size={18} /></button>}
+              {headerLeftExtra}
+            </div>
+            {/* alt is empty on purpose: the sheet's own title is the heading
+                right below it, and a screen reader announcing the mark too
+                would read the app's name on top of every title in the app. */}
+            <img className="modal-mark" src="/mark.png?v=1" alt="" />
+            <div className="modal-head-right">{headerRight}</div>
           </div>
           <h2 className="modal-title" ref={headRef} tabIndex={-1}>{title}</h2>
-          <div style={{ minWidth: 42, display: "flex", justifyContent: "flex-end" }}>{headerRight}</div>
         </div>
         <div className="modal-content">{children}</div>
       </div>
@@ -14015,6 +14031,7 @@ function GlobalStyle() {
       .pad { padding: 16px; }
       .logo-block { position: relative; overflow: hidden; padding: 38px 18px 34px; margin-bottom: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--border); }
       .brand-lockup { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+      .brand-lockup-plate { display: block; height: 58px; width: auto; border-radius: 7px; border: 1px solid var(--border); }
       .brand-lockup-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 30px; letter-spacing: 0.2em; line-height: 1; color: var(--text); text-indent: 0.2em; }
       .brand-lockup-rule { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 230px; }
       .logo-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.35; pointer-events: none; }
@@ -14170,6 +14187,13 @@ function GlobalStyle() {
       .quote-current { border-color: var(--accent); }
       /* ---- Title block: emblem + wordmark + ruled subtitle ---- */
       .brand-block { display: flex; align-items: center; gap: 11px; min-width: 0; }
+      /* The mark is a small dark plate rather than a cut-out shape — see
+         scripts/make-icons.py for why. flex-shrink is off because a squeezed
+         logo is worse than a wrapped word. */
+      /* The plate's cloth is a shade off the app's black, so on the dark theme
+         its edge shows whatever is done. A border makes that edge deliberate
+         instead of accidental, and on the light theme it frames the mark. */
+      .brand-plate { display: block; height: 26px; width: auto; border-radius: 5px; flex: 0 0 auto; border: 1px solid var(--border); }
       .brand-stack { min-width: 0; }
       .brand-word { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; font-size: 21px; letter-spacing: 0.17em; line-height: 1; color: var(--text); }
       .brand-rule { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
@@ -14191,7 +14215,7 @@ function GlobalStyle() {
       .bottom-nav { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--border); background: var(--bg); z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); }
       .nav-btn { flex: 1; min-width: 0; background: none; border: none; color: var(--text-dim); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 10px; font-size: 11.5px; line-height: 1.1; white-space: nowrap; cursor: pointer; position: relative; }
       .nav-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-      @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } .topbar { padding-left: 10px; padding-right: 10px; } .topbar-icons { gap: 6px; } }
+      @media (max-width: 359px) { .nav-btn { font-size: 10.5px; } .topbar { padding-left: 10px; padding-right: 10px; } .topbar-icons { gap: 6px; } .brand-plate { height: 21px; } .brand-block { gap: 8px; } }
       .nav-btn.active { color: var(--accent); }
       .nav-btn.active::after { content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 2px; }
       .hero-card { position: relative; border-radius: 20px; padding: 22px 20px 20px; margin-bottom: 16px; overflow: hidden; background: var(--card); border: 1px solid var(--border); }
@@ -14517,7 +14541,12 @@ function GlobalStyle() {
       .view-toggle-btn.active { background: var(--accent); color: var(--accent-text); }
       .program-actions .btn-ghost { flex: 1; justify-content: center; font-size: 13px; padding: 10px; margin-top: 0; }
       .pr-line { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 4px 0; }
-      input[type="range"] { width: 100%; accent-color: var(--accent); }
+      /* Height, not for looks: the default range input is about sixteen pixels
+         tall, which is the whole of its hit area, and the readiness sliders and
+         the session difficulty slider are things an athlete drags with a thumb
+         on a phone. The track and the knob are drawn by the browser and stay
+         the size they were; the box around them gets big enough to hit. */
+      input[type="range"] { width: 100%; accent-color: var(--accent); height: 30px; }
       .bw-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 16px; text-align: right; }
       .sig-block { margin-top: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; }
       .sig-pad-wrap { position: relative; margin-bottom: 18px; }
@@ -14561,8 +14590,18 @@ function GlobalStyle() {
       .modal-overlay.fullscreen { padding: 0; }
       .modal-overlay.fullscreen .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; border: 0; }
       .modal-overlay.fullscreen .modal-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
-      .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px; }
-      .modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 16px; flex: 1; }
+      .modal-head { display: flex; flex-direction: column; align-items: stretch; padding: 12px 16px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 7px; }
+      .modal-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      /* Both sides take an equal share so the mark lands dead centre whether
+         the row carries one control or three. */
+      .modal-head-left { display: flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 44px; }
+      .modal-head-right { display: flex; justify-content: flex-end; flex: 1 1 0; min-width: 44px; }
+      /* Same plate as the top bar, a size down, and centred between the
+         controls. Bordered for the same reason the top bar's is: the plate's
+         black is a shade off the app's, so its edge shows either way and a
+         border makes that edge deliberate. */
+      .modal-mark { display: block; height: 22px; width: auto; border-radius: 4px; border: 1px solid var(--border); flex: 0 0 auto; }
+      .modal-title { font-family: 'Oswald', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; font-size: 16px; min-width: 0; margin: 0; }
       .modal-content { overscroll-behavior-y: contain; padding: 16px; overflow-y: auto; flex: 1; }
       .progress-circle { position: relative; width: 42px; height: 42px; }
       .progress-circle-arc { stroke: var(--accent); transition: stroke-dashoffset 0.25s; }
