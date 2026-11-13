@@ -12945,7 +12945,11 @@ function ProgramTab({ client, isCoach, onPersist }) {
       {viewToggle}
       <div className="program-title">{client.program.name}</div>
 
-      {client.program.coachNote && <Card title="From the Coach"><Prose text={client.program.coachNote} /></Card>}
+      {/* "From the Coach" used to open this page. Taken out at Kyle's
+          request — the page now starts on Effort Philosophy, which is what
+          an athlete actually needs from it. The coachNote text is still on
+          each program object below if it is ever wanted somewhere else; it
+          is simply not rendered anywhere. */}
       {client.program.philosophy && <Card title="Effort Philosophy" right={<Info size={16} color="var(--text-dim)" />}><Prose text={client.program.philosophy} /></Card>}
       {client.program.methodology && <Card title="Methodology"><Prose text={client.program.methodology} /></Card>}
 
