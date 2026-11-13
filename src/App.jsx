@@ -73,6 +73,32 @@ const coachCashApp = import.meta.env.VITE_COACH_CASHAPP || "";
 const coachPaymentLink = import.meta.env.VITE_COACH_PAYMENT_LINK || "";
 
 const COACH_USER_ID = import.meta.env.VITE_COACH_USER_ID || "";
+
+// The gym's code. Set it and nobody creates an account without typing it,
+// which is the whole point: this is one gym's app, and a link that escapes
+// into another gym's chat should not work there.
+//
+// Be clear about what this is and is not. It stops the link being useful to
+// somebody who was not given the code — which is the thing actually worth
+// stopping. It is not a secret kept from a determined person: the code ships
+// inside the app's JavaScript, so anybody willing to read the bundle can find
+// it. Enforcing it properly means checking it on the server, and that is a
+// bigger piece of work than this. Treat it as a lock on the door, not a vault.
+//
+// Left unset, the app behaves exactly as it did: anyone can sign up.
+const GYM_CODE = String(import.meta.env.VITE_GYM_CODE || "").trim();
+const gymCodeRequired = () => GYM_CODE.length > 0;
+// Typed on a phone, in a hurry, probably from a screenshot. Case, spaces and
+// stray punctuation should not be the thing that keeps a teammate out.
+const normaliseGymCode = (raw) => String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+// The comparison takes both sides so it can be checked without the real code
+// being baked into a test build. An empty expected code means no gate at all.
+function codeMatches(entered, expected) {
+  const want = normaliseGymCode(expected);
+  if (!want) return true;
+  return normaliseGymCode(entered) === want;
+}
+const gymCodeOk = (raw) => codeMatches(raw, GYM_CODE);
 // Every escalation in the app — a payment that has not been marked, a report, a
 // deletion request — ended in "ask your coach". That worked when every athlete
 // trained at the same gym. Set VITE_SUPPORT_EMAIL and it becomes a real path.
@@ -534,7 +560,7 @@ function restorableTeam(teams, teamId) {
 // lands in a room that is empty by definition.
 // What the bar at the top of the Group tab says about teams, beyond where you
 // are standing. Somebody handed a code has to be able to see where it goes:
-// the bar used to say "Open Mat — everyone" and nothing else, which tells a
+// the bar used to say the app's name and nothing else, which tells a
 // person with a code in their hand nothing at all.
 function teamBarHint(teams, activeTeam, waiting) {
   // Somebody waiting on you outranks everything else the bar could say: it is
@@ -2524,7 +2550,7 @@ function UpdateBanner() {
   if (!available || dismissed) return null;
   return (
     <div className="update-banner" role="status">
-      <span>A newer version of Open Mat is ready.</span>
+      <span>A newer version of Infiniti Kryos is ready.</span>
       <span className="update-banner-actions">
         <button className="btn-primary" onClick={() => window.location.reload()}>Reload</button>
         <button className="btn-ghost" onClick={() => setDismissed(true)}>Later</button>
@@ -6729,7 +6755,7 @@ function TeamsPanel({ teams, activeTeam, isCoach, userId, clientName, onSwitch, 
         <button type="button" className={`room-row${!activeTeam ? " current" : ""}`}
           onClick={() => { onSwitch(null); onClose(); }}>
           <span className="room-row-main">
-            <span className="room-row-name">Open Mat — everyone</span>
+            <span className="room-row-name">Everyone at the gym</span>
             <span className="room-row-blurb">The rooms every member shares, across every gym.</span>
           </span>
           {!activeTeam ? <Check size={16} aria-hidden="true" /> : null}
@@ -7621,7 +7647,7 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
             ? `Posting in the team ${activeTeam.name}. Change team.`
             : "Posting in the rooms everyone shares. Change team."}>
           <Users size={15} aria-hidden="true" className="team-bar-icon" />
-          <span className="team-bar-name">{activeTeam ? activeTeam.name : "Open Mat — everyone"}</span>
+          <span className="team-bar-name">{activeTeam ? activeTeam.name : "Everyone at the gym"}</span>
           <span className="team-bar-pill">{teamBarHint(teams, activeTeam, waitingOnMe)}</span>
           <ChevronRight size={15} className="room-bar-chev" aria-hidden="true" />
         </button>
@@ -8291,7 +8317,7 @@ function ProgressHub({ client, onPersist, userId }) {
 class AppErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { failed: false }; }
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error) { try { console.error("Open Mat error:", error); } catch {} }
+  componentDidCatch(error) { try { console.error("Infiniti Kryos error:", error); } catch {} }
   render() {
     if (!this.state.failed) return this.props.children;
     return (
@@ -8978,7 +9004,7 @@ function OnboardingScreen({ onSubmit }) {
       <div className="logo-block">
         <BrandLockup />
       </div>
-      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Open Mat</div>
+      <div className="program-title" style={{ fontSize: 20, marginBottom: 4 }}>Welcome to Infiniti Kryos</div>
       {!waiver && <p className="muted" style={{ marginBottom: 8 }}>A strength and conditioning system built specifically for Brazilian Jiu-Jitsu and wrestling — every phase, lift, and rep scheme mapped out in advance so there's no guesswork about what to do or why. Strategically built around what a grappler actually needs: real strength, explosive power, durability that holds up under bad positions, and conditioning that doesn't gas out in a hard round.</p>}
       {!waiver && <p className="muted" style={{ marginBottom: 20, fontSize: 12.5 }}>Four short steps — the paperwork, then you, then your week, then anything to work around. It takes a minute and it only happens once.</p>}
 
@@ -9179,8 +9205,8 @@ function PaymentModal({ onClose, userId }) {
 function BrandLockup() {
   return (
     <div className="brand-lockup">
-      <div className="brand-lockup-word">Open</div>
-      <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Mat</span><span className="brand-rule-line" /></div>
+      <div className="brand-lockup-word">Infiniti</div>
+      <div className="brand-lockup-rule"><span className="brand-rule-line" /><span className="brand-sub">Kryos</span><span className="brand-rule-line" /></div>
     </div>
   );
 }
@@ -9190,8 +9216,8 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
     <div className="topbar">
       <div className="brand-block">
         <div className="brand-stack">
-          <div className="brand-word">Open</div>
-          <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Mat</span><span className="brand-rule-line" /></div>
+          <div className="brand-word">Infiniti</div>
+          <div className="brand-rule"><span className="brand-rule-line" /><span className="brand-sub">Kryos</span><span className="brand-rule-line" /></div>
         </div>
       </div>
       <div className="topbar-avatar-wrap">
@@ -9208,7 +9234,7 @@ function TopBar({ client, isCoach, newSignupCount = 0, onOpenSettings, onOpenPay
       </div>
       <div className="topbar-icons">
         <div className="topbar-icon-group">
-          <button className="icon-btn" onClick={onOpenShare} aria-label="Share Open Mat with a friend"><Share2 size={20} /></button>
+          <button className="icon-btn" onClick={onOpenShare} aria-label="Share Infiniti Kryos with a friend"><Share2 size={20} /></button>
           {isCoach && (
             <button className="icon-btn icon-btn-badged" onClick={onOpenCoachDashboard}
               aria-label={newSignupCount > 0 ? `Coach Dashboard — ${newSignupCount} new sign-up${newSignupCount === 1 ? "" : "s"} to review` : "Coach Dashboard"}>
@@ -9249,7 +9275,7 @@ const TUTORIAL_PAGES = [
 // The legal name behind the app. Change VITE_PROVIDER_NAME in Vercel the day
 // an LLC exists and every agreement in here names the company from then on.
 // Bump WAIVER_VERSION at the same time so athletes re-sign against the new name.
-const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Open Mat";
+const PROVIDER = import.meta.env.VITE_PROVIDER_NAME || "Infiniti Kryos";
 
 const WAIVER_VERSION = "2026-11-13";
 
@@ -9894,7 +9920,7 @@ function WaiverModal({ onClose, onAccept, accepted, defaultName = "", dismissibl
 
 
 const TERMS_SECTIONS = [
-  { heading: "What this app is", body: "Open Mat is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
+  { heading: "What this app is", body: "Infiniti Kryos is a strength and conditioning coaching tool built and operated by Kyle Cox, a personal trainer, for the athletes of Infiniti BJJ. It gives you a training program, somewhere to log your sessions, and a group feed shared with the other athletes using it. It is not a medical device, not a diagnostic tool, and not a substitute for being coached in person by somebody who can watch you lift." },
   { heading: "Your data", body: "The app stores what it needs to run your program: your name, your bodyweight entries, your workout logs, your daily readiness check-ins, your personal records, the profile picture you upload, the class notes you write, and anything you choose to type into the injury notes box. It's used to run and personalize your training, it is never sold, and apart from the group feed described below it is visible only to you and to the person who operates the app.\n\nThe group feed is different, and it is worth being clear about. Anything you post there — the text, any video you upload, your name and your belt — is visible to every other athlete using the app. Uploaded clips are stored at a public web address, which means anybody given that link can watch the clip without signing in. Posts carry the name on your profile at the time you posted, and changing your name later does not rewrite posts you have already made. Treat the feed as public, and do not post anything there you would mind a stranger seeing." },
   { heading: "Payment", body: `The fee is a one-time payment, due once you have finished your first week of sessions. There is no subscription and no recurring charge — you are not billed again, on this twelve-week block or any future one, and there is nothing to cancel. You pay Kyle directly, through Venmo or whichever method is shown in the app; this app never sees, transmits or stores a card or bank account number, and it cannot charge you. Because the whole program is yours as soon as it unlocks, the fee is not automatically refundable. If something is wrong, email ${SUPPORT_EMAIL || "the address in Settings"} within 14 days of paying and you will be refunded. If you stop training, nothing further is charged and everything you have logged stays in your account.` },
   { heading: "Not coaching, not medical advice", body: "This app is software that writes you a training program. It is not personal training, it is not coaching, and it is not medical care: nobody is supervising you, reviewing your sessions or assessing whether a given lift is safe for you. It cannot account for an injury, a medical condition, or anything else it has not been told, so check with a physician before starting if you have any doubt at all. If something hurts during a session, stop — the app adjusts for how you say you feel, but it cannot see you. Heavy resistance training, including the near-maximal single-rep lifts this program prescribes, carries a real risk of injury. By using this app you confirm you are medically cleared to train, that you are choosing to train unsupervised, and that you accept that risk as your own." },
@@ -9928,7 +9954,7 @@ function ShareModal({ onClose }) {
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
-    "Most lifting programs aren't built for grapplers. This one is. Open Mat writes you a twelve-week strength and conditioning block aimed at what we actually need on the mat: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
+    "Most lifting programs aren't built for grapplers. This one is. Infiniti Kryos writes you a twelve-week strength and conditioning block aimed at what we actually need on the mat: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
     "Every set you log is kept and every PR tracked. We get our own private page to break technique down position by position, with video. And the rules game drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
     "First week is free. Come train:",
   ].join("\n\n");
@@ -9937,7 +9963,7 @@ function ShareModal({ onClose }) {
 
   const handleNativeShare = async () => {
     try {
-      await navigator.share({ title: "Open Mat", text: shareText, url: shareUrl });
+      await navigator.share({ title: PROVIDER, text: shareText, url: shareUrl });
     } catch (err) {
       // The person canceled the share sheet or it failed silently — nothing to surface here.
     }
@@ -9954,7 +9980,7 @@ function ShareModal({ onClose }) {
   };
 
   return (
-    <ModalShell onClose={onClose} title="Share Open Mat">
+    <ModalShell onClose={onClose} title={`Share ${PROVIDER}`}>
       <p className="muted" style={{ marginBottom: 16 }}>Invite a friend to train with you — they'll get their own account and can pick their own program.</p>
       {/* The link on its own told you nothing about what you were about to send
           in your own name. This is the message, exactly as it goes out. */}
@@ -10868,7 +10894,11 @@ function downloadWaiverRecord(records) {
   const signed = loadable.filter((r) => r.full && r.full.waiver && r.full.waiver.at);
   const unsigned = loadable.filter((r) => !(r.full && r.full.waiver && r.full.waiver.at));
   const lines = [];
-  lines.push("OPEN MAT — LIABILITY WAIVER RECORD");
+  // Built from PROVIDER rather than typed, because a hardcoded name here is
+  // exactly what survived the last rename: lowercase searches miss it, and
+  // nothing in the app displays it, so it goes out on the document Kyle hands
+  // to somebody else still carrying the old name.
+  lines.push(PROVIDER.toUpperCase() + " — LIABILITY WAIVER RECORD");
   lines.push("Generated " + generated.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }));
   lines.push("");
   lines.push("Athletes who have accepted: " + signed.length + " of " + loadable.length);
@@ -15388,6 +15418,7 @@ function AuthScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [gymCode, setGymCode] = useState("");
   const [busy, setBusy] = useState(false);
   const duePrice = PROGRAM_PRICE;
   const hasPaymentInfo = coachVenmo || coachCashApp || coachPaymentLink;
@@ -15397,6 +15428,13 @@ function AuthScreen() {
     setError(""); setInfo(""); setBusy(true);
     try {
       if (mode === "signup") {
+        // Checked before the account is created, not after. An account that
+        // exists but cannot be used is worse than one that was never made.
+        if (!gymCodeOk(gymCode)) {
+          setError("That gym code is not right. Ask your coach for the current one.");
+          setBusy(false);
+          return;
+        }
         const { data: signUpData, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
         if (err) setError(friendlyAuthError(err.message));
         else {
@@ -15466,6 +15504,19 @@ function AuthScreen() {
           )}
           {error && <div className="error-box" role="alert">{error}</div>}
           {info && <div className="success-box" role="status">{info}</div>}
+          {mode === "signup" && gymCodeRequired() && (
+            <label className="labeled-input">
+              <span><Lock size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Gym code</span>
+              <input type="text" required autoComplete="off" autoCapitalize="characters" spellCheck={false}
+                value={gymCode} onChange={(e) => setGymCode(e.target.value)}
+                placeholder="From your coach" aria-describedby="gym-code-help" />
+            </label>
+          )}
+          {mode === "signup" && gymCodeRequired() && (
+            <p className="muted" id="gym-code-help" style={{ fontSize: 12, lineHeight: 1.5, margin: "-4px 0 12px" }}>
+              This app is for one gym. If you train here and do not have the code, ask your coach.
+            </p>
+          )}
           {mode === "signup" && (
             <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: "4px 0 12px" }}>
               This app writes you a strength program and tracks your training. It is software, not

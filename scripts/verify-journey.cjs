@@ -3217,6 +3217,39 @@ check("teams switching themselves off tells the one person who can fix it", () =
   unmount();
 });
 
+check("the gym code is checked before an account exists", () => {
+  // This app is for one gym. A link that escapes into another gym's chat
+  // should be useless there, which is all the code is for.
+  //
+  // The check has to happen before auth.signUp, not after: an account that
+  // exists but cannot be used is worse than one that was never created —
+  // the email is burned, the person is confused, and somebody has to go into
+  // Supabase and delete it by hand.
+  const app = fs.readFileSync("src/App.jsx", "utf8");
+  const signupBlock = app.match(/if \(mode === "signup"\) \{[\s\S]{0,900}?auth\.signUp/);
+  if (!signupBlock) throw new Error("the sign-up path has moved, so this check is not checking anything");
+  if (!/gymCodeOk\(/.test(signupBlock[0])) {
+    throw new Error("auth.signUp is reached without the gym code being checked first");
+  }
+  // And the field exists to type it into.
+  if (!/VITE_GYM_CODE/.test(app)) throw new Error("there is no gym code setting at all");
+  if (!/setGymCode\(/.test(app)) throw new Error("the sign-up form has no gym code field");
+
+  // Typed on a phone from a screenshot: case, spaces and punctuation must not
+  // be what keeps a teammate out.
+  if (!A.codeMatches("infiniti", "INFINITI")) throw new Error("the code is case sensitive");
+  if (!A.codeMatches("  INFINITI  ", "INFINITI")) throw new Error("spaces around the code stop it matching");
+  if (!A.codeMatches("in-fin-iti", "INFINITI")) throw new Error("punctuation stops it matching");
+  // But it is still a code, not a suggestion.
+  if (A.codeMatches("INFINIT", "INFINITI")) throw new Error("a partial code is accepted");
+  if (A.codeMatches("", "INFINITI")) throw new Error("an empty code is accepted");
+  if (A.codeMatches("SOMEOTHERGYM", "INFINITI")) throw new Error("any code at all is accepted");
+  // Unset, the app works exactly as it did before — nobody is locked out by
+  // forgetting to configure it.
+  if (!A.codeMatches("", "")) throw new Error("an unset gym code locks everybody out");
+  if (!A.codeMatches("anything", "   ")) throw new Error("a blank gym code still gates sign-up");
+});
+
 check("the app has one name and it is the same everywhere", () => {
   // The name lives in the browser title, the home screen title, the web
   // manifest, the service worker, the share sheet, the waiver and two separate
@@ -3274,9 +3307,19 @@ check("the app has one name and it is the same everywhere", () => {
   // The waiver record is the one thing here that leaves the app as a document
   // somebody else reads, and it carried the old name for two months after the
   // rename because nothing looked at it.
-  if (!app.includes(`${name.toUpperCase()} — LIABILITY WAIVER RECORD`)) {
-    throw new Error(`the waiver record Kyle hands out is not headed "${name.toUpperCase()}"`);
+  // Checked on what the record actually says, not on the source containing a
+  // literal — the header is built from PROVIDER now, so searching the file for
+  // the finished string would fail on correct code. The one thing that must
+  // hold is that PROVIDER and the wordmark are the same name.
+  const provider = (app.match(/const PROVIDER = import\.meta\.env\.VITE_PROVIDER_NAME \|\| "([^"]+)"/) || [])[1];
+  if (!provider) throw new Error("PROVIDER has no default name to fall back on");
+  if (provider !== name) throw new Error(`the wordmark says "${name}" and PROVIDER says "${provider}"`);
+  if (!/lines\.push\(PROVIDER\.toUpperCase\(\) \+ " — LIABILITY WAIVER RECORD"\)/.test(app)) {
+    throw new Error("the waiver record's heading is not built from PROVIDER, so it can drift again");
   }
+  // And nothing anywhere still spells out a name that is not this one.
+  const headings = [...app.matchAll(/"([A-Z][A-Z ]{3,}) — LIABILITY WAIVER RECORD"/g)].map((m) => m[1]);
+  if (headings.length) throw new Error(`a hardcoded "${headings[0]}" is still in the waiver record`);
 
   // And the icons the manifest asks for have to be icons that exist.
   const icons = manifest.icons || [];
