@@ -515,6 +515,18 @@ function groupOfChannel(id) {
 // down the room picker. A clip from a room that no longer exists, or one
 // saved before rooms existed at all, lands in the fallback group rather than
 // disappearing.
+// Finding one clip among a hundred. Every word has to appear somewhere —
+// in the post, in the name of the room it came from, or in who posted it —
+// so "dani guard" finds Dani's guard clip and "knee shield" finds the one
+// that says knee shield, rather than everything containing "knee".
+function savedMatches(post, term) {
+  const q = String(term || "").trim().toLowerCase();
+  if (!q) return true;
+  const p = post || {};
+  const hay = [p.body, p.author_name, p.channel ? channelMeta(p.channel).label : ""]
+    .join(" ").toLowerCase();
+  return q.split(/\s+/).every((w) => hay.includes(w));
+}
 function groupSavedPosts(posts) {
   const by = new Map();
   (posts || []).forEach((p) => {
@@ -6745,6 +6757,11 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   // "all" or a CHANNEL_GROUPS id. Not remembered between visits: a filter you
   // cannot see the effect of is how a saved clip goes missing.
   const [savedGroup, setSavedGroup] = useState("all");
+  const [savedQuery, setSavedQuery] = useState("");
+  // Which saved clip is open full size. Its own state rather than the room's
+  // openClipId, so opening one here does not change what the room behind it
+  // is showing when you go back.
+  const [savedOpenId, setSavedOpenId] = useState(null);
   // One clip chosen out of the matches. The full result set stays put, so
   // going back to it is a state change and not another round trip.
   const [picked, setPicked] = useState(null);
@@ -7211,35 +7228,25 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
         )}
 
         {Array.isArray(savedPosts) && savedPosts.length > 0 && (() => {
-          const groups = groupSavedPosts(savedPosts);
-          // One part is no choice at all, so the row only appears once there
-          // is something to choose between.
-          const showChips = groups.length > 1;
-          const chosen = showChips && groups.some((g) => g.id === savedGroup) ? savedGroup : "all";
+          // A hundred saved clips is the case this screen has to survive, and
+          // a hundred full-size cards is forty screens of scrolling. So: a
+          // search box, the parts as filters, and a wall of thumbnails — the
+          // same wall the rooms use, where eight fit on a screen instead of
+          // one. A card only opens when you pick one.
+          const open = savedOpenId ? savedPosts.find((x) => x.id === savedOpenId) : null;
+          const hits = savedPosts.filter((p) => savedMatches(p, savedQuery));
+          const groups = groupSavedPosts(hits);
+          const chosen = groups.some((g) => g.id === savedGroup) ? savedGroup : "all";
           const shown = groups.filter((g) => chosen === "all" || g.id === chosen);
-          return (<>
-          {showChips && (
-            <div className="rg-chiprow" style={{ marginBottom: 14 }} role="group" aria-label="Filter your saved clips by part">
-              <button type="button" className={`tech-suggest${chosen === "all" ? " on" : ""}`}
-                aria-pressed={chosen === "all"} onClick={() => setSavedGroup("all")}>
-                All {savedPosts.length}
-              </button>
-              {groups.map((g) => (
-                <button key={g.id} type="button" className={`tech-suggest${chosen === g.id ? " on" : ""}`}
-                  aria-pressed={chosen === g.id} onClick={() => setSavedGroup(g.id)}>
-                  {g.label} {g.posts.length}
-                </button>
-              ))}
-            </div>
-          )}
-          {shown.map((g) => (
-          <div key={g.id} style={{ marginBottom: 18 }}>
-            {/* The heading stays even when one part is filtered to, because
-                the room name under each clip is the small print and this is
-                the part you came looking for. */}
-            <div className="room-group-label"><span>{g.label}</span><span>{g.posts.length}</span></div>
-          <div className="feed">
-            {g.posts.map((p) => (
+          // Counts come off everything saved, not off what the search left,
+          // so the chips do not flicker between numbers as you type.
+          const allGroups = groupSavedPosts(savedPosts);
+          if (open) {
+            return (<>
+              <button type="button" className="link-btn" style={{ marginBottom: 10 }}
+                onClick={() => setSavedOpenId(null)}>← Back to your saved clips</button>
+              <div className="feed" aria-live="polite">
+            {[open].map((p) => (
               <article className="post-card" key={p.id}>
                 <header className="post-head">
                   <BeltEmblem level={p.author_belt} size={26} title={null} />
@@ -7279,9 +7286,81 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
                 </div>
               </article>
             ))}
-          </div>
-          </div>
-          ))}
+              </div>
+            </>);
+          }
+          return (<>
+            <label className="labeled-input" style={{ marginBottom: 10 }}>
+              <span className="sr-only">Search your saved clips</span>
+              <input type="search" value={savedQuery} placeholder="Search your saved clips"
+                onChange={(e) => setSavedQuery(e.target.value)} />
+            </label>
+            {allGroups.length > 1 && (
+              <div className="rg-chiprow" style={{ marginBottom: 14 }} role="group" aria-label="Filter your saved clips by position">
+                <button type="button" className={`tech-suggest${chosen === "all" ? " on" : ""}`}
+                  aria-pressed={chosen === "all"} onClick={() => setSavedGroup("all")}>
+                  All {savedPosts.length}
+                </button>
+                {allGroups.map((g) => (
+                  <button key={g.id} type="button" className={`tech-suggest${chosen === g.id ? " on" : ""}`}
+                    aria-pressed={chosen === g.id} onClick={() => setSavedGroup(g.id)}>
+                    {g.label} {g.posts.length}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hits.length === 0 && (
+              <p className="muted" style={{ fontSize: 13 }}>
+                Nothing saved matches “{savedQuery.trim()}”.{" "}
+                <button type="button" className="link-btn" onClick={() => setSavedQuery("")}>Clear the search</button>
+              </p>
+            )}
+            {shown.map((g) => {
+              const clips = g.posts.filter(isClip);
+              const notes = g.posts.filter((p) => !isClip(p));
+              return (
+                <div key={g.id} style={{ marginBottom: 18 }}>
+                  <div className="room-group-label"><span>{g.label}</span><span>{g.posts.length}</span></div>
+                  {clips.length > 0 && (
+                    <div className="clip-grid" aria-label={`Saved clips in ${g.label}`}>
+                      {clips.map((p) => {
+                        const thumb = clipThumb(p.video_url);
+                        return (
+                          <button key={p.id} type="button" className="clip-tile"
+                            onClick={() => setSavedOpenId(p.id)}
+                            aria-label={`Open the clip ${p.author_name || "an athlete"} posted in ${channelMeta(p.channel).label}${p.body ? `: ${matchSnippet(p.body, savedQuery, 60)}` : ""}`}>
+                            <span className="clip-tile-shot">
+                              {thumb
+                                ? <img src={thumb} alt="" loading="lazy" />
+                                : <video src={p.video_url} preload="metadata" muted playsInline tabIndex={-1} aria-hidden="true" />}
+                              <span className="clip-tile-play" aria-hidden="true"><Video size={16} /></span>
+                            </span>
+                            <span className="clip-tile-text">{p.body ? matchSnippet(p.body, savedQuery, 58) : "No description"}</span>
+                            {/* Always the room, never "Latest": on this screen
+                                every clip comes from somewhere different, and
+                                the room is the label that tells them apart. */}
+                            <span className="clip-tile-who">{clipTileWho(p, true)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Saved posts with no clip in them. They are the minority
+                      and they have no thumbnail, so they are a list rather
+                      than a wall — but they are still saved, so they are still
+                      here. */}
+                  {notes.map((p) => (
+                    <button key={p.id} type="button" className="room-row" onClick={() => setSavedOpenId(p.id)}>
+                      <span className="room-row-main">
+                        <span className="room-row-name">{matchSnippet(p.body, savedQuery, 60)}</span>
+                        <span className="room-row-blurb">{clipTileWho(p, true)}</span>
+                      </span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
           </>);
         })()}
       </div>

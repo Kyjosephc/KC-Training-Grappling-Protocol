@@ -2808,6 +2808,28 @@ check("filing saved clips never loses one", () => {
   groups.forEach((g) => { if (!ids.includes(g.id)) throw new Error(`filed under "${g.id}", which is not a part`); });
 });
 
+check("searching saved clips looks where the words actually are", () => {
+  // Most posters never write the technique's name in the post, so a search
+  // that only reads the body finds nothing. The room a clip came from and
+  // who posted it are both things a person remembers, so both are searched.
+  const p = { body: "break the posture first", author_name: "Dani", channel: "closedguard" };
+  if (!A.savedMatches(p, "posture")) throw new Error("the words of the post are not searched");
+  if (!A.savedMatches(p, "closed guard")) throw new Error("the room the clip came from is not searched");
+  if (!A.savedMatches(p, "dani")) throw new Error("who posted it is not searched");
+  if (!A.savedMatches(p, "DANI")) throw new Error("search is case sensitive");
+  // Every word has to land, or "dani guard" returns everything by Dani and
+  // everything about guard, which on a hundred clips is no help at all.
+  if (!A.savedMatches(p, "dani guard")) throw new Error("two words that both match did not match");
+  if (A.savedMatches(p, "dani wrestling")) throw new Error("a term where only one word matched still matched");
+  if (A.savedMatches(p, "berimbolo")) throw new Error("a word that appears nowhere matched");
+  // An empty box is not a filter.
+  ["", "   ", null, undefined].forEach((v) => {
+    if (!A.savedMatches(p, v)) throw new Error(`${JSON.stringify(v)} filtered something out`);
+  });
+  // And nothing throws on a half-built post.
+  [{}, { body: null }, { channel: "nope" }, null].forEach((bad) => { A.savedMatches(bad, "x"); });
+});
+
 check("an empty saved list is empty, not a row of headings", () => {
   [[], null, undefined].forEach((v) => {
     const g = A.groupSavedPosts(v);
