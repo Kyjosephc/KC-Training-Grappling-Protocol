@@ -506,6 +506,25 @@ function groupOfChannel(id) {
   const c = COMMUNITY_CHANNELS.find((x) => x.id === id);
   return (c && c.group) || FALLBACK_GROUP;
 }
+// Saved clips, filed under the parts the room picker already uses — Guards,
+// Attacking, Top, Standing and the rest. Thirty saved clips in one column is
+// a list you scroll past rather than use, and what an athlete actually wants
+// on a Thursday is "the guard stuff I kept", which is a question the rooms
+// answer already. Ordered by CHANNEL_GROUPS rather than by what was saved
+// first, so the headings read down the saved list in the same order they read
+// down the room picker. A clip from a room that no longer exists, or one
+// saved before rooms existed at all, lands in the fallback group rather than
+// disappearing.
+function groupSavedPosts(posts) {
+  const by = new Map();
+  (posts || []).forEach((p) => {
+    const g = groupOfChannel(p && p.channel);
+    if (!by.has(g)) by.set(g, []);
+    by.get(g).push(p);
+  });
+  return CHANNEL_GROUPS.filter((g) => by.has(g.id))
+    .map((g) => ({ id: g.id, label: g.label, posts: by.get(g.id) }));
+}
 const DEFAULT_CHANNEL = "general";
 // Where the tab opens for somebody with no stored preference. Deliberately not
 // DEFAULT_CHANNEL, which is the fallback a *query* uses when it has no channel
@@ -6723,6 +6742,9 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
   const [savedIds, setSavedIds] = useState(() => new Set());
   const [showSaved, setShowSaved] = useState(false);
   const [savedPosts, setSavedPosts] = useState(null);
+  // "all" or a CHANNEL_GROUPS id. Not remembered between visits: a filter you
+  // cannot see the effect of is how a saved clip goes missing.
+  const [savedGroup, setSavedGroup] = useState("all");
   // One clip chosen out of the matches. The full result set stays put, so
   // going back to it is a state change and not another round trip.
   const [picked, setPicked] = useState(null);
@@ -7188,9 +7210,36 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
           </p>
         )}
 
-        {Array.isArray(savedPosts) && savedPosts.length > 0 && (
+        {Array.isArray(savedPosts) && savedPosts.length > 0 && (() => {
+          const groups = groupSavedPosts(savedPosts);
+          // One part is no choice at all, so the row only appears once there
+          // is something to choose between.
+          const showChips = groups.length > 1;
+          const chosen = showChips && groups.some((g) => g.id === savedGroup) ? savedGroup : "all";
+          const shown = groups.filter((g) => chosen === "all" || g.id === chosen);
+          return (<>
+          {showChips && (
+            <div className="rg-chiprow" style={{ marginBottom: 14 }} role="group" aria-label="Filter your saved clips by part">
+              <button type="button" className={`tech-suggest${chosen === "all" ? " on" : ""}`}
+                aria-pressed={chosen === "all"} onClick={() => setSavedGroup("all")}>
+                All {savedPosts.length}
+              </button>
+              {groups.map((g) => (
+                <button key={g.id} type="button" className={`tech-suggest${chosen === g.id ? " on" : ""}`}
+                  aria-pressed={chosen === g.id} onClick={() => setSavedGroup(g.id)}>
+                  {g.label} {g.posts.length}
+                </button>
+              ))}
+            </div>
+          )}
+          {shown.map((g) => (
+          <div key={g.id} style={{ marginBottom: 18 }}>
+            {/* The heading stays even when one part is filtered to, because
+                the room name under each clip is the small print and this is
+                the part you came looking for. */}
+            <div className="room-group-label"><span>{g.label}</span><span>{g.posts.length}</span></div>
           <div className="feed">
-            {savedPosts.map((p) => (
+            {g.posts.map((p) => (
               <article className="post-card" key={p.id}>
                 <header className="post-head">
                   <BeltEmblem level={p.author_belt} size={26} title={null} />
@@ -7231,7 +7280,10 @@ function CommunityTab({ client, userId, isCoach, prefs, onPrefs, unreadByChannel
               </article>
             ))}
           </div>
-        )}
+          </div>
+          ))}
+          </>);
+        })()}
       </div>
     );
   }
@@ -14485,7 +14537,10 @@ function GlobalStyle() {
       .room-group-count { margin-left: 8px; font-weight: 700; letter-spacing: 0;
         font-variant-numeric: tabular-nums; color: var(--text-dim); }
       .room-group-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
-        color: var(--text-dim); margin: 0 0 6px 2px; }
+        color: var(--text-dim); margin: 0 0 6px 2px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+      /* The count, where a heading carries one. Without this the two spans
+         sat against each other and the saved list read "GUARDS2". */
+      .room-group-label > span + span { font-weight: 600; letter-spacing: 0.06em; opacity: 0.75; margin-right: 2px; }
       .room-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
         padding: 10px 12px; margin-bottom: 4px; border-radius: 11px; border: 1px solid transparent;
         background: var(--card); color: var(--text); cursor: pointer; font: inherit; }

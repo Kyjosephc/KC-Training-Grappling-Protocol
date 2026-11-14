@@ -2761,6 +2761,60 @@ check("the group page offers no team to switch to", () => {
   unmount();
 });
 
+check("saved clips are filed under the parts the rooms already use", () => {
+  // The point of the screen: "the guard stuff I kept" is a question the room
+  // groups answer, so the saved list is filed the same way rather than being
+  // one long column in the order things happened to be saved.
+  const posts = [
+    { id: "1", channel: "halfguard" },
+    { id: "2", channel: "wrestling" },
+    { id: "3", channel: "passing" },
+    { id: "4", channel: "closedguard" },
+    { id: "5", channel: "backattacks" },
+  ];
+  const groups = A.groupSavedPosts(posts);
+  if (!groups.length) throw new Error("nothing came back");
+  // Order follows the room picker, not the order they were saved in.
+  const order = groups.map((g) => g.id);
+  const want = A.CHANNEL_GROUPS.map((g) => g.id).filter((id) => order.includes(id));
+  if (order.join(",") !== want.join(",")) {
+    throw new Error(`parts came back as ${order.join(",")}, the picker reads ${want.join(",")}`);
+  }
+  // Every group carries its own label and its own posts.
+  groups.forEach((g) => {
+    if (!g.label) throw new Error(`the ${g.id} part has no heading`);
+    if (!g.posts.length) throw new Error(`the ${g.id} part is empty and should not be here at all`);
+  });
+});
+
+check("filing saved clips never loses one", () => {
+  // The failure that matters. A clip that is saved and then not shown is
+  // worse than no saved list, because the athlete believes it is in there.
+  const channels = A.COMMUNITY_CHANNELS.map((c) => c.id);
+  const posts = channels.map((c, i) => ({ id: "p" + i, channel: c }));
+  // And the ones with nowhere obvious to go: a room that has been retired, a
+  // post saved before rooms existed, and junk.
+  posts.push({ id: "x1", channel: "a-room-that-was-deleted" });
+  posts.push({ id: "x2" }, { id: "x3", channel: null }, { id: "x4", channel: "" });
+  const groups = A.groupSavedPosts(posts);
+  const out = groups.flatMap((g) => g.posts.map((p) => p.id));
+  if (out.length !== posts.length) {
+    const lost = posts.map((p) => p.id).filter((id) => !out.includes(id));
+    throw new Error(`${posts.length} saved, ${out.length} shown — lost ${lost.join(", ") || "something"}`);
+  }
+  if (new Set(out).size !== out.length) throw new Error("a saved clip was filed under two parts at once");
+  // Nothing empty, and nothing but real parts.
+  const ids = A.CHANNEL_GROUPS.map((g) => g.id);
+  groups.forEach((g) => { if (!ids.includes(g.id)) throw new Error(`filed under "${g.id}", which is not a part`); });
+});
+
+check("an empty saved list is empty, not a row of headings", () => {
+  [[], null, undefined].forEach((v) => {
+    const g = A.groupSavedPosts(v);
+    if (!Array.isArray(g) || g.length) throw new Error(`${JSON.stringify(v)} produced ${JSON.stringify(g)}`);
+  });
+});
+
 console.log("\nMedals");
 
 check("only a finished week is won", () => {
