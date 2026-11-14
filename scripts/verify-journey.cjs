@@ -63,6 +63,19 @@ const setVal = (el, v) => act(() => {
   Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v);
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 });
+
+// The sign-up page now asks how long you have trained with a barbell, and it
+// will not move on until you answer. Default to the middle option so the
+// walkers below get the full programme; the capped case is checked on its own.
+const pickBarbell = (value = "6to24") => act(() => {
+  const sel = [...host.querySelectorAll("select")]
+    .find((s) => [...s.options].some((o) => o.value === "under6"));
+  if (!sel) throw new Error("the sign-up page no longer asks how long you have trained with a barbell");
+  Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set.call(sel, value);
+  sel.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+});
+
 const unmount = () => act(() => root.render(null));
 const hasNot = (re, label) => { if (re.test(txt())) throw new Error(`did not expect ${label || re} on screen`); };
 
@@ -228,7 +241,7 @@ check("name alone is not enough — it still wants bodyweight", () => {
 });
 check("a filled first page moves on to the week", () => {
   const n = [...host.querySelectorAll("input[type=number]")];
-  setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10");
+  setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10"); pickBarbell();
   if (cont().disabled) throw new Error("still disabled with name, weight and height in");
   click(/^continue$/i);
   has(/step 3 of 4/i, "the week page");
@@ -299,7 +312,7 @@ const fillProfile = () => {
   const t = [...host.querySelectorAll("input[type=text]")];
   setVal(t[0], "Dani"); setVal(t[1], "Reyes");
   const n = [...host.querySelectorAll("input[type=number]")];
-  setVal(n[0], "148"); setVal(n[1], "5"); setVal(n[2], "6");
+  setVal(n[0], "148"); setVal(n[1], "5"); setVal(n[2], "6"); pickBarbell();
   click(/^continue$/i);
 };
 const pickStrengthDays = (howMany) => {
@@ -2834,6 +2847,160 @@ check("an empty saved list is empty, not a row of headings", () => {
   [[], null, undefined].forEach((v) => {
     const g = A.groupSavedPosts(v);
     if (!Array.isArray(g) || g.length) throw new Error(`${JSON.stringify(v)} produced ${JSON.stringify(g)}`);
+  });
+});
+
+console.log("\nHow heavy the main lift actually goes");
+
+// Walk every max-effort lift in both conjugate programs once, and hold the
+// numbers to the decision: a grappler is not asked for an all-out single
+// twice a week.
+const meLifts = (() => {
+  const out = [];
+  ["A", "B", "C", "D"].forEach((v) => {
+    const program = A.buildProgramVariant(v);
+    program.phases.forEach((phase) => {
+      for (let w = phase.weekStart; w <= phase.weekEnd; w++) {
+        phase.days.forEach((day) => {
+          A.resolveDaySections(day, w, program, phase, false,
+            { injuryAreas: [], excludedExercises: [], blockNumber: 1 })
+            .forEach((sec) => (sec.exercises || []).forEach((e) => {
+              if (!/Max Effort/.test(e.quality || "")) return;
+              const t = e.perSetTargets || [];
+              const top = t[t.length - 1];
+              if (top && top.pct1rm) out.push({ v, w, day: day.label, name: e.name, top, quality: e.quality, sets: t });
+            }));
+        });
+      }
+    });
+  });
+  return out;
+})();
+
+check("no week outside a PR week asks for an all-out single", () => {
+  // The finding this encodes: the ladder used to end at 100% with nothing in
+  // reserve on every non-deload week, which across the two conjugate programs
+  // was twenty-nine all-out singles for somebody also training on the mat
+  // three to five nights a week.
+  if (!meLifts.length) throw new Error("no max-effort lifts found at all — the walk is broken");
+  const bad = meLifts.filter((x) => !A.PR_WEEKS.includes(x.w) && x.top.pct1rm >= 100 && x.top.rir === 0);
+  if (bad.length) {
+    throw new Error(`${bad.length} all-out single(s) outside weeks ${A.PR_WEEKS.join(" and ")}: `
+      + bad.slice(0, 4).map((x) => `${x.v} w${x.w} ${x.name}`).join(", "));
+  }
+});
+
+check("a PR week can actually produce a PR", () => {
+  // A cap with no way through it is not a cap, it is a ceiling. The second
+  // failure mode is subtler: a PR week landing on lifts that stop at a heavy
+  // triple by design, which is what week 11 did — the week said PR and every
+  // lift in it refused. Each PR week has to reach a true single somewhere.
+  A.PR_WEEKS.forEach((w) => {
+    const inWeek = meLifts.filter((x) => x.w === w);
+    if (!inWeek.length) throw new Error(`week ${w} is a PR week with no max-effort lift in it`);
+    const singles = inWeek.filter((x) => x.top.pct1rm >= 100 && x.top.rir === 0);
+    if (!singles.length) {
+      throw new Error(`week ${w} is a PR week but every lift in it stops short: `
+        + inWeek.map((x) => `${x.name} at ${x.top.pct1rm}%`).join(", "));
+    }
+  });
+});
+
+check("the cap lowers a top set and never raises one", () => {
+  // A good morning stops at a heavy triple because of what it is, not because
+  // of which week it is, and a deload stops because it is a deload. Neither
+  // may be lifted by landing in a PR week.
+  meLifts.forEach((x) => {
+    if (/Deload/.test(x.quality || "") && x.top.pct1rm > 75) {
+      throw new Error(`${x.v} w${x.w} ${x.name}: a deload reaching ${x.top.pct1rm}%`);
+    }
+    if (/good morning/i.test(x.name) && x.top.pct1rm > 90) {
+      throw new Error(`${x.v} w${x.w}: a good morning reaching ${x.top.pct1rm}%, which is the lift that is capped for spinal shear`);
+    }
+  });
+});
+
+check("somebody new to a barbell is never sent for a single", () => {
+  // The cue on these lifts always said that anyone under about six months
+  // should stop at a heavy triple. It was the only thing saying so, and the
+  // target printed beside the input box said 100% — which is the one people
+  // follow. Now the answer to the sign-up question decides it, and the cap
+  // holds on every week including the two that ask everybody else for a PR.
+  let seen = 0;
+  ["A", "C"].forEach((v) => {
+    const program = A.buildProgramVariant(v);
+    program.phases.forEach((phase) => {
+      for (let w = phase.weekStart; w <= phase.weekEnd; w++) {
+        phase.days.forEach((day) => {
+          A.resolveDaySections(day, w, program, phase, false,
+            { injuryAreas: [], excludedExercises: [], blockNumber: 1, newToBarbell: true })
+            .forEach((sec) => (sec.exercises || []).forEach((e) => {
+              if (!/Max Effort/.test(e.quality || "") || /Deload/.test(e.quality || "")) return;
+              const t = e.perSetTargets || [];
+              const top = t[t.length - 1];
+              if (!top || !top.pct1rm) return;
+              seen++;
+              if (top.pct1rm > 90 || top.reps < 2) {
+                throw new Error(`${v} w${w} ${e.name}: a new lifter is sent to ${top.pct1rm}% for ${top.reps} rep(s)`);
+              }
+            }));
+        });
+      }
+    });
+  });
+  if (!seen) throw new Error("no max-effort lifts were reached at all — the walk is broken");
+  // And the same athlete on a PR week is still capped.
+  const program = A.buildProgramVariant("A");
+  A.PR_WEEKS.forEach((w) => {
+    const phase = program.phases.find((p) => w >= p.weekStart && w <= p.weekEnd);
+    phase.days.forEach((day) => {
+      A.resolveDaySections(day, w, program, phase, false,
+        { injuryAreas: [], excludedExercises: [], blockNumber: 1, newToBarbell: true })
+        .forEach((sec) => (sec.exercises || []).forEach((e) => {
+          if (!/Max Effort/.test(e.quality || "")) return;
+          const t = e.perSetTargets || [];
+          const top = t[t.length - 1];
+          if (top && top.pct1rm >= 100) throw new Error(`a PR week lifted the cap for a new lifter: week ${w}, ${e.name}`);
+        }));
+    });
+  });
+});
+
+check("the answer has to be given, and only the one answer caps", () => {
+  // An account made before the question existed has no answer stored, and
+  // must keep the full programme rather than being quietly capped by a field
+  // it was never asked. Only "under6" caps.
+  const caps = (v) => A.isNewToBarbell({ barbellExperience: v });
+  if (!caps("under6")) throw new Error("the one answer that should cap does not");
+  ["6to24", "over24", "", null, undefined, "yes", "true"].forEach((v) => {
+    if (caps(v)) throw new Error(`${JSON.stringify(v)} capped the programme and should not have`);
+  });
+  if (caps(undefined) || A.isNewToBarbell({}) || A.isNewToBarbell(null)) {
+    throw new Error("an account from before the question existed was capped");
+  }
+  // Every option the form offers is one the cap understands.
+  const ids = A.BARBELL_EXPERIENCE.map((b) => b.id);
+  if (!ids.includes("under6")) throw new Error("the form no longer offers the answer that caps");
+  if (new Set(ids).size !== ids.length) throw new Error("two options share an id");
+  A.BARBELL_EXPERIENCE.forEach((b) => {
+    if (!b.label || !b.note) throw new Error(`the ${b.id} option does not say what it does`);
+  });
+});
+
+check("the way up to the top set is still a ramp", () => {
+  // Capping by removing the last rung must not leave a ladder that jumps. The
+  // build-up has to climb, and no step may be a leap.
+  meLifts.forEach((x) => {
+    const pcts = x.sets.map((t) => t.pct1rm).filter((p) => p != null);
+    if (pcts.length < 3) throw new Error(`${x.v} w${x.w} ${x.name}: only ${pcts.length} set(s) to the top`);
+    for (let i = 1; i < pcts.length; i++) {
+      if (pcts[i] < pcts[i - 1]) throw new Error(`${x.v} w${x.w} ${x.name}: the ramp goes down, ${pcts.join("/")}`);
+      if (pcts[i] - pcts[i - 1] > 12) throw new Error(`${x.v} w${x.w} ${x.name}: a ${pcts[i] - pcts[i - 1]}-point jump, ${pcts.join("/")}`);
+    }
+    // And the last rung is the heaviest, or it is not a top set.
+    if (pcts[pcts.length - 1] !== Math.max(...pcts)) {
+      throw new Error(`${x.v} w${x.w} ${x.name}: the heaviest set is not the last, ${pcts.join("/")}`);
+    }
   });
 });
 

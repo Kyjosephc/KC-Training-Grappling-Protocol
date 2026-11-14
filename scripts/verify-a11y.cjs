@@ -41,6 +41,19 @@ const setVal = (el, v) => act(() => {
   el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 });
 
+// The sign-up page now asks how long you have trained with a barbell, and it
+// will not move on until you answer. Default to the middle option so the
+// walkers below get the full programme; the capped case is checked on its own.
+const pickBarbell = (value = "6to24") => act(() => {
+  const sel = [...host.querySelectorAll("select")]
+    .find((s) => [...s.options].some((o) => o.value === "under6"));
+  if (!sel) throw new Error("the sign-up page no longer asks how long you have trained with a barbell");
+  Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value").set.call(sel, value);
+  sel.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+});
+
+
 // The waiver takes two signatures now: one drawn, one typed. Walking the
 // sign-up flow means drawing one.
 const drawSignature = () => {
@@ -194,7 +207,7 @@ try {
     const t = [...host.querySelectorAll("input[type=text]")];
     setVal(t[0], "Test"); setVal(t[1], "One");
     const n = [...host.querySelectorAll("input[type=number]")];
-    setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10");
+    setVal(n[0], "172"); setVal(n[1], "5"); setVal(n[2], "10"); pickBarbell();
     click(/^continue$/i);
     if (page === 3) return;
     const picks = [...host.querySelectorAll("button")].filter((b) => /^Strength\/Conditioning$/.test(b.textContent.trim()));

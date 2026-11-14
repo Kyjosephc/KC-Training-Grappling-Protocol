@@ -3103,8 +3103,61 @@ function applyDeWave(e, phase) {
   return { ...e, load: loadText, perSetTargets, pct1rmFlat: effPct || e.pct1rmFlat };
 }
 
+// The weeks that ask for a true all-out single. Everything else builds to
+// about 95% with a rep still in the tank.
+//
+// Why, written down because the numbers used to say otherwise: a max effort
+// ladder ending at 100% with nothing in reserve ran on every non-deload week,
+// on both the upper and the lower day. Across the two conjugate programs that
+// was twenty-nine all-out singles, roughly two a week, for an athlete who is
+// also on the mat three to five nights. Westside's own article written for
+// grapplers says to leave a set or two in the tank on most max effort days and
+// to take PR lifts every six to eight weeks — and the cue on these very lifts
+// already said to stop on bar speed rather than at a percentage. The number
+// beside the input box said otherwise, and the number is what people follow.
+//
+// Six and ten are that spacing. Both are also the SECOND week on the same
+// main lift — the rotation changes the lift every two weeks, and the week you
+// already know the groove is the week a single is worth taking. Eleven was the
+// first choice and was wrong: in both conjugate programs week eleven lands on
+// lifts flagged maxTriple (trap bar, wide-grip bench), which stop at a heavy
+// triple whatever the week says, so it would have been a PR week that could
+// not produce one.
+const PR_WEEKS = [6, 10];
+const isPrWeek = (weekNumber) => PR_WEEKS.includes(Number(weekNumber));
+
+// Applied after the exercise resolves, so it sees the ladder the week actually
+// produced rather than the one written in the pool. A lift already capped
+// lower — a good morning's heavy triple, a deload, the week 12 taper — is left
+// exactly as it is: this only ever removes a top set, never adds one.
+function capMaxEffort(e, weekNumber, opts) {
+  const targets = e && e.perSetTargets;
+  if (!targets || !targets.length) return e;
+  if (!/Max Effort/.test(e.quality || "") || /Deload/.test(e.quality || "")) return e;
+  const last = targets[targets.length - 1];
+  if (!last || !(last.pct1rm >= 100 && last.rir === 0)) return e;
+  // Under about six months with a barbell: a heavy triple, every week, PR
+  // weeks included. The max effort method runs on reading your own bar speed,
+  // and that is a skill rather than an instruction — you cannot follow "stop
+  // when it slows" until you know what slow looks like on your own lift.
+  if (opts && opts.newToBarbell) {
+    const triple = meTripleCapSets();
+    return { ...e, perSetTargets: triple, sets: triple.length,
+      reps: "working up to a heavy triple",
+      cues: `${e.cues || ""}\n\nYou told the app you have been lifting with a barbell under six months, so this stops at a heavy triple rather than a single — every week, this one included. You lose almost nothing: a heavy triple drives nearly the same adaptation at a fraction of the risk. Change it in Settings once that is no longer true of you.`.trim() };
+  }
+  if (isPrWeek(weekNumber)) {
+    return { ...e, cues: `${e.cues || ""}\n\nThis is one of the two weeks in the block that asks for a true single. Take it only if the heavy double moved well — a PR you had to grind for costs more on the mat this week than the number is worth, and week ${PR_WEEKS[PR_WEEKS.length - 1] === Number(weekNumber) ? "one of the next block" : PR_WEEKS[1]} comes round soon enough.`.trim() };
+  }
+  const capped = targets.slice(0, -1).map((t, i, arr) =>
+    (i === arr.length - 1 ? { ...t, rir: 1, note: "Top single" } : t));
+  return { ...e, perSetTargets: capped, sets: capped.length,
+    reps: "working sets of 3 down to a heavy single",
+    cues: `${e.cues || ""}\n\nThis week stops at about ninety-five percent with a rep still in you. The bar should move — if it slows to a grind you are past the weight this week was asking for. Weeks ${PR_WEEKS.join(" and ")} are the ones that ask for a true single.`.trim() };
+}
+
 function resolveSectionExercises(section, weekNumber, program, phase, opts) {
-  return section.exercises.map((e) => resolveExercise(e, weekNumber, program, phase, opts));
+  return section.exercises.map((e) => capMaxEffort(resolveExercise(e, weekNumber, program, phase, opts), weekNumber, opts));
 }
 function resolveDaySections(day, weekNumber, program, phase, veteranMode, opts) {
   const isDeload = (phase?.name || "").toLowerCase().includes("deload");
@@ -3180,7 +3233,8 @@ function primaryLiftName(day, weekNumber, program, phase, opts) {
   return day.name;
 }
 function resolveOptsFor(client) {
-  return { blockNumber: client.blockNumber || 1, excludedExercises: client.excludedExercises || [], injuryAreas: client.injuryAreas || [] };
+  return { blockNumber: client.blockNumber || 1, excludedExercises: client.excludedExercises || [],
+    injuryAreas: client.injuryAreas || [], newToBarbell: isNewToBarbell(client) };
 }
 function sectionHeadline(resolvedSec) {
   if ((resolvedSec.type === "strength" || resolvedSec.type === "power")
@@ -5645,7 +5699,19 @@ function buildProgramVariant(variant) {
   return finishProgram(base);
 }
 
-function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, promoDiscount, weeklySchedule, waiver }) {
+// How long someone has been under a barbell, which decides whether the max
+// effort ladder is allowed to reach a true single. The cue on those lifts has
+// always said that anyone under about six months should stop at a heavy
+// triple, and it was the only thing saying so — the target beside the input
+// box still read 100%. Written guidance loses that argument every time.
+const BARBELL_EXPERIENCE = [
+  { id: "under6", label: "Less than 6 months", note: "Max effort days stop at a heavy triple" },
+  { id: "6to24", label: "6 months to 2 years", note: "Full program" },
+  { id: "over24", label: "More than 2 years", note: "Full program" },
+];
+const isNewToBarbell = (client) => (client && client.barbellExperience) === "under6";
+
+function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches, useTemplate, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, promoDiscount, weeklySchedule, waiver, barbellExperience }) {
   const name = `${firstName} ${lastName}`.trim() || "Athlete";
   return {
     id, name, firstName, lastName, heightFeet: heightFeet || 0, heightInches: heightInches || 0,
@@ -5658,6 +5724,10 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     hasSeenTutorial: false,
     weeklySchedule: weeklySchedule || defaultWeeklySchedule(),
     beltLevel: beltLevel || "White",
+    // Absent on every account made before this existed. isNewToBarbell only
+    // answers true to the one value, so an old account keeps the full program
+    // rather than being quietly capped by a field it was never asked.
+    barbellExperience: barbellExperience || "",
     bjjNotes: [],
     bjjFocus: [],
     rulesProgress: emptyRulesProgress(),
@@ -8689,6 +8759,7 @@ function OnboardingScreen({ onSubmit }) {
   const [heightFeet, setHeightFeet] = useState("");
   const [heightInches, setHeightInches] = useState("");
   const [beltLevel, setBeltLevel] = useState("White");
+  const [barbellExperience, setBarbellExperience] = useState("");
   const [schedule, setSchedule] = useState(defaultWeeklySchedule());
   const [programVariant, setProgramVariant] = useState("B");
   const [injuryNotes, setInjuryNotes] = useState("");
@@ -8717,13 +8788,13 @@ function OnboardingScreen({ onSubmit }) {
     setProgramVariant(allowedVariants.includes(kin) ? kin
       : allowedVariants.includes("B") ? "B" : allowedVariants[0]);
   }, [allowedKey, programVariant]);
-  const canSubmit = firstName.trim() && lastName.trim() && weight
+  const canSubmit = firstName.trim() && lastName.trim() && weight && barbellExperience
     && hasEnoughStrengthDays && allowedVariants.includes(programVariant);
   // What each page needs before Continue does anything. The schedule rule lives
   // on page two so nobody reaches the end and finds the start button dead for a
   // reason that is three screens behind them.
   const stepComplete = step === 1
-    ? !!(firstName.trim() && lastName.trim() && weight)
+    ? !!(firstName.trim() && lastName.trim() && weight && barbellExperience)
     : step === 2
       ? !!(hasEnoughStrengthDays && allowedVariants.includes(programVariant))
       : true;
@@ -8818,6 +8889,23 @@ function OnboardingScreen({ onSubmit }) {
           {BELT_LEVELS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
       </label>
+      {/* Asked rather than assumed, and asked here rather than left in a cue
+          halfway down a session screen. It is the one answer on this page that
+          changes how heavy the program will ever tell you to go. */}
+      <label className="labeled-input">
+        <span>How long have you trained with a barbell?</span>
+        <select className="select-input" value={barbellExperience}
+          onChange={(e) => setBarbellExperience(e.target.value)}>
+          <option value="">Choose one</option>
+          {BARBELL_EXPERIENCE.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+        </select>
+      </label>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 14 }}>
+        Under six months and the heaviest days stop at a solid triple instead of a single — a
+        heavy triple builds nearly the same strength at a fraction of the risk, and reading your
+        own bar speed well enough to take a true max is a skill that takes a while. Change it in
+        Settings whenever that stops being true of you.
+      </p>
       </>)}
 
       {step === 2 && (<>
@@ -8885,7 +8973,7 @@ function OnboardingScreen({ onSubmit }) {
         </p>
       )}
       <button className="btn-primary wide" style={{ marginTop: 10 }} disabled={!canSubmit || !waiver || submitting}
-        onClick={async () => { setSubmitting(true); try { await onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver }); } finally { setSubmitting(false); } }}>
+        onClick={async () => { setSubmitting(true); try { await onSubmit({ firstName: firstName.trim(), lastName: lastName.trim(), weight: Number(weight) || 0, heightFeet: Number(heightFeet) || 0, heightInches: Number(heightInches) || 0, beltLevel, programVariant, injuryNotes, injuryAreas, profilePicture, weeklySchedule: schedule, waiver, barbellExperience }); } finally { setSubmitting(false); } }}>
         {submitting ? "Setting up your program…" : "Get started"}
       </button>
       </>)}
@@ -10205,6 +10293,7 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
   const [schedule, setSchedule] = useState(client?.weeklySchedule || defaultWeeklySchedule());
   const [savedSchedule, setSavedSchedule] = useState(false);
   const [belt, setBelt] = useState(client?.beltLevel || "White");
+  const [barbellExp, setBarbellExp] = useState(client?.barbellExperience || "");
   const [savedBelt, setSavedBelt] = useState(false);
   const [uploadingPic, setUploadingPic] = useState(false);
   const [picError, setPicError] = useState("");
@@ -10307,6 +10396,29 @@ function SettingsModal({ client, isCoach, onPersist, theme, onChangeTheme, onClo
         disabled={!savedBelt && belt === (client?.beltLevel || "White")}>
         {savedBelt ? "Saved" : "Save belt level"}
       </button>
+
+      {/* The one setting on this screen that changes how heavy the program
+          will ever tell you to go, so it says what it does rather than
+          leaving you to find out on a Tuesday. */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Time under a barbell</div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 8 }}>
+          Under six months and the max effort days stop at a heavy triple instead of a true
+          single — nearly the same strength at a fraction of the risk, while you build the
+          feel for your own bar speed that a real max needs.
+        </p>
+        <select className="select-input" aria-label="How long you have trained with a barbell"
+          style={{ width: "100%", marginBottom: 8 }} value={barbellExp}
+          onChange={(e) => setBarbellExp(e.target.value)}>
+          <option value="">Not answered</option>
+          {BARBELL_EXPERIENCE.map((b) => <option key={b.id} value={b.id}>{b.label} — {b.note}</option>)}
+        </select>
+        <button className="btn-ghost wide" style={{ marginTop: 0 }}
+          disabled={barbellExp === (client?.barbellExperience || "")}
+          onClick={() => onPersist({ ...client, barbellExperience: barbellExp })}>
+          Save training experience
+        </button>
+      </div>
 
       </SettingsSection>
 
