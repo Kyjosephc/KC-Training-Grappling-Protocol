@@ -9567,9 +9567,10 @@ function ShareModal({ onClose }) {
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
-    "Hey guys — I made an app.",
-    "It's a twelve-week strength and conditioning program built for grapplers instead of for lifters: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
-    "Every set you log is kept and every PR tracked. We've got our own private page to break technique down position by position, with video. And there's a rules game that drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
+    "Hey guys — I built an app for the gym.",
+    "It writes you a twelve-week strength and conditioning block built for grappling, on two or three days a week: max-effort and dynamic-effort lifting, explosive power, grip, neck and durability work, and conditioning dosed so it doesn't cost you anything on the mat. You don't need a tested max to start. Log your sleep and soreness and it trims the session before you lift; flag an injury and it substitutes around it.",
+    "It keeps every set, every PR, your bodyweight and your progress across the block, with a one-rep-max calculator built in.",
+    "Team only: technique rooms broken down by position with video, a weekly leaderboard, and a rules game that drills competition scoring and refereeing under IBJJF, ADCC, Grappling Industries and The Revolution — including the IBJJF changes landing in January.",
     "First week is free. Come train:",
   ].join("\n\n");
   const fullMessage = `${shareText} ${shareUrl}`;
