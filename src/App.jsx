@@ -9567,8 +9567,9 @@ function ShareModal({ onClose }) {
   // What somebody who has never heard of this reads before deciding whether to
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
-    "Most lifting programs aren't built for grapplers. This one is. Infiniti Kryos writes you a twelve-week strength and conditioning block aimed at what we actually need on the mat: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
-    "Every set you log is kept and every PR tracked. We get our own private page to break technique down position by position, with video. And the rules game drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
+    "Hey guys — I made an app.",
+    "It's a twelve-week strength and conditioning program built for grapplers instead of for lifters: real strength, explosive power, durability that holds up in bad positions, and conditioning that doesn't gas out in a hard round. You don't need a tested max to start, and if you tell it how beaten up you are it rewrites the session before you lift.",
+    "Every set you log is kept and every PR tracked. We've got our own private page to break technique down position by position, with video. And there's a rules game that drills competition scoring across four rulesets, so you stop giving away points you never knew you were giving away.",
     "First week is free. Come train:",
   ].join("\n\n");
   const fullMessage = `${shareText} ${shareUrl}`;
