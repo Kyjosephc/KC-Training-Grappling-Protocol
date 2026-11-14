@@ -9568,10 +9568,13 @@ function ShareModal({ onClose }) {
   // tap the link. It has to say what the app actually does, not that it exists.
   const shareText = [
     "Hey guys — I built an app for the gym.",
-    "It writes you a twelve-week strength and conditioning block built for grappling, on two or three days a week: max-effort and dynamic-effort lifting, explosive power, grip, neck and durability work, and conditioning dosed so it doesn't cost you anything on the mat. You don't need a tested max to start. Log your sleep and soreness and it trims the session before you lift; flag an injury and it substitutes around it.",
-    "It keeps every set, every PR, your bodyweight and your progress across the block, with a one-rep-max calculator built in.",
-    "Team only: technique rooms broken down by position with video, a weekly leaderboard, and a rules game that drills competition scoring and refereeing under IBJJF, ADCC, Grappling Industries and The Revolution — including the IBJJF changes landing in January.",
-    "First week is free. Come train:",
+    "It writes you a full twelve-week strength and conditioning block for grappling, two or three days a week: max-effort and dynamic-effort lifting, explosive power, and the grip, neck and durability work that holds up in bad positions — with the conditioning dosed so it never costs you anything on the mat. No tested max needed to start. Tell it how you slept and how sore you are and it trims the session before you lift; flag an injury and it substitutes around it.",
+    "Every set, every PR, your bodyweight and your progress across the block are all kept, with a one-rep-max calculator built in.",
+    "And it's ours: technique rooms broken down by position with video, a weekly leaderboard, and a rules game that drills scoring and refereeing under IBJJF, ADCC, Grappling Industries and The Revolution — including the IBJJF changes landing in January.",
+    // The price comes from the same constant the payment screen charges, so
+    // the invite and the bill can never disagree. "One-time" is the app's own
+    // terms, not a sales line: nothing recurs and there is nothing to cancel.
+    `First week is free. After that it's a one-time $${PROGRAM_PRICE} for unlimited access — no subscription, nothing recurring, nothing to cancel. Come train:`,
   ].join("\n\n");
   const fullMessage = `${shareText} ${shareUrl}`;
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
