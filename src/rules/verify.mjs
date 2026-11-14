@@ -230,5 +230,53 @@ if (a !== b) fail("buildQuestionBank() is not deterministic between calls");
 const weak = pickQuestions(bank, { ruleset: "all", count: 20, weakTopics: ["penalties"], seed: 5 });
 console.log(`ranks + selection: ok, bank is deterministic (weak-area round drew ${weak.filter(q=>q.topic==="penalties").length} penalty questions of 20)`);
 
+// 14. Rules published but not yet in force.
+// A ruleset may carry an `upcoming` block: changes the organisation has
+// announced with a date in the future. Two things have to hold. It has to be
+// as well sourced as everything else — an athlete reading it is going to act
+// on it. And it must never reach the question bank, because until the date
+// arrives the answer to "what is the rule" is the rule above it, and a
+// tournament in the meantime is refereed under the old one.
+const upcomingSets = RULESET_IDS.filter((id) => RULESETS[id].upcoming);
+upcomingSets.forEach((id) => {
+  const u = RULESETS[id].upcoming;
+  if (!u.effective) fail(`${id}: upcoming rules with no date they start`);
+  if (!u.source) fail(`${id}: upcoming rules with no source`);
+  if (!u.checked) fail(`${id}: upcoming rules nobody recorded checking`);
+  if (!u.note || u.note.length < 40) fail(`${id}: upcoming rules do not say what applies until then`);
+  if (!Array.isArray(u.changes) || !u.changes.length) fail(`${id}: an upcoming block with no changes in it`);
+  (u.changes || []).forEach((ch, i) => {
+    if (!ch.k) fail(`${id} upcoming ${i}: no name`);
+    if (!ch.v || ch.v.length < 20) fail(`${id} upcoming ${i} (${ch.k}): nothing an athlete could act on`);
+    if (!ch.cite) fail(`${id} upcoming ${i} (${ch.k}): no citation`);
+  });
+  // Not one question, and not one wrong answer either. A distractor built from
+  // a rule that is not in force yet is the same mistake wearing a disguise.
+  const texts = (u.changes || []).map((ch) => ch.v);
+  bank.forEach((q) => {
+    const hay = [q.prompt, q.why, ...(q.options || [])].join(" ");
+    texts.forEach((t) => {
+      const chunk = t.slice(0, 60);
+      if (chunk.length > 30 && hay.includes(chunk)) {
+        fail(`${q.id} is built from a rule that does not start until ${u.effective}`);
+      }
+    });
+  });
+});
+// Said in the data, held here: the generator does not read this block at all.
+const engineSrc = await (await import("node:fs/promises")).readFile(new URL("./engine.js", import.meta.url), "utf8");
+if (/\bupcoming\b/.test(engineSrc)) fail("the question generator reads the not-yet-in-force rules");
+// And once the date has passed the label is a lie. This is the reminder.
+upcomingSets.forEach((id) => {
+  const u = RULESETS[id].upcoming;
+  const starts = new Date(u.effective.replace(/^(\d+) /, "$1 "));
+  if (!Number.isNaN(starts.getTime()) && Date.now() >= starts.getTime()) {
+    fail(`${RULESETS[id].name}'s "${u.effective}" rules are now in force. Fold each one into the rules above it, `
+      + `update version/effective/checked/cite, then delete the upcoming block — until that is done the app is `
+      + `showing them as upcoming and still teaching the old answers.`);
+  }
+});
+console.log(`rules not yet in force: ${upcomingSets.length} ruleset(s), ${upcomingSets.reduce((n, id) => n + RULESETS[id].upcoming.changes.length, 0)} change(s), none of them in the question bank`);
+
 console.log(fails ? `\n*** ${fails} FAILURES ***` : "\nALL CHECKS PASSED");
 process.exit(fails ? 1 : 0);

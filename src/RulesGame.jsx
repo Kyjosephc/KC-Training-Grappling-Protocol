@@ -593,6 +593,27 @@ export default function RulesGame({ progress, onProgress, belt }) {
             </div>
           ))}
         </Card2>
+
+        {/* Rules the organisation has published that are not in force yet.
+            Last, and labelled with the date they start, because everything
+            above it is what a referee will use at a tournament today — and
+            somebody reading this in December is competing under the rules
+            above, not these. The game's questions come from the rules above
+            and never from here; src/rules/verify.mjs holds that. */}
+        {rs.upcoming && (
+          <Card2 title={`Changing ${rs.upcoming.effective}`}>
+            <p className="muted" style={{ marginTop: 0, marginBottom: 10, fontSize: 12.5 }}>{rs.upcoming.note}</p>
+            {rs.upcoming.changes.map((ch, i) => (
+              <div key={i} className="rg-rule">
+                <div className="rg-rule-head"><span>{ch.k}</span></div>
+                <div className="muted">{ch.v} <span className="rg-cite-inline">{ch.cite}</span></div>
+              </div>
+            ))}
+            <p className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+              Source: {rs.upcoming.source} · checked {rs.upcoming.checked}
+            </p>
+          </Card2>
+        )}
       </div>
     );
   }
