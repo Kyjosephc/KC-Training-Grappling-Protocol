@@ -3194,6 +3194,122 @@ check("a program nobody could finish is refused", () => {
   }
 });
 
+console.log("\nWhat the programs say about themselves");
+
+// The blurb on the sign-up card is the only thing most people read before
+// committing twelve weeks, and two of the four had drifted into saying things
+// that were not true of the program underneath. Each claim below is measured
+// against the program rather than trusted.
+const programFacts = (v) => {
+  const p = A.buildProgramVariant(v);
+  const mins = [];
+  let me = 0, singles = 0, withPct = 0, sprint = 0;
+  const prWeeks = new Set();
+  const deloads = new Set();
+  p.phases.forEach((ph) => {
+    if (/deload/i.test(ph.name || "")) for (let w = ph.weekStart; w <= ph.weekEnd; w++) deloads.add(w);
+    for (let w = ph.weekStart; w <= ph.weekEnd; w++) {
+      ph.days.forEach((d) => {
+        const secs = A.resolveDaySections(d, w, p, ph, false,
+          { injuryAreas: [], excludedExercises: [], blockNumber: 1 });
+        mins.push(A.sessionShape(secs, p.warmup).minutes);
+        secs.forEach((sec) => (sec.exercises || []).forEach((e) => {
+          if (/Max Effort/.test(e.quality || "") && !/Deload/.test(e.quality || "")) me++;
+          const ts = e.perSetTargets || [];
+          const top = ts[ts.length - 1];
+          if (top && top.pct1rm >= 100 && top.rir === 0) { singles++; prWeeks.add(w); }
+          if (ts.some((x) => x && x.pct1rm != null)) withPct++;
+          if (/sprint|agility|shuttle/i.test(e.name || "")) sprint++;
+        }));
+      });
+    }
+  });
+  return { p, me, singles, withPct, sprint, prWeeks: [...prWeeks].sort((a, b) => a - b),
+    deloads: [...deloads].sort((a, b) => a - b),
+    lo: Math.min(...mins), hi: Math.max(...mins) };
+};
+
+check("every program on the sign-up card is the program it says it is", () => {
+  if (!A.PROGRAM_CHOICES || A.PROGRAM_CHOICES.length < 2) throw new Error("no programs offered at sign-up");
+  A.PROGRAM_CHOICES.forEach((c) => {
+    const f = programFacts(c.id);
+    if (!f.p) throw new Error(`${c.id} is offered and does not exist`);
+    if (Number(c.days) !== Number(f.p.sessionsPerWeek)) {
+      throw new Error(`${c.id} is sold as ${c.days} days and is built as ${f.p.sessionsPerWeek}`);
+    }
+    if (!c.blurb || c.blurb.length < 80) throw new Error(`${c.id} says almost nothing about itself`);
+  });
+});
+
+check("the session lengths on the card are the session lengths in the program", () => {
+  A.PROGRAM_CHOICES.forEach((c) => {
+    const m = /(\d+) to (\d+) minutes/.exec(c.blurb || "");
+    if (!m) throw new Error(`${c.id} does not say how long a session takes`);
+    const f = programFacts(c.id);
+    if (Number(m[1]) !== f.lo || Number(m[2]) !== f.hi) {
+      throw new Error(`${c.id} promises ${m[1]} to ${m[2]} minutes and runs ${f.lo} to ${f.hi}`);
+    }
+  });
+});
+
+check("a program that claims no percentages has none", () => {
+  A.PROGRAM_CHOICES.forEach((c) => {
+    if (!/no percentages/i.test(c.blurb || "")) return;
+    const f = programFacts(c.id);
+    if (f.withPct) throw new Error(`${c.id} claims no percentages and ${f.withPct} of its exercises carry one`);
+  });
+  // And the claim to be the only one is checked both ways.
+  const claims = A.PROGRAM_CHOICES.filter((c) => /no percentages/i.test(c.blurb || "")).map((c) => c.id);
+  const actually = A.PROGRAM_CHOICES.filter((c) => programFacts(c.id).withPct === 0).map((c) => c.id);
+  if (claims.join(",") !== actually.join(",")) {
+    throw new Error(`claimed percentage-free: ${claims.join(",") || "none"}; actually: ${actually.join(",") || "none"}`);
+  }
+});
+
+check("a program that claims no max effort work has none", () => {
+  A.PROGRAM_CHOICES.forEach((c) => {
+    if (!/no max ?effort|no maximal singles/i.test(c.blurb || "")) return;
+    const f = programFacts(c.id);
+    if (f.me) throw new Error(`${c.id} claims no max effort work and prescribes ${f.me} such lifts`);
+    if (f.singles) throw new Error(`${c.id} claims no maximal singles and prescribes ${f.singles}`);
+  });
+});
+
+check("only one program claims the sprint work, and it is the one that has it", () => {
+  const claims = A.PROGRAM_CHOICES.filter((c) => /only program[^.]*sprint/i.test(c.blurb || "")).map((c) => c.id);
+  const actually = A.PROGRAM_CHOICES.filter((c) => programFacts(c.id).sprint > 0).map((c) => c.id);
+  if (claims.length !== 1) throw new Error(`${claims.length} programs claim to be the only one with sprint work`);
+  if (actually.join(",") !== claims.join(",")) {
+    throw new Error(`${claims[0]} claims the sprint work; the programs that actually have it are ${actually.join(",") || "none"}`);
+  }
+  // And the ones that say they have none really have none.
+  A.PROGRAM_CHOICES.forEach((c) => {
+    if (!/no sprint or agility/i.test(c.blurb || "")) return;
+    const f = programFacts(c.id);
+    if (f.sprint) throw new Error(`${c.id} says it has no sprint work and has ${f.sprint} slots of it`);
+  });
+});
+
+check("the weeks a card names are the weeks the program keeps", () => {
+  A.PROGRAM_CHOICES.forEach((c) => {
+    const f = programFacts(c.id);
+    const pr = /weeks (\d+) and (\d+)/i.exec(c.blurb || "");
+    if (pr) {
+      const named = [Number(pr[1]), Number(pr[2])];
+      if (named.join(",") !== f.prWeeks.join(",")) {
+        throw new Error(`${c.id} names weeks ${named.join(" and ")} for its all-out singles; they fall in ${f.prWeeks.join(", ") || "no week"}`);
+      }
+    }
+    const dl = /[Dd]eloads on weeks ([\d, and]+)\./.exec(c.blurb || "");
+    if (dl) {
+      const named = (dl[1].match(/\d+/g) || []).map(Number);
+      if (named.join(",") !== f.deloads.join(",")) {
+        throw new Error(`${c.id} names deloads on ${named.join(", ")}; the program deloads on ${f.deloads.join(", ") || "no week"}`);
+      }
+    }
+  });
+});
+
 console.log("\nMedals");
 
 check("only a finished week is won", () => {

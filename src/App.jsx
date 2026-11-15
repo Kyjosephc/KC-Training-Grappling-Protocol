@@ -5112,15 +5112,24 @@ function requiredStrengthDaysFor(variant) {
   return variant === "D" ? MIN_STRENGTH_DAYS : REQUIRED_STRENGTH_DAYS;
 }
 const MIN_STRENGTH_DAYS = 2;
+// What somebody reads before picking the thing they will do for twelve weeks.
+// Every claim below was measured against the programs themselves rather than
+// written from memory, and verify:journey measures them again — two of these
+// had drifted into saying things that were not true. Program B said it used
+// how-hard-it-feels "instead of a fixed percentage of your max" while forty
+// of its exercises carried a percentage, and said "nothing tapers off" while
+// it deloaded on weeks 4, 8 and 12. A and C both promised "a true Max Effort
+// lift" every session, which stopped being true the day the top set was
+// capped at ninety-five percent outside the two PR weeks.
 const PROGRAM_CHOICES = [
   { id: "A", days: 3, title: "Program A — Condensed Conjugate",
-    blurb: "3 days a week. Every session pairs a true Max Effort lift with a fast Dynamic Effort lift, so a full week of strength and speed work fits in three sessions. Includes a real taper into a fresh, heavy peak the final three weeks. Best if you're actively competing or training grappling 3 to 5 times a week." },
+    blurb: "3 days a week, and the only program here with real sprint and agility work in it. Every session pairs a heavy main lift with fast, light speed work, and the main lift rotates every couple of weeks so you never stop being a beginner at it. You build to an all-out single twice in the block, in weeks 6 and 10, and leave a rep in the tank the rest of the time — you are on the mat as well. Sessions run 25 to 80 minutes. Deloads on weeks 4, 8 and 12. Pick this if you are competing and can give it three days." },
   { id: "B", days: 3, title: "Program B — Offseason Strength Build",
-    blurb: "3 days a week, built on Rate of Perceived Exertion and tempo-controlled supersets instead of a fixed percentage of your max. Every phase just keeps building — nothing tapers off. Best for stretches with no competition on the calendar, when getting as strong as possible is the only goal." },
+    blurb: "3 days a week and the most work of the four — sessions run 40 to 90 minutes. No max effort days at all: most sets are prescribed by how hard they should feel, with tempo work, paired lifts and isometrics, and the last block turns towards speed-strength and aerobic work. Deloads on weeks 4, 8 and 12. Pick this when nothing is on the calendar and getting stronger is the whole job." },
   { id: "C", days: 2, title: "Program C — Conjugate, Two Days",
-    blurb: "Program A's method on 2 days. One true Max Effort lift and one fast Dynamic Effort lift every session, on a main lift that rotates every two weeks. The sprint and agility day is gone — your mat work already covers it. This is the two-day program to pick if you are competing." },
+    blurb: "Program A's method in two sessions of 55 to 70 minutes. One heavy main lift and one fast speed lift each session, rotating every couple of weeks, building to an all-out single twice in the block. There is no sprint or agility work anywhere in it, and that is deliberate rather than an oversight — two sessions a week has no room for it, and your mat time is already repeat-effort conditioning against somebody who is resisting. This is the two-day program to pick if you are competing." },
   { id: "D", days: 2, title: "Program D — Offseason Strength, Two Days",
-    blurb: "Program B's method on 2 days. No percentages and no maximal singles — every set is prescribed by how hard it should feel, the lifts are paired, and the load climbs while the sets stay put. Best for a genuine offseason with nothing on the calendar. It builds strength and holds the muscle you have; adding size takes three days." },
+    blurb: "The only program with no percentages in it anywhere, so you need no tested max to run it — every set is prescribed by how hard it should feel. No maximal singles either. The lifts are paired, the load climbs while the sets stay put, and sessions run 45 to 70 minutes. Pick this for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days." },
 ];
 // At signup the schedule picks the program rather than the other way round.
 // What the note above tells somebody who is choosing a program, in minutes of
