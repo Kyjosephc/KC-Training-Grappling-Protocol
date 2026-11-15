@@ -5886,6 +5886,10 @@ function buildClient({ id, firstName, lastName, weight, heightFeet, heightInches
     // answers true to the one value, so an old account keeps the full program
     // rather than being quietly capped by a field it was never asked.
     barbellExperience: barbellExperience || "",
+    // Programs this athlete is building. Separate from the one above on
+    // purpose: rewriting week 3 of the program you are in week 7 of leaves a
+    // training history logged against something that no longer exists.
+    programDrafts: [],
     bjjNotes: [],
     bjjFocus: [],
     rulesProgress: emptyRulesProgress(),
@@ -8490,6 +8494,7 @@ function MainApp({ userId, onSignOut }) {
     if (!c.readiness) c.readiness = {};
         if (!c.weeklySchedule) c.weeklySchedule = defaultWeeklySchedule();
         if (!c.beltLevel) c.beltLevel = "White";
+        if (!Array.isArray(c.programDrafts)) c.programDrafts = [];
         if (!c.bjjNotes) c.bjjNotes = [];
         if (!c.bjjFocus) c.bjjFocus = [];
         if (!c.rulesProgress) c.rulesProgress = emptyRulesProgress();
@@ -13321,6 +13326,201 @@ function VolumePanel({ program }) {
   );
 }
 
+
+// =========================================================================
+// BUILDING YOUR OWN PROGRAM
+// =========================================================================
+// A draft is an ordinary program object, the same shape as the four built in
+// here, kept beside the one the athlete is training on rather than replacing
+// it. Nothing happens to their training until they say so.
+//
+// The editing is the coach's editor, unlocked: sets, reps, reps in reserve,
+// rest, load, purpose and two video links per exercise, sections you can add
+// and remove. There was never a second editor worth writing — the only reason
+// an athlete could not do this was an isCoach check.
+// Switching an athlete onto a draft they built. The copy is deep and it
+// matters: without it the program they are training on and the draft they
+// keep editing are the same object, so every later tweak to the draft would
+// silently rewrite the session they are about to do. Week count restarts
+// because it is a different program; nothing they have logged is touched,
+// because logs live on the client, not on the program.
+function clientOnDraft(client, draft) {
+  if (!client || !draft) return client;
+  return { ...client, program: JSON.parse(JSON.stringify(draft)), sessionsCompleted: 0, blockNumber: 1 };
+}
+
+function ProgramBuilder({ client, onPersist }) {
+  const drafts = Array.isArray(client.programDrafts) ? client.programDrafts : [];
+  const [openId, setOpenId] = useState(null);
+  const [editingDay, setEditingDay] = useState(null);
+  const [confirmUse, setConfirmUse] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const open = drafts.find((d) => d.id === openId) || null;
+
+  const saveDrafts = (next) => onPersist({ ...client, programDrafts: next });
+  const updateOpen = (nextProgram) =>
+    saveDrafts(drafts.map((d) => (d.id === openId ? nextProgram : d)));
+
+  if (!open) {
+    return (
+      <>
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
+          Build a program of your own — phases, days, exercises, sets, reps, rest and video
+          links. It sits here while you work on it and changes nothing about the training you
+          are doing now. When it is finished you can switch yourself onto it, and send it to
+          the coach to share with everybody else.
+        </p>
+        {drafts.length === 0 && (
+          <div className="adjust-box" style={{ marginBottom: 12 }}>
+            Nothing here yet. Start one and it keeps itself saved as you go.
+          </div>
+        )}
+        {drafts.map((d) => {
+          const problems = programProblems(d);
+          const weeks = Math.max(0, ...(d.phases || []).map((p) => Number(p.weekEnd) || 0));
+          return (
+            <div key={d.id} className="room-group" style={{ marginBottom: 12 }}>
+              <button type="button" className="room-row" onClick={() => setOpenId(d.id)}>
+                <span className="room-row-main">
+                  <span className="room-row-name">{d.name || "Untitled program"}</span>
+                  <span className="room-row-blurb">
+                    {weeks} week{weeks === 1 ? "" : "s"} · {d.sessionsPerWeek || 0} session
+                    {Number(d.sessionsPerWeek) === 1 ? "" : "s"} a week ·{" "}
+                    {problems.length === 0 ? "ready to share" : `${problems.length} thing${problems.length === 1 ? "" : "s"} to fix`}
+                  </span>
+                </span>
+                <ChevronRight size={15} aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
+        <button className="btn-primary wide" onClick={() => {
+          const p = blankProgram(`${(client.firstName || "My").trim()}'s program`);
+          saveDrafts([...drafts, p]);
+          setOpenId(p.id);
+        }}>Build a program</button>
+      </>
+    );
+  }
+
+  const problems = programProblems(open);
+  const setField = (patch) => updateOpen({ ...open, ...patch });
+  const setPhases = (phases) => updateOpen({ ...open, phases });
+
+  return (
+    <>
+      <button className="link-btn" style={{ marginBottom: 8 }} onClick={() => setOpenId(null)}>← All your programs</button>
+
+      <LabeledInput label="Program name" value={open.name || ""} onChange={(v) => setField({ name: v })} />
+      <LabeledInput label="Sessions a week" type="number" min="1" max="7"
+        value={String(open.sessionsPerWeek || "")} onChange={(v) => setField({ sessionsPerWeek: Number(v) || 0 })} />
+
+      {/* Said while they build rather than at the end. Finding out a program
+          cannot be shared after an hour of work is the version of this that
+          makes somebody give up. */}
+      <div className="adjust-box" style={{ marginBottom: 14 }}>
+        {problems.length === 0 ? (
+          <strong>Nothing to fix — this can be sent to the coach to share.</strong>
+        ) : (<>
+          <strong>{problems.length} thing{problems.length === 1 ? "" : "s"} to fix before this can be shared</strong>
+          <ul className="rg-ol" style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+            {problems.slice(0, 8).map((p, i) => (
+              <li key={i} style={{ fontSize: 12.5, marginBottom: 4 }}>
+                <strong>{p.rule}</strong>{p.where ? ` — ${p.where}` : ""}<br />
+                <span className="muted">{p.detail}</span>
+              </li>
+            ))}
+          </ul>
+          {problems.length > 8 && <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>…and {problems.length - 8} more.</p>}
+        </>)}
+      </div>
+
+      {(open.phases || []).map((phase, pi) => (
+        <div key={phase.id} className="room-group" style={{ marginBottom: 14 }}>
+          <div className="room-group-label"><span>Phase {pi + 1}</span></div>
+          <LabeledInput label="Phase name" value={phase.name || ""}
+            onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, name: v } : p)))} />
+          <div className="edit-ex-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <LabeledInput label="First week" type="number" min="1" max="52" value={String(phase.weekStart || "")}
+              onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekStart: Number(v) || 0 } : p)))} />
+            <LabeledInput label="Last week" type="number" min="1" max="52" value={String(phase.weekEnd || "")}
+              onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekEnd: Number(v) || 0 } : p)))} />
+          </div>
+          {(phase.days || []).map((day) => (
+            <div key={day.id} className="blocked-row">
+              <span>{day.name || `Day ${day.label}`} — {(day.sections || []).reduce((n, sc) => n + (sc.exercises || []).length, 0)} exercise(s)</span>
+              <span style={{ display: "flex", gap: 8 }}>
+                <button className="link-btn" onClick={() => setEditingDay({ phaseId: phase.id, dayId: day.id })}>Edit</button>
+                <button className="link-btn" onClick={() => setPhases(open.phases.map((p) => (p.id === phase.id
+                  ? { ...p, days: p.days.filter((d) => d.id !== day.id) } : p)))}>Remove</button>
+              </span>
+            </div>
+          ))}
+          <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setPhases(open.phases.map((p) => (p.id === phase.id
+            ? { ...p, days: [...(p.days || []), { id: uid(), label: String((p.days || []).length + 1), name: `Day ${(p.days || []).length + 1}`, intent: "",
+                sections: [{ id: uid(), type: "strength", name: "Main strength", exercises: [] }] }] }
+            : p)))}><Plus size={14} /> Add a day</button>
+          {open.phases.length > 1 && (
+            <button className="link-btn" style={{ marginTop: 8 }}
+              onClick={() => setPhases(open.phases.filter((p) => p.id !== phase.id))}>Remove this phase</button>
+          )}
+        </div>
+      ))}
+
+      <button className="btn-ghost wide" onClick={() => {
+        const last = Math.max(0, ...(open.phases || []).map((p) => Number(p.weekEnd) || 0));
+        setPhases([...(open.phases || []), { id: uid(), name: `Phase ${(open.phases || []).length + 1}`,
+          weekStart: last + 1, weekEnd: last + 4, objective: "", intensityNote: "",
+          days: [{ id: uid(), label: "1", name: "Day 1", intent: "",
+            sections: [{ id: uid(), type: "strength", name: "Main strength", exercises: [] }] }] }]);
+      }}><Plus size={14} /> Add a phase</button>
+
+      {confirmUse ? (
+        <div className="adjust-box" style={{ marginTop: 14 }}>
+          Switch your training onto “{open.name || "this program"}”? You start again at week 1
+          of it. Everything you have already logged is kept exactly as it is — this changes what
+          you train next, not what you have done.
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+              onClick={async () => {
+                await onPersist(clientOnDraft(client, open));
+                setConfirmUse(false);
+                emitToast({ kind: "info", autoDismissMs: 6000, message: `You are on ${open.name || "your own program"} now.` });
+              }}>Yes, switch me over</button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
+              onClick={() => setConfirmUse(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={problems.length > 0}
+          onClick={() => setConfirmUse(true)}>
+          {problems.length > 0 ? "Fix the list above to use this" : "Train on this program"}
+        </button>
+      )}
+
+      {confirmDelete ? (
+        <div className="adjust-box" style={{ marginTop: 10 }}>
+          Delete “{open.name || "this program"}”? It cannot be undone.
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button className="btn-primary" style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}
+              onClick={async () => { await saveDrafts(drafts.filter((d) => d.id !== openId)); setOpenId(null); }}>Yes, delete it</button>
+            <button className="btn-ghost" style={{ flex: 1, marginTop: 0, justifyContent: "center", padding: "8px 12px", fontSize: 13 }}
+              onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button className="link-btn" style={{ marginTop: 12 }} onClick={() => setConfirmDelete(true)}>Delete this program</button>
+      )}
+
+      {editingDay && (
+        <DayEditor client={client} program={open} onProgramChange={updateOpen}
+          phaseId={editingDay.phaseId} dayId={editingDay.dayId}
+          onClose={() => setEditingDay(null)} onPersist={onPersist} />
+      )}
+    </>
+  );
+}
+
 function ProgramTab({ client, isCoach, onPersist }) {
   const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
@@ -13334,8 +13534,18 @@ function ProgramTab({ client, isCoach, onPersist }) {
     <div className="view-toggle-row">
       <button className={`view-toggle-btn ${view === "overview" ? "active" : ""}`} onClick={() => setView("overview")}>Overview</button>
       <button className={`view-toggle-btn ${view === "schedule" ? "active" : ""}`} onClick={() => setView("schedule")}>Full Schedule</button>
+      <button className={`view-toggle-btn ${view === "build" ? "active" : ""}`} onClick={() => setView("build")}>Build</button>
     </div>
   );
+
+  if (view === "build") {
+    return (
+      <div className="pad">
+        {viewToggle}
+        <ProgramBuilder client={client} onPersist={onPersist} />
+      </div>
+    );
+  }
 
   if (view === "schedule") {
     return (
@@ -13416,8 +13626,14 @@ function ProgramTab({ client, isCoach, onPersist }) {
   );
 }
 
-function DayEditor({ client, phaseId, dayId, onClose, onPersist }) {
-  const phase = client.program.phases.find((p) => p.id === phaseId);
+// Given a program and a way to save it, this edits one day of it. It used to
+// reach straight into client.program, which was fine while the coach was the
+// only person editing and the only thing being edited was the program you
+// were training on. A draft is neither, so the program comes in as a prop now
+// and the old behaviour is what happens when it does not.
+function DayEditor({ client, program, onProgramChange, phaseId, dayId, onClose, onPersist }) {
+  const prog = program || client.program;
+  const phase = prog.phases.find((p) => p.id === phaseId);
   const day = phase.days.find((d) => d.id === dayId);
   const [dayName, setDayName] = useState(day.name);
   const [intent, setIntent] = useState(day.intent || "");
@@ -13439,8 +13655,9 @@ function DayEditor({ client, phaseId, dayId, onClose, onPersist }) {
   const removeSection = (sIdx) => setSections((prev) => prev.filter((_, i) => i !== sIdx));
 
   const save = async () => {
-    const updated = { ...client, program: { ...client.program, phases: client.program.phases.map((p) => p.id !== phaseId ? p : { ...p, days: p.days.map((d) => d.id !== dayId ? d : { ...d, name: dayName, intent, sections }) }) } };
-    await onPersist(updated);
+    const nextProgram = { ...prog, phases: prog.phases.map((p) => p.id !== phaseId ? p : { ...p, days: p.days.map((d) => d.id !== dayId ? d : { ...d, name: dayName, intent, sections }) }) };
+    if (onProgramChange) await onProgramChange(nextProgram);
+    else await onPersist({ ...client, program: nextProgram });
     onClose();
   };
 

@@ -3032,6 +3032,41 @@ const okProgram = (mutate) => {
   return p;
 };
 
+check("a draft you build is yours until you say otherwise", () => {
+  // A new draft changes nothing about the training you are doing. The whole
+  // reason drafts are separate is that rewriting week 3 of the program you
+  // are in week 7 of leaves a history logged against something gone.
+  const draft = A.blankProgram("Mine");
+  if (!draft || !draft.phases || !draft.phases.length) throw new Error("a new draft has no phases to edit");
+  if (!draft.id) throw new Error("a draft with no id cannot be told apart from another");
+});
+
+check("switching onto your own program copies it rather than sharing it", () => {
+  // The bug this prevents: the program you train on and the draft you keep
+  // editing being the same object, so tonight's session changes while you are
+  // tinkering with next month's.
+  const client = { id: "a", sessionsCompleted: 37, blockNumber: 3, logs: [{ id: "l1" }], program: { id: "old" } };
+  const draft = A.blankProgram("Mine");
+  draft.phases[0].days[0].sections[0].exercises.push({ id: "e", name: "Back Squat", sets: 3, reps: "5" });
+  const next = A.clientOnDraft(client, draft);
+  if (next.program === draft) throw new Error("the program and the draft are the same object");
+  if (next.program.phases === draft.phases) throw new Error("the phases are shared between them");
+  // Prove it by moving the draft and checking the program did not move.
+  draft.phases[0].days[0].sections[0].exercises[0].name = "Deadlift";
+  draft.name = "Changed";
+  if (next.program.phases[0].days[0].sections[0].exercises[0].name !== "Back Squat") {
+    throw new Error("editing the draft afterwards changed the session they are training on");
+  }
+  if (next.program.name !== "Mine") throw new Error("renaming the draft renamed the live program");
+  // A different program means starting at week 1 of it, and losing nothing.
+  if (next.sessionsCompleted !== 0) throw new Error(`switched over still ${next.sessionsCompleted} sessions in`);
+  if (next.blockNumber !== 1) throw new Error("the block number carried over from the old program");
+  if (!next.logs || next.logs.length !== 1) throw new Error("switching program threw away what had been logged");
+  // And nothing silly on nothing.
+  if (A.clientOnDraft(null, draft) !== null) throw new Error("no client produced something");
+  if (A.clientOnDraft(client, null) !== client) throw new Error("no draft changed the client anyway");
+});
+
 check("a program with nothing wrong with it publishes", () => {
   const probs = A.programProblems(okProgram());
   if (probs.length) {
