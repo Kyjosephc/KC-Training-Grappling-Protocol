@@ -3136,6 +3136,36 @@ check("every way of breaking a program is actually caught", () => {
   });
 });
 
+check("one problem is reported once, not once per week", () => {
+  // A day is the same day in every week of its phase. A four-week phase with
+  // one empty section used to report it four times and a twelve-week phase
+  // would have reported it twelve, which turns "things to fix" into a wall
+  // nobody reads.
+  const twelve = okProgram((p) => {
+    p.phases[0].weekEnd = 12;
+    p.phases[0].days[0].sections[0].exercises = [];
+  });
+  const empties = A.programProblems(twelve).filter((x) => /empty section/i.test(x.rule));
+  if (empties.length !== 1) {
+    throw new Error(`one empty section reported ${empties.length} time(s) across a twelve-week phase`);
+  }
+  // And it says which weeks it covers, so nobody goes looking in week 1 only.
+  if (!/weeks 1 to 12/.test(empties[0].where)) {
+    throw new Error(`it does not say which weeks it affects: "${empties[0].where}"`);
+  }
+  // Two different days with the same fault are still two problems.
+  const twoDays = okProgram((p) => {
+    p.sessionsPerWeek = 2;
+    p.phases[0].weekEnd = 8;
+    const d2 = JSON.parse(JSON.stringify(p.phases[0].days[0]));
+    d2.id = "d2"; d2.label = "2"; d2.name = "Day B";
+    p.phases[0].days.push(d2);
+    p.phases[0].days.forEach((d) => { d.sections[0].exercises = []; });
+  });
+  const two = A.programProblems(twoDays).filter((x) => /empty section/i.test(x.rule));
+  if (two.length !== 2) throw new Error(`two different empty days collapsed into ${two.length} problem(s)`);
+});
+
 check("an ordinary warm-up jump is not treated as a leap", () => {
   // The rule that was wrong first time round. Forty-five to sixty on an empty
   // bar is how everybody warms up; eighty-eight to a hundred is the one that

@@ -3282,7 +3282,14 @@ function rampJumpAllowed(fromPct) {
 
 function programProblems(program, opts) {
   const problems = [];
-  const say = (rule, where, detail) => problems.push({ rule, where, detail });
+  // A day is the same day in every week of its phase, so a problem with it is
+  // one problem however many weeks that phase runs. Collected with the day and
+  // the week on it, then collapsed at the end — a four-week phase used to
+  // report its one empty section four times, and a twelve-week phase would
+  // have reported it twelve. "Five things to fix" that are one thing is how a
+  // list of problems stops being read.
+  const say = (rule, where, detail, dayKey, week) =>
+    problems.push({ rule, where, detail, dayKey, week });
   if (!program || !Array.isArray(program.phases) || !program.phases.length) {
     say("The program is empty", "", "A program needs at least one phase with a day in it.");
     return problems;
@@ -3323,47 +3330,50 @@ function programProblems(program, opts) {
     }
     for (let week = Number(phase.weekStart) || 1; week <= (Number(phase.weekEnd) || 0); week++) {
       phase.days.forEach((day) => {
-        const where = `week ${week}, day ${day.label || day.name || "?"}`;
+        const dayKey = `day ${day.label || day.name || "?"}`;
+        const where = `week ${week}, ${dayKey}`;
         let secs;
         try {
           secs = resolveDaySections(day, week, program, phase, false,
             opts || { injuryAreas: [], excludedExercises: [], blockNumber: 1 });
         } catch (err) {
-          say("A day the app cannot read", where, String(err && err.message ? err.message : err));
+          say("A day the app cannot read", where, String(err && err.message ? err.message : err), dayKey, week);
           return;
         }
         const named = [];
         (secs || []).forEach((sec) => {
           const list = sec.exercises || [];
           if (!list.length) {
-            say("An empty section", `${where} — ${sec.name || sec.type || "a section"}`,
-              "Either put an exercise in it or take it out.");
+            say("An empty section", where, `"${sec.name || sec.type || "a section"}" has nothing in it. Either put an exercise in it or take it out.`, dayKey + "|" + (sec.id || sec.name || ""), week);
           }
           list.forEach((e) => {
             const label = `${where} — ${e.name || "an unnamed exercise"}`;
-            if (!e.name || !String(e.name).trim()) say("An exercise with no name", where, "Every exercise needs a name.");
+            if (!e.name || !String(e.name).trim()) say("An exercise with no name", where, "Every exercise needs a name.", dayKey, week);
             else named.push(String(e.name).trim().toLowerCase());
             const hasScheme = (e.perSetTargets && e.perSetTargets.length) || e.reps || e.sets;
-            if (!hasScheme) say("An exercise with no sets or reps", label, "Say how many sets and reps it is.");
+            if (!hasScheme) say("An exercise with no sets or reps", label, "Say how many sets and reps it is.", dayKey + "|" + (e.id || e.name || ""), week);
 
             const targets = (e.perSetTargets || []).filter((t) => t && t.pct1rm != null);
             if (targets.length) {
               const pcts = targets.map((t) => Number(t.pct1rm));
               if (pcts.some((p) => !(p > 0 && p <= 100))) {
                 say("A percentage that is not a percentage", label,
-                  `The sets read ${pcts.join("/")}%. A share of somebody's one-rep max has to land between 1 and 100.`);
+                  `The sets read ${pcts.join("/")}%. A share of somebody's one-rep max has to land between 1 and 100.`,
+                  dayKey + "|" + (e.id || e.name || ""), week);
               }
               if (targets.length >= 2) {
                 for (let i = 1; i < pcts.length; i++) {
                   if (pcts[i] < pcts[i - 1]) {
                     say("The build-up goes down", label,
-                      `The sets read ${pcts.join("/")}%. Warm-up sets climb towards the top set.`);
+                      `The sets read ${pcts.join("/")}%. Warm-up sets climb towards the top set.`,
+                      dayKey + "|" + (e.id || e.name || ""), week);
                     break;
                   }
                   const allowed = rampJumpAllowed(pcts[i - 1]);
                   if (pcts[i] - pcts[i - 1] > allowed) {
                     say("A jump too big to warm up through", label,
-                      `${pcts[i - 1]}% straight to ${pcts[i]}%. From ${pcts[i - 1]}% the step should be ${allowed} points or less.`);
+                      `${pcts[i - 1]}% straight to ${pcts[i]}%. From ${pcts[i - 1]}% the step should be ${allowed} points or less.`,
+                      dayKey + "|" + (e.id || e.name || ""), week);
                     break;
                   }
                 }
@@ -3373,25 +3383,47 @@ function programProblems(program, opts) {
                 trueSingles += 1;
                 if (targets.length < 3) {
                   say("A top single with no way up to it", label,
-                    "An all-out single needs at least two build-up sets before it.");
+                    "An all-out single needs at least two build-up sets before it.",
+                    dayKey + "|" + (e.id || e.name || ""), week);
                 }
               }
             }
           });
         });
         const dup = named.filter((n, i) => named.indexOf(n) !== i);
-        [...new Set(dup)].forEach((n) => say("The same exercise twice in one session", where, `"${n}" appears more than once.`));
+        [...new Set(dup)].forEach((n) => say("The same exercise twice in one session", where, `"${n}" appears more than once.`, dayKey + "|" + n, week));
 
         try {
           const shape = sessionShape(secs, program.warmup);
           if (shape && shape.minutes > PUBLISH_MAX_SESSION_MINUTES) {
             say("A session longer than people finish", where,
-              `About ${shape.minutes} minutes. Keep it to ${PUBLISH_MAX_SESSION_MINUTES} or trim the work.`);
+              `About ${shape.minutes} minutes. Keep it to ${PUBLISH_MAX_SESSION_MINUTES} or trim the work.`,
+              dayKey, week);
           }
         } catch (err) { /* a shape we cannot measure is caught by the rules above */ }
       });
     }
   });
+
+  const collapsed = [];
+  const seen = new Map();
+  problems.forEach((p) => {
+    if (!p.dayKey) { collapsed.push({ rule: p.rule, where: p.where, detail: p.detail }); return; }
+    const key = `${p.rule}|${p.detail}|${p.dayKey}`;
+    if (seen.has(key)) { seen.get(key).weeks.push(p.week); return; }
+    const entry = { rule: p.rule, detail: p.detail, dayKey: p.dayKey, weeks: [p.week] };
+    seen.set(key, entry);
+    collapsed.push(entry);
+  });
+  collapsed.forEach((p) => {
+    if (!p.weeks) return;
+    const ws = [...new Set(p.weeks)].sort((a, b) => a - b);
+    p.where = ws.length === 1 ? `${p.dayKey}, week ${ws[0]}`
+      : `${p.dayKey}, weeks ${ws[0]} to ${ws[ws.length - 1]}`;
+    delete p.weeks; delete p.dayKey;
+  });
+  problems.length = 0;
+  collapsed.forEach((p) => problems.push(p));
 
   if (trueSingles > PUBLISH_MAX_TRUE_SINGLES) {
     say("Too many all-out singles", "",
@@ -13353,6 +13385,7 @@ function ProgramBuilder({ client, onPersist }) {
   const drafts = Array.isArray(client.programDrafts) ? client.programDrafts : [];
   const [openId, setOpenId] = useState(null);
   const [editingDay, setEditingDay] = useState(null);
+  const [editingWarmup, setEditingWarmup] = useState(false);
   const [confirmUse, setConfirmUse] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const open = drafts.find((d) => d.id === openId) || null;
@@ -13396,6 +13429,10 @@ function ProgramBuilder({ client, onPersist }) {
         })}
         <button className="btn-primary wide" onClick={() => {
           const p = blankProgram(`${(client.firstName || "My").trim()}'s program`);
+          // Start it consistent with itself. The template says three sessions
+          // a week and hands you one day, so a brand-new draft opened on a
+          // complaint about its own default.
+          p.sessionsPerWeek = (p.phases[0].days || []).length || 1;
           saveDrafts([...drafts, p]);
           setOpenId(p.id);
         }}>Build a program</button>
@@ -13404,6 +13441,9 @@ function ProgramBuilder({ client, onPersist }) {
   }
 
   const problems = programProblems(open);
+  const exerciseCount = (open.phases || []).reduce((n, p) =>
+    n + (p.days || []).reduce((m, d) =>
+      m + (d.sections || []).reduce((k, sc) => k + (sc.exercises || []).length, 0), 0), 0);
   const setField = (patch) => updateOpen({ ...open, ...patch });
   const setPhases = (phases) => updateOpen({ ...open, phases });
 
@@ -13411,15 +13451,21 @@ function ProgramBuilder({ client, onPersist }) {
     <>
       <button className="link-btn" style={{ marginBottom: 8 }} onClick={() => setOpenId(null)}>← All your programs</button>
 
-      <LabeledInput label="Program name" value={open.name || ""} onChange={(v) => setField({ name: v })} />
-      <LabeledInput label="Sessions a week" type="number" min="1" max="7"
-        value={String(open.sessionsPerWeek || "")} onChange={(v) => setField({ sessionsPerWeek: Number(v) || 0 })} />
+      <DraftField label="Program name" value={open.name || ""} onCommit={(v) => setField({ name: v })} />
+      <DraftField label="Sessions a week" type="number" min="1" max="7"
+        value={open.sessionsPerWeek || ""} onCommit={(v) => setField({ sessionsPerWeek: Number(v) || 0 })} />
 
       {/* Said while they build rather than at the end. Finding out a program
           cannot be shared after an hour of work is the version of this that
           makes somebody give up. */}
       <div className="adjust-box" style={{ marginBottom: 14 }}>
-        {problems.length === 0 ? (
+        {exerciseCount === 0 ? (<>
+          <strong>Nothing in it yet.</strong>
+          <p style={{ margin: "4px 0 0" }}>
+            Add a day, open it, and put some exercises in. Anything that would stop this being
+            shared shows up here as you go, so you are never finding out at the end.
+          </p>
+        </>) : problems.length === 0 ? (
           <strong>Nothing to fix — this can be sent to the coach to share.</strong>
         ) : (<>
           <strong>{problems.length} thing{problems.length === 1 ? "" : "s"} to fix before this can be shared</strong>
@@ -13438,19 +13484,35 @@ function ProgramBuilder({ client, onPersist }) {
       {(open.phases || []).map((phase, pi) => (
         <div key={phase.id} className="room-group" style={{ marginBottom: 14 }}>
           <div className="room-group-label"><span>Phase {pi + 1}</span></div>
-          <LabeledInput label="Phase name" value={phase.name || ""}
-            onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, name: v } : p)))} />
+          <DraftField label="Phase name" value={phase.name || ""}
+            onCommit={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, name: v } : p)))} />
           <div className="edit-ex-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
-            <LabeledInput label="First week" type="number" min="1" max="52" value={String(phase.weekStart || "")}
-              onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekStart: Number(v) || 0 } : p)))} />
-            <LabeledInput label="Last week" type="number" min="1" max="52" value={String(phase.weekEnd || "")}
-              onChange={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekEnd: Number(v) || 0 } : p)))} />
+            <DraftField label="First week" type="number" min="1" max="52" value={phase.weekStart || ""}
+              onCommit={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekStart: Number(v) || 0 } : p)))} />
+            <DraftField label="Last week" type="number" min="1" max="52" value={phase.weekEnd || ""}
+              onCommit={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, weekEnd: Number(v) || 0 } : p)))} />
           </div>
+          {/* The two things every built-in phase carries and a hand-built one
+              could not: what the phase is for, and how hard it should feel. */}
+          <DraftField label="What this phase is for" value={phase.objective || ""}
+            onCommit={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, objective: v } : p)))} />
+          <DraftField label="How hard it should feel" value={phase.intensityNote || ""}
+            onCommit={(v) => setPhases(open.phases.map((p) => (p.id === phase.id ? { ...p, intensityNote: v } : p)))} />
           {(phase.days || []).map((day) => (
             <div key={day.id} className="blocked-row">
               <span>{day.name || `Day ${day.label}`} — {(day.sections || []).reduce((n, sc) => n + (sc.exercises || []).length, 0)} exercise(s)</span>
               <span style={{ display: "flex", gap: 8 }}>
                 <button className="link-btn" onClick={() => setEditingDay({ phaseId: phase.id, dayId: day.id })}>Edit</button>
+                {/* Twelve weeks of training is mostly the same day written out
+                    again with the numbers moved. Without this, building one
+                    means typing every exercise from scratch every time. */}
+                <button className="link-btn" onClick={() => setPhases(open.phases.map((p) => (p.id !== phase.id ? p : {
+                  ...p,
+                  days: [...p.days, { ...JSON.parse(JSON.stringify(day)), id: uid(),
+                    label: String(p.days.length + 1), name: `${day.name || `Day ${day.label}`} copy`,
+                    sections: JSON.parse(JSON.stringify(day.sections || [])).map((sc) => ({ ...sc, id: uid(),
+                      exercises: (sc.exercises || []).map((e) => ({ ...e, id: uid() })) })) }],
+                })))}>Duplicate</button>
                 <button className="link-btn" onClick={() => setPhases(open.phases.map((p) => (p.id === phase.id
                   ? { ...p, days: p.days.filter((d) => d.id !== day.id) } : p)))}>Remove</button>
               </span>
@@ -13460,6 +13522,19 @@ function ProgramBuilder({ client, onPersist }) {
             ? { ...p, days: [...(p.days || []), { id: uid(), label: String((p.days || []).length + 1), name: `Day ${(p.days || []).length + 1}`, intent: "",
                 sections: [{ id: uid(), type: "strength", name: "Main strength", exercises: [] }] }] }
             : p)))}><Plus size={14} /> Add a day</button>
+          <button className="link-btn" style={{ marginTop: 8, marginRight: 12 }} onClick={() => {
+            const last = Math.max(0, ...open.phases.map((p) => Number(p.weekEnd) || 0));
+            const span = Math.max(1, (Number(phase.weekEnd) || 1) - (Number(phase.weekStart) || 1) + 1);
+            const copy = JSON.parse(JSON.stringify(phase));
+            copy.id = uid();
+            copy.name = `${phase.name || "Phase"} copy`;
+            copy.weekStart = last + 1;
+            copy.weekEnd = last + span;
+            copy.days = (copy.days || []).map((d) => ({ ...d, id: uid(),
+              sections: (d.sections || []).map((sc) => ({ ...sc, id: uid(),
+                exercises: (sc.exercises || []).map((e) => ({ ...e, id: uid() })) })) }));
+            setPhases([...open.phases, copy]);
+          }}>Duplicate this phase</button>
           {open.phases.length > 1 && (
             <button className="link-btn" style={{ marginTop: 8 }}
               onClick={() => setPhases(open.phases.filter((p) => p.id !== phase.id))}>Remove this phase</button>
@@ -13474,6 +13549,13 @@ function ProgramBuilder({ client, onPersist }) {
           days: [{ id: uid(), label: "1", name: "Day 1", intent: "",
             sections: [{ id: uid(), type: "strength", name: "Main strength", exercises: [] }] }] }]);
       }}><Plus size={14} /> Add a phase</button>
+
+      {/* The warm-up runs before every session in the program, so it belongs
+          to the program rather than to any one day. Every built-in program
+          has a real one; a draft had none it could touch. */}
+      <button className="btn-ghost wide" onClick={() => setEditingWarmup(true)}>
+        <Pencil size={14} /> Edit the warm-up ({(open.warmup || []).length} block{(open.warmup || []).length === 1 ? "" : "s"})
+      </button>
 
       {confirmUse ? (
         <div className="adjust-box" style={{ marginTop: 14 }}>
@@ -13494,7 +13576,9 @@ function ProgramBuilder({ client, onPersist }) {
       ) : (
         <button className="btn-primary wide" style={{ marginTop: 14 }} disabled={problems.length > 0}
           onClick={() => setConfirmUse(true)}>
-          {problems.length > 0 ? "Fix the list above to use this" : "Train on this program"}
+          {exerciseCount === 0 ? "Add some exercises first"
+            : problems.length > 0 ? "Fix the list above to use this"
+            : "Train on this program"}
         </button>
       )}
 
@@ -13516,6 +13600,10 @@ function ProgramBuilder({ client, onPersist }) {
         <DayEditor client={client} program={open} onProgramChange={updateOpen}
           phaseId={editingDay.phaseId} dayId={editingDay.dayId}
           onClose={() => setEditingDay(null)} onPersist={onPersist} />
+      )}
+      {editingWarmup && (
+        <WarmupEditor client={client} program={open} onProgramChange={updateOpen}
+          onClose={() => setEditingWarmup(false)} onPersist={onPersist} />
       )}
     </>
   );
@@ -13701,15 +13789,23 @@ function DayEditor({ client, program, onProgramChange, phaseId, dayId, onClose, 
   );
 }
 
-function WarmupEditor({ client, onClose, onPersist }) {
-  const [blocks, setBlocks] = useState(JSON.parse(JSON.stringify(client.program.warmup || defaultWarmup())));
+// Same change the day editor took: told which program to work on, rather
+// than reaching into the one you are training on.
+function WarmupEditor({ client, program, onProgramChange, onClose, onPersist }) {
+  const prog = program || client.program;
+  const [blocks, setBlocks] = useState(JSON.parse(JSON.stringify(prog.warmup || defaultWarmup())));
   const updateBlockField = (bIdx, field, value) => setBlocks((prev) => { const next = [...prev]; next[bIdx] = { ...next[bIdx], [field]: value }; return next; });
   const updateItemField = (bIdx, iIdx, field, value) => setBlocks((prev) => { const next = [...prev]; const items = [...next[bIdx].items]; items[iIdx] = { ...items[iIdx], [field]: value }; next[bIdx] = { ...next[bIdx], items }; return next; });
   const addItem = (bIdx) => setBlocks((prev) => { const next = [...prev]; next[bIdx] = { ...next[bIdx], items: [...next[bIdx].items, { id: uid(), name: "New item", detail: "", videoUrl: "" }] }; return next; });
   const removeItem = (bIdx, iIdx) => setBlocks((prev) => { const next = [...prev]; next[bIdx] = { ...next[bIdx], items: next[bIdx].items.filter((_, i) => i !== iIdx) }; return next; });
   const addBlock = () => setBlocks((prev) => [...prev, { id: uid(), block: "New Block", duration: "", items: [] }]);
   const removeBlock = (bIdx) => setBlocks((prev) => prev.filter((_, i) => i !== bIdx));
-  const save = async () => { await onPersist({ ...client, program: { ...client.program, warmup: blocks } }); onClose(); };
+  const save = async () => {
+    const nextProgram = { ...prog, warmup: blocks };
+    if (onProgramChange) await onProgramChange(nextProgram);
+    else await onPersist({ ...client, program: nextProgram });
+    onClose();
+  };
 
   return (
     <ModalShell onClose={onClose} title="Edit Warm-Up" fullscreen>
@@ -13771,8 +13867,21 @@ function MEPoolEditor({ client, onClose, onPersist }) {
     </ModalShell>
   );
 }
-function LabeledInput({ label, value, onChange, type = "text", step, inputMode, min, max }) {
-  return <label className="labeled-input"><span>{label}</span><input type={type} step={step} inputMode={inputMode} min={min} max={max} value={value ?? ""} onChange={(e) => onChange(e.target.value)} /></label>;
+function LabeledInput({ label, value, onChange, onBlur, type = "text", step, inputMode, min, max }) {
+  return <label className="labeled-input"><span>{label}</span><input type={type} step={step} inputMode={inputMode} min={min} max={max} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} /></label>;
+}
+
+// A text box on a draft, which saves when you leave it rather than on every
+// key. Wiring these straight to the save was seventeen database writes for a
+// seventeen-character program name — fine on a laptop, not fine on a phone on
+// gym wifi, and not fine for anyone paying per write.
+function DraftField({ label, value, onCommit, type, min, max, inputMode }) {
+  const asText = value == null ? "" : String(value);
+  const [draft, setDraft] = useState(asText);
+  useEffect(() => { setDraft(asText); }, [asText]);
+  return <LabeledInput label={label} value={draft} type={type} min={min} max={max} inputMode={inputMode}
+    onChange={setDraft}
+    onBlur={() => { if (draft !== asText) onCommit(draft); }} />;
 }
 
 /* ============================== HISTORY TAB ============================== */
@@ -15566,6 +15675,13 @@ function GlobalStyle() {
       .program-ex-row:first-of-type { border-top: none; }
       .edit-ex-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
       .edit-ex-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+      /* A flex child will not shrink below the width of its content unless it
+         is told it may, so the text box held the row open and pushed the
+         delete button eight pixels off the right of a phone. The app-shell
+         hides the overflow, so nothing scrolled — the button was simply cut in
+         half. Both editors use this row. */
+      .edit-ex-row > * { min-width: 0; }
+      .edit-ex-row > .icon-btn { flex: 0 0 auto; }
       .edit-ex-row.four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
       .edit-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 16px; }
       .edit-input:disabled { opacity: 0.6; }
