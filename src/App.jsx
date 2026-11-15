@@ -3245,6 +3245,164 @@ function sectionHeadline(resolvedSec) {
   }
   return resolvedSec.name;
 }
+// =========================================================================
+// WHAT A PROGRAM HAS TO SATISFY BEFORE SOMEBODY ELSE TRAINS ON IT
+// =========================================================================
+// The five harnesses only ever saw the four programs in this file. A program
+// somebody builds in the app goes through none of them, and it arrives under
+// this gym's name with its logo on it. So the rules those harnesses hold the
+// built-in programs to are written here as well, where the app itself can run
+// them, and a program that fails one cannot be published.
+//
+// Every rule earned its place by being a mistake that was actually made. The
+// max-effort one is the mistake this program shipped with for months: a
+// ladder ending at 100% with nothing in reserve, twice a week, for an athlete
+// who also trains on the mat. The ramp rule is what stops a "build-up" that
+// goes 50 then 95. The session-length rule is what stops a program nobody
+// finishes.
+//
+// These are floors, not coaching. A program can pass every one of them and
+// still be a poor program — that is what the review step is for. What they
+// catch is the kind of mistake that hurts somebody.
+const PUBLISH_MAX_SESSION_MINUTES = 90;
+const PUBLISH_MAX_TRUE_SINGLES = 4;
+// How big a step up is reasonable depends on where you already are, which is
+// how warming up actually works: nobody creeps from 45% to 50%, and nobody
+// should leap from 88% to 100%. A flat cap was the first attempt and it was
+// wrong in both directions — it failed Program B forty times for a perfectly
+// ordinary 45-to-60 warm-up jump while still allowing 88 straight to 100.
+// The numbers come from measuring every jump in the four built-in programs:
+// below 70% they run to 20 points, from 70 to 84 they run to 15, and once
+// past 85 the biggest one anywhere is 6.
+function rampJumpAllowed(fromPct) {
+  if (fromPct < 70) return 20;
+  if (fromPct < 85) return 15;
+  return 10;
+}
+
+function programProblems(program, opts) {
+  const problems = [];
+  const say = (rule, where, detail) => problems.push({ rule, where, detail });
+  if (!program || !Array.isArray(program.phases) || !program.phases.length) {
+    say("The program is empty", "", "A program needs at least one phase with a day in it.");
+    return problems;
+  }
+  const perWeek = Number(program.sessionsPerWeek) || 0;
+  if (perWeek < 1) say("No sessions a week", "", "Say how many sessions a week this program is for.");
+
+  // The weeks have to be one unbroken run from 1, or the app cannot work out
+  // which week an athlete is in.
+  const spans = program.phases
+    .map((p) => ({ name: p.name || "a phase", a: Number(p.weekStart), b: Number(p.weekEnd) }))
+    .sort((x, y) => x.a - y.a);
+  let expect = 1;
+  spans.forEach((sp) => {
+    if (!Number.isFinite(sp.a) || !Number.isFinite(sp.b) || sp.b < sp.a) {
+      say("A phase covers no weeks", sp.name, `Weeks read ${sp.a} to ${sp.b}.`);
+      return;
+    }
+    if (sp.a !== expect) {
+      say("The weeks do not run on from each other", sp.name,
+        `This phase starts at week ${sp.a}, and the phase before it ended at week ${expect - 1}.`);
+    }
+    expect = sp.b + 1;
+  });
+
+  let trueSingles = 0;
+  const totalWeeks = Math.max(...program.phases.map((p) => Number(p.weekEnd) || 0));
+  if (!(totalWeeks > 0)) say("The program has no weeks in it", "", "Give at least one phase a week range.");
+
+  program.phases.forEach((phase) => {
+    if (!Array.isArray(phase.days) || !phase.days.length) {
+      say("A phase with no days", phase.name || "a phase", "Add at least one day to it.");
+      return;
+    }
+    if (phase.days.length !== perWeek && perWeek) {
+      say("The days do not match the week", phase.name || "a phase",
+        `This phase has ${phase.days.length} day(s) but the program says ${perWeek} session(s) a week.`);
+    }
+    for (let week = Number(phase.weekStart) || 1; week <= (Number(phase.weekEnd) || 0); week++) {
+      phase.days.forEach((day) => {
+        const where = `week ${week}, day ${day.label || day.name || "?"}`;
+        let secs;
+        try {
+          secs = resolveDaySections(day, week, program, phase, false,
+            opts || { injuryAreas: [], excludedExercises: [], blockNumber: 1 });
+        } catch (err) {
+          say("A day the app cannot read", where, String(err && err.message ? err.message : err));
+          return;
+        }
+        const named = [];
+        (secs || []).forEach((sec) => {
+          const list = sec.exercises || [];
+          if (!list.length) {
+            say("An empty section", `${where} — ${sec.name || sec.type || "a section"}`,
+              "Either put an exercise in it or take it out.");
+          }
+          list.forEach((e) => {
+            const label = `${where} — ${e.name || "an unnamed exercise"}`;
+            if (!e.name || !String(e.name).trim()) say("An exercise with no name", where, "Every exercise needs a name.");
+            else named.push(String(e.name).trim().toLowerCase());
+            const hasScheme = (e.perSetTargets && e.perSetTargets.length) || e.reps || e.sets;
+            if (!hasScheme) say("An exercise with no sets or reps", label, "Say how many sets and reps it is.");
+
+            const targets = (e.perSetTargets || []).filter((t) => t && t.pct1rm != null);
+            if (targets.length) {
+              const pcts = targets.map((t) => Number(t.pct1rm));
+              if (pcts.some((p) => !(p > 0 && p <= 100))) {
+                say("A percentage that is not a percentage", label,
+                  `The sets read ${pcts.join("/")}%. A share of somebody's one-rep max has to land between 1 and 100.`);
+              }
+              if (targets.length >= 2) {
+                for (let i = 1; i < pcts.length; i++) {
+                  if (pcts[i] < pcts[i - 1]) {
+                    say("The build-up goes down", label,
+                      `The sets read ${pcts.join("/")}%. Warm-up sets climb towards the top set.`);
+                    break;
+                  }
+                  const allowed = rampJumpAllowed(pcts[i - 1]);
+                  if (pcts[i] - pcts[i - 1] > allowed) {
+                    say("A jump too big to warm up through", label,
+                      `${pcts[i - 1]}% straight to ${pcts[i]}%. From ${pcts[i - 1]}% the step should be ${allowed} points or less.`);
+                    break;
+                  }
+                }
+              }
+              const top = targets[targets.length - 1];
+              if (Number(top.pct1rm) >= 100 && Number(top.rir || 0) === 0) {
+                trueSingles += 1;
+                if (targets.length < 3) {
+                  say("A top single with no way up to it", label,
+                    "An all-out single needs at least two build-up sets before it.");
+                }
+              }
+            }
+          });
+        });
+        const dup = named.filter((n, i) => named.indexOf(n) !== i);
+        [...new Set(dup)].forEach((n) => say("The same exercise twice in one session", where, `"${n}" appears more than once.`));
+
+        try {
+          const shape = sessionShape(secs, program.warmup);
+          if (shape && shape.minutes > PUBLISH_MAX_SESSION_MINUTES) {
+            say("A session longer than people finish", where,
+              `About ${shape.minutes} minutes. Keep it to ${PUBLISH_MAX_SESSION_MINUTES} or trim the work.`);
+          }
+        } catch (err) { /* a shape we cannot measure is caught by the rules above */ }
+      });
+    }
+  });
+
+  if (trueSingles > PUBLISH_MAX_TRUE_SINGLES) {
+    say("Too many all-out singles", "",
+      `${trueSingles} sets across the program end at 100% with nothing in reserve. `
+      + `Grapplers train on the mat as well, and the published guidance is a handful of PR lifts a block, not one a week. `
+      + `Keep it to ${PUBLISH_MAX_TRUE_SINGLES} or leave a rep in reserve.`);
+  }
+  return problems;
+}
+const canPublishProgram = (program, opts) => programProblems(program, opts).length === 0;
+
 function totalSessionsIn(program) {
   const perWeek = program.sessionsPerWeek || 3;
   const totalWeeks = Math.max(...program.phases.map((p) => p.weekEnd));

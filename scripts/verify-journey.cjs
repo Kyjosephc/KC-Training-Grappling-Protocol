@@ -3004,6 +3004,131 @@ check("the way up to the top set is still a ramp", () => {
   });
 });
 
+console.log("\nWhat a program has to pass before anyone else trains on it");
+
+// A minimal program that passes, used as the starting point for each way of
+// breaking one. Built by hand rather than from a template so every rule below
+// is broken deliberately and in one place.
+const okProgram = (mutate) => {
+  const p = {
+    id: "p", name: "Test program", sessionsPerWeek: 1,
+    conjugate: {}, warmup: [], mobility: [],
+    phases: [{
+      id: "ph", name: "Phase 1", weekStart: 1, weekEnd: 1, days: [{
+        id: "d", label: "1", name: "Day A", sections: [{
+          id: "s", type: "strength", name: "Main strength", exercises: [{
+            id: "e", name: "Back Squat", sets: 3, reps: "5", rir: 2, rest: "2 minutes",
+            perSetTargets: [
+              { reps: 5, rir: 4, pct1rm: 60 },
+              { reps: 5, rir: 3, pct1rm: 70 },
+              { reps: 5, rir: 2, pct1rm: 78 },
+            ],
+          }],
+        }],
+      }],
+    }],
+  };
+  if (mutate) mutate(p);
+  return p;
+};
+
+check("a program with nothing wrong with it publishes", () => {
+  const probs = A.programProblems(okProgram());
+  if (probs.length) {
+    throw new Error("the baseline program was refused: "
+      + probs.map((x) => `${x.rule} (${x.where})`).join("; "));
+  }
+  if (!A.canPublishProgram(okProgram())) throw new Error("canPublishProgram disagrees with programProblems");
+});
+
+check("the four programs in this app pass their own gate", () => {
+  // The gate is held to the same standard it holds other people to. If a
+  // change to a built-in program would fail the rules, that is worth knowing
+  // before the rule is used to refuse somebody else's work.
+  ["A", "B", "C", "D"].forEach((v) => {
+    const probs = A.programProblems(A.buildProgramVariant(v));
+    if (probs.length) {
+      throw new Error(`Program ${v} fails its own gate: `
+        + probs.slice(0, 3).map((x) => `${x.rule} — ${x.where}`).join("; "));
+    }
+  });
+});
+
+check("every way of breaking a program is actually caught", () => {
+  // Each entry is a mistake somebody will make, and the words the rule has to
+  // answer with. A gate that passes everything is not a gate.
+  const cases = [
+    ["nothing at all", (p) => { p.phases = []; }, /empty/i],
+    ["a phase with no days", (p) => { p.phases[0].days = []; }, /no days/i],
+    ["weeks that skip", (p) => {
+      p.phases.push({ id: "p2", name: "Phase 2", weekStart: 5, weekEnd: 6, days: p.phases[0].days });
+    }, /run on from each other/i],
+    ["a section with nothing in it", (p) => { p.phases[0].days[0].sections[0].exercises = []; }, /empty section/i],
+    ["an exercise with no name", (p) => { p.phases[0].days[0].sections[0].exercises[0].name = ""; }, /no name/i],
+    ["an exercise with no sets or reps", (p) => {
+      const e = p.phases[0].days[0].sections[0].exercises[0];
+      e.reps = ""; e.sets = 0; e.perSetTargets = null;
+    }, /no sets or reps/i],
+    ["a build-up that goes down", (p) => {
+      p.phases[0].days[0].sections[0].exercises[0].perSetTargets = [
+        { reps: 3, rir: 2, pct1rm: 85 }, { reps: 3, rir: 2, pct1rm: 70 }];
+    }, /goes down/i],
+    ["a leap from a heavy set to a max", (p) => {
+      p.phases[0].days[0].sections[0].exercises[0].perSetTargets = [
+        { reps: 3, rir: 3, pct1rm: 70 }, { reps: 2, rir: 2, pct1rm: 88 }, { reps: 1, rir: 0, pct1rm: 100 }];
+    }, /too big/i],
+    ["a percentage over 100", (p) => {
+      p.phases[0].days[0].sections[0].exercises[0].perSetTargets = [{ reps: 1, rir: 0, pct1rm: 140 }];
+    }, /not a percentage/i],
+    ["the same lift twice in one session", (p) => {
+      const sec = p.phases[0].days[0].sections[0];
+      sec.exercises.push({ ...sec.exercises[0], id: "e2" });
+    }, /twice in one session/i],
+    ["an all-out single with no warm-up", (p) => {
+      p.phases[0].days[0].sections[0].exercises[0].perSetTargets = [{ reps: 1, rir: 0, pct1rm: 100 }];
+    }, /no way up to it/i],
+  ];
+  cases.forEach(([what, mutate, wants]) => {
+    const probs = A.programProblems(okProgram(mutate));
+    if (!probs.length) throw new Error(`${what}: published with no complaint at all`);
+    const hit = probs.find((x) => wants.test(x.rule));
+    if (!hit) {
+      throw new Error(`${what}: refused, but for the wrong reason — ${probs.map((x) => x.rule).join("; ")}`);
+    }
+    if (!hit.detail || hit.detail.length < 15) {
+      throw new Error(`${what}: "${hit.rule}" does not say enough to act on`);
+    }
+  });
+});
+
+check("an ordinary warm-up jump is not treated as a leap", () => {
+  // The rule that was wrong first time round. Forty-five to sixty on an empty
+  // bar is how everybody warms up; eighty-eight to a hundred is the one that
+  // hurts people. A gate that cries wolf at the first gets ignored at the
+  // second.
+  const fine = okProgram((p) => {
+    p.phases[0].days[0].sections[0].exercises[0].perSetTargets = [
+      { reps: 5, rir: 5, pct1rm: 45 }, { reps: 5, rir: 4, pct1rm: 60 },
+      { reps: 5, rir: 3, pct1rm: 72 }, { reps: 3, rir: 2, pct1rm: 82 }];
+  });
+  const probs = A.programProblems(fine).filter((x) => /too big/i.test(x.rule));
+  if (probs.length) throw new Error(`an ordinary warm-up was refused: ${probs[0].detail}`);
+});
+
+check("a program nobody could finish is refused", () => {
+  const long = okProgram((p) => {
+    const sec = p.phases[0].days[0].sections[0];
+    for (let i = 0; i < 40; i++) {
+      sec.exercises.push({ id: "x" + i, name: "Accessory " + i, sets: 5, reps: "10",
+        rir: 2, rest: "2 minutes" });
+    }
+  });
+  const probs = A.programProblems(long);
+  if (!probs.some((x) => /longer than people finish/i.test(x.rule))) {
+    throw new Error(`forty extra exercises published as a session: ${probs.map((x) => x.rule).join("; ") || "no complaint"}`);
+  }
+});
+
 console.log("\nMedals");
 
 check("only a finished week is won", () => {
