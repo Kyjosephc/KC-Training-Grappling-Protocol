@@ -6039,39 +6039,67 @@ const PROGRAM_VARIANT_LABELS = {
 // could not stand behind was left out rather than guessed at — misattribution
 // is rife with these figures, Bruce Lee most of all. The Musashi lines are
 // from the Dokkodo, his twenty-one precepts, checked against the full text.
+// Lines from people who actually did the thing, and from the ones who thought
+// hardest about doing it. Two rules, and the second is the one that does the
+// work.
+//
+// Nothing that would fit on a poster in a corporate stairwell. Cut for being
+// filler rather than for being wrong: "nobody cares, work harder", "keep
+// hammering", "we're here to take over", Jordan's nine thousand missed shots,
+// Churchill's "never give in", four of Musashi's Dokkodo lines that are
+// genuinely deep and have nothing to say to somebody about to squat. Fifteen
+// went. The average line is better for it.
+//
+// And nothing attributed to somebody who did not say it. Every Rollins line
+// below was read off the essay rather than recalled — several that nearly
+// went in from memory turned out to be worded differently.
+//
+// "We don't rise to the level of our expectations; we fall to the level of
+// our training" was in this library attributed to Archilochus, and is gone.
+// The classicists who went looking found no fragment anything like it; the
+// trail ends at an unnamed Navy SEAL and the self-help industry. It was one
+// of the best lines here and it still went, because the rule below — every
+// quote is attributed to a real person — is worth more than any one line.
+//
+// Henry Rollins, "Iron and the Soul", Details magazine, 1994, is the single
+// best source here: it is about lifting specifically, it is not sentimental
+// about it, and it was written by somebody who did the work.
 const MENTAL_COACHING_LIBRARY = [
+  { quote: "The Iron never lies to you.", author: "Henry Rollins" },
+  { quote: "Friends may come and go. But two hundred pounds is always two hundred pounds.", author: "Henry Rollins" },
+  { quote: "That which you work against will always work against you.", author: "Henry Rollins" },
+  { quote: "I have never met a truly strong person who didn't have self-respect.", author: "Henry Rollins" },
+  { quote: "Pain is not my enemy; it is my call to greatness.", author: "Henry Rollins" },
+  { quote: "I learned that nothing good comes without work and a certain amount of pain.", author: "Henry Rollins" },
+  { quote: "I believe that when the body is strong, the mind thinks strong thoughts.", author: "Henry Rollins" },
+  { quote: "The Iron is the great reference point, the all-knowing perspective giver.", author: "Henry Rollins" },
+  { quote: "Learning about what you're made of is always time well spent, and I have found no better teacher.", author: "Henry Rollins" },
+  { quote: "Muscle mass does not always equal strength.", author: "Henry Rollins" },
+  { quote: "Strength reveals itself through character.", author: "Henry Rollins" },
+  { quote: "The Iron had taught me how to live.", author: "Henry Rollins" },
+
   { quote: "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times.", author: "Bruce Lee" },
   { quote: "Absorb what is useful, discard what is useless, and add what is specifically your own.", author: "Bruce Lee" },
   { quote: "Do not pray for an easy life; pray for the strength to endure a difficult one.", author: "Bruce Lee" },
-  { quote: "If you spend too much time thinking about a thing, you'll never get it done.", author: "Bruce Lee" },
-  { quote: "Be water, my friend.", author: "Bruce Lee" },
-  { quote: "Accept everything just the way it is.", author: "Miyamoto Musashi, Dokkodo" },
   { quote: "Do not regret what you have done.", author: "Miyamoto Musashi, Dokkodo" },
   { quote: "Think lightly of yourself and deeply of the world.", author: "Miyamoto Musashi, Dokkodo" },
-  { quote: "Do not act following customary beliefs.", author: "Miyamoto Musashi, Dokkodo" },
-  { quote: "In all things have no preferences.", author: "Miyamoto Musashi, Dokkodo" },
-  { quote: "Never stray from the Way.", author: "Miyamoto Musashi, Dokkodo" },
+
   { quote: "It hurts, but that's all it does. The most difficult part of the training is training your mind.", author: "David Goggins" },
   { quote: "The most important conversations you'll ever have are the ones you'll have with yourself.", author: "David Goggins" },
   { quote: "Motivation is crap. Motivation comes and goes.", author: "David Goggins" },
   { quote: "You are in danger of living a life so comfortable and soft that you will die without ever realizing your true potential.", author: "David Goggins" },
-  { quote: "Nobody cares. Work harder.", author: "Cam Hanes" },
-  { quote: "Keep hammering.", author: "Cam Hanes" },
   { quote: "There's no talent here, this is hard work. This is an obsession.", author: "Conor McGregor" },
-  { quote: "We're not here to take part. We're here to take over.", author: "Conor McGregor" },
   { quote: "Precision beats power, and timing beats speed.", author: "Conor McGregor" },
+
   { quote: "Always assume that your opponent is going to be bigger, stronger and faster than you, so that you learn to rely on technique, timing and leverage rather than brute strength.", author: "Helio Gracie" },
   { quote: "If you think, you are late. If you are late, you use strength. If you use strength, you tire. And if you tire, you die.", author: "Saulo Ribeiro" },
   { quote: "Flow with the go.", author: "Rickson Gracie" },
   { quote: "Once you've wrestled, everything else in life is easy.", author: "Dan Gable" },
-  { quote: "Gold medals aren't really made of gold. They're made of sweat, determination, and a hard-to-find alloy called guts.", author: "Dan Gable" },
   { quote: "Discipline equals freedom.", author: "Jocko Willink" },
-  { quote: "The Iron never lies to you.", author: "Henry Rollins" },
+  { quote: "Everybody has a plan until they get punched in the mouth.", author: "Mike Tyson" },
   { quote: "The fight is won or lost far away from witnesses — behind the lines, in the gym, and out there on the road, long before I dance under those lights.", author: "Muhammad Ali" },
   { quote: "Champions aren't made in gyms. Champions are made from something they have deep inside them — a desire, a dream, a vision.", author: "Muhammad Ali" },
-  { quote: "It isn't the mountains ahead to climb that wear you out; it's the pebble in your shoe.", author: "Muhammad Ali" },
-  { quote: "Everybody has a plan until they get punched in the mouth.", author: "Mike Tyson" },
-  { quote: "We don't rise to the level of our expectations; we fall to the level of our training.", author: "Archilochus" },
+
   { quote: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
   { quote: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
   { quote: "Waste no more time arguing what a good man should be. Be one.", author: "Marcus Aurelius" },
@@ -6080,11 +6108,7 @@ const MENTAL_COACHING_LIBRARY = [
   { quote: "No man is free who is not master of himself.", author: "Epictetus" },
   { quote: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
   { quote: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
-  { quote: "I've missed more than 9,000 shots in my career. I've lost almost 300 games. Twenty-six times I've been trusted to take the game-winning shot and missed. I've failed over and over and over again in my life. And that is why I succeed.", author: "Michael Jordan" },
   { quote: "Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.", author: "Theodore Roosevelt" },
-  { quote: "Do not let what you cannot do interfere with what you can do.", author: "John Wooden" },
-  { quote: "Never give in, never give in, never, never, never, never — in nothing, great or small, large or petty — never give in.", author: "Winston Churchill" },
-  { quote: "You may encounter many defeats, but you must not be defeated.", author: "Maya Angelou" },
 ];
 
 // Quotes earn their place by being rare. They used to sit on every exercise
