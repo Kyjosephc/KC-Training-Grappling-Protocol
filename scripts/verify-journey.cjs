@@ -3293,14 +3293,17 @@ check("only one program claims the sprint work, and it is the one that has it", 
 check("the weeks a card names are the weeks the program keeps", () => {
   A.PROGRAM_CHOICES.forEach((c) => {
     const f = programFacts(c.id);
-    const pr = /weeks (\d+) and (\d+)/i.exec(c.blurb || "");
+    // Anchored on the claim itself. A bare "weeks X and Y" also matches the
+    // deload sentence, and this check then told a card that its deload weeks
+    // were the wrong weeks for its all-out singles.
+    const pr = /all-out single[\s\S]{0,80}?weeks? (\d+) and (\d+)/i.exec(c.blurb || "");
     if (pr) {
       const named = [Number(pr[1]), Number(pr[2])];
       if (named.join(",") !== f.prWeeks.join(",")) {
         throw new Error(`${c.id} names weeks ${named.join(" and ")} for its all-out singles; they fall in ${f.prWeeks.join(", ") || "no week"}`);
       }
     }
-    const dl = /[Dd]eloads on weeks ([\d, and]+)\./.exec(c.blurb || "");
+    const dl = /[Dd]eloads on weeks ((?:\d+[,\s]*(?:and\s+)?)+)/.exec(c.blurb || "");
     if (dl) {
       const named = (dl[1].match(/\d+/g) || []).map(Number);
       if (named.join(",") !== f.deloads.join(",")) {

@@ -5129,7 +5129,7 @@ const PROGRAM_CHOICES = [
   { id: "C", days: 2, title: "Program C — Conjugate, Two Days",
     blurb: "Program A's method in two sessions of 55 to 70 minutes. One heavy main lift and one fast speed lift each session, rotating every couple of weeks, building to an all-out single twice in the block. There is no sprint or agility work anywhere in it, and that is deliberate rather than an oversight — two sessions a week has no room for it, and your mat time is already repeat-effort conditioning against somebody who is resisting. This is the two-day program to pick if you are competing." },
   { id: "D", days: 2, title: "Program D — Offseason Strength, Two Days",
-    blurb: "The only program with no percentages in it anywhere, so you need no tested max to run it — every set is prescribed by how hard it should feel. No maximal singles either. The lifts are paired, the load climbs while the sets stay put, and sessions run 45 to 70 minutes. Pick this for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days." },
+    blurb: "Program B's method in two sessions of 45 to 70 minutes, and the only program here with no percentages in it anywhere — so you need no tested max to run it at all. Every set is prescribed by how hard it should feel, there are no maximal singles, the lifts are paired, and the load climbs while the sets stay put. Deloads on weeks 8 and 12 only, because on two days the fatigue is coming from the mat and the mat does not take a week off. Two days carries about two thirds of B's weekly work, so expect this to build strength and hold the muscle you have rather than match what three days does. Pick it for a genuine offseason; if you are competing inside twelve weeks, Program C holds up better on two days." },
 ];
 // At signup the schedule picks the program rather than the other way round.
 // What the note above tells somebody who is choosing a program, in minutes of
@@ -5836,6 +5836,12 @@ function buildOffseasonTwoDay() {
     coachNote: "This is the two-day program for a genuine offseason with nothing on the calendar. If you are competing inside twelve weeks, Program C holds up better on two days — its stimulus is per-rep quality rather than accumulated volume, which is exactly what survives a short week. There is no sprint or agility work anywhere in this program, and that is deliberate rather than an oversight: two sessions and ninety minutes a week do not have room for it, and your mat time is already repeat-effort conditioning against a resisting opponent, which is the thing sprinting is a substitute for. If you ever find yourself with three days to give, Program A carries real sprint work.",
     warmup: defaultWarmup(),
     phases: [
+      // Weeks 1 to 4 run unbroken, and that is deliberate even though B comes
+      // off on week 4. Tried matching B here and verify:journey refused it,
+      // with the better argument: on a two-day program the fatigue is coming
+      // from the mat, and the mat does not deload on this calendar. Three
+      // scheduled easy weeks out of twelve would give up lifting stimulus
+      // without removing the thing actually making you tired.
       offseasonTwoDayPhase("Strength Base — Weeks 1 to 4", 1, 4, "base",
         "Four weeks to find what a real working weight is on each of the six main lifts. The sets and reps do not move; the load does.",
         "Three reps in reserve on every working set. If the weight you used last time felt like four or five in reserve, add to it — that is the whole progression and the app will suggest the step."),
