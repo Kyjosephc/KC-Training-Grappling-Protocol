@@ -4075,6 +4075,16 @@ const rpeProgramCues = {
   "Seal Row": "No seal row bench? A chest-supported dumbbell row on a steep incline bench trains the same thing — use that rather than skipping it. Chest stays flat on the bench the whole set — no heaving up off it to move the weight. Pull to the bottom of your ribs and squeeze the shoulder blades together at the top.",
 };
 
+// The labels the built-in programs put on an exercise. Offered as a list in
+// the editor rather than a free text box, so a program somebody builds shows
+// the same tags an athlete already knows from the ones that shipped.
+const EXERCISE_QUALITIES = [
+  "Max Effort", "Dynamic Effort", "Strength", "Accessory", "Posterior Chain",
+  "Pull", "Arms", "Core", "Grip", "Grip/Trunk", "Neck", "Durability", "Prehab",
+  "Rotational Power", "Rotational Strength", "Neuromuscular", "Alactic Power",
+  "Agility", "Movement Quality", "Conditioning",
+];
+
 function ex(o) {
   const base = { id: uid(), sets: 3, reps: "8", load: "", rir: 2, rest: "90 seconds", tempo: "", cues: "", purpose: "", quality: "", videoUrl: "", perSetTargets: null, ...o };
   if (!base.videoUrl) base.videoUrl = lookupVideo(base.name);
@@ -13776,6 +13786,27 @@ function DayEditor({ client, program, onProgramChange, phaseId, dayId, onClose, 
               {e.deWave ? <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Load is automatically set from this phase's Dynamic Effort percentage ({phase.dePercent || "—"}).</div>
                 : <LabeledInput label="Load" value={e.load} onChange={(v) => updateExField(sIdx, exIdx, "load", v)} />}
               <LabeledInput label="Purpose" value={e.purpose} onChange={(v) => updateExField(sIdx, exIdx, "purpose", v)} />
+              <LabeledInput label="Tempo (optional)" value={e.tempo || ""} onChange={(v) => updateExField(sIdx, exIdx, "tempo", v)} />
+              <label className="labeled-input">
+                <span>What kind of work this is</span>
+                <select className="select-input" value={e.quality || ""}
+                  onChange={(ev) => updateExField(sIdx, exIdx, "quality", ev.target.value)}>
+                  <option value="">No label</option>
+                  {EXERCISE_QUALITIES.map((q) => <option key={q} value={q}>{q}</option>)}
+                </select>
+              </label>
+              {/* The coaching. Every built-in exercise carries a few sentences
+                  on how to do it and what to stop for, and they are the most
+                  useful thing on the session screen — but there was no box to
+                  write one in, so a program somebody built had none. */}
+              <label className="labeled-input">
+                <span>Coaching notes — how to do it, what to watch, when to stop</span>
+                <textarea className="edit-input" rows={5} value={e.cues || ""}
+                  placeholder="Set the pins before your first working set. Brace before you unrack, not after. Stop the set the moment the bar slows or your back rounds — the last ugly rep is the one that hurts you."
+                  onChange={(ev) => updateExField(sIdx, exIdx, "cues", ev.target.value)} />
+              </label>
+              <PerSetTargetsEditor targets={e.perSetTargets}
+                onChange={(next) => updateExField(sIdx, exIdx, "perSetTargets", next)} />
               {!e.rotatingPool && <LabeledInput label="Video link" value={e.videoUrl} onChange={(v) => updateExField(sIdx, exIdx, "videoUrl", v)} />}
               {!e.rotatingPool && <LabeledInput label="Second video link (optional)" value={e.videoUrl2 || ""} onChange={(v) => updateExField(sIdx, exIdx, "videoUrl2", v)} />}
             </div>
@@ -13867,6 +13898,60 @@ function MEPoolEditor({ client, onClose, onPersist }) {
     </ModalShell>
   );
 }
+// Set-by-set targets: what percentage of their max, for how many reps, with
+// how many left in the tank. This is what the app reads to suggest a weight
+// and what the publishing rules read to decide whether a build-up is sane —
+// so without a way to write them, a program somebody built could not warm
+// anybody up and the ramp rules had nothing to check.
+function PerSetTargetsEditor({ targets, onChange }) {
+  const rows = Array.isArray(targets) ? targets : [];
+  const setRow = (i, patch) => onChange(rows.map((r, n) => (n === i ? { ...r, ...patch } : r)));
+  if (!rows.length) {
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <p className="muted" style={{ fontSize: 12, margin: "0 0 6px" }}>
+          Every set the same? Leave this alone. For a lift that builds up — warm-up sets into a
+          heavy top set — spell the sets out and the app will suggest a weight for each one.
+        </p>
+        <button type="button" className="btn-ghost" onClick={() => onChange([
+          { reps: 5, rir: 4, pct1rm: 60, note: "Warm-up" },
+          { reps: 3, rir: 2, pct1rm: 75, note: "Build" },
+          { reps: 3, rir: 1, pct1rm: 85, note: "Top set" },
+        ])}><Plus size={14} /> Build up to a top set</button>
+      </div>
+    );
+  }
+  return (
+    <div className="edit-ex-card" style={{ marginBottom: 10 }}>
+      <div className="room-group-label"><span>Set by set</span><span>{rows.length}</span></div>
+      {rows.map((r, i) => (
+        <div key={i} className="edit-ex-row">
+          <LabeledInput label="% of max" type="number" min="1" max="100" value={r.pct1rm ?? ""}
+            onChange={(v) => setRow(i, { pct1rm: v === "" ? null : Number(v) })} />
+          <LabeledInput label="Reps" value={r.reps ?? ""} onChange={(v) => setRow(i, { reps: v })} />
+          <LabeledInput label="In reserve" type="number" min="0" max="10" value={r.rir ?? ""}
+            onChange={(v) => setRow(i, { rir: v === "" ? null : Number(v) })} />
+          <LabeledInput label="Label" value={r.note ?? ""} onChange={(v) => setRow(i, { note: v })} />
+          <button type="button" className="icon-btn small" aria-label={`Remove set ${i + 1}`}
+            onClick={() => onChange(rows.filter((_, n) => n !== i))}><Trash2 size={14} /></button>
+        </div>
+      ))}
+      <button type="button" className="btn-ghost" onClick={() => {
+        const last = rows[rows.length - 1] || {};
+        onChange([...rows, { reps: last.reps ?? 3, rir: Math.max(0, (last.rir ?? 2) - 1),
+          pct1rm: Math.min(100, (last.pct1rm ?? 70) + 5), note: "" }]);
+      }}><Plus size={14} /> Add a set</button>
+      <button type="button" className="link-btn" style={{ marginLeft: 12 }}
+        onClick={() => onChange(null)}>Go back to the same weight every set</button>
+      <p className="muted" style={{ fontSize: 12, margin: "8px 0 0" }}>
+        Climb towards the top set rather than jumping to it. Below 70% a step of up to 20 points
+        is fine, 70 to 84 up to 15, and once past 85 keep it to 10 — the same rule the app checks
+        before a program can be shared.
+      </p>
+    </div>
+  );
+}
+
 function LabeledInput({ label, value, onChange, onBlur, type = "text", step, inputMode, min, max }) {
   return <label className="labeled-input"><span>{label}</span><input type={type} step={step} inputMode={inputMode} min={min} max={max} value={value ?? ""} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} /></label>;
 }
@@ -15682,7 +15767,12 @@ function GlobalStyle() {
          half. Both editors use this row. */
       .edit-ex-row > * { min-width: 0; }
       .edit-ex-row > .icon-btn { flex: 0 0 auto; }
-      .edit-ex-row.four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .edit-ex-row.four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: end; }
+      /* "Reps in reserve" wraps onto two lines on a phone and the other three
+         boxes stayed where they were, so the row stepped down in the middle.
+         The label takes the height of the tallest, and the boxes line up. */
+      .edit-ex-row.four > .labeled-input { display: flex; flex-direction: column; height: 100%; }
+      .edit-ex-row.four > .labeled-input > span { flex: 1 1 auto; }
       .edit-input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 16px; }
       .edit-input:disabled { opacity: 0.6; }
       .wide-input { flex: 1; }
