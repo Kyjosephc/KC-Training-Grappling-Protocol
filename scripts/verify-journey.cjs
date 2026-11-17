@@ -36,9 +36,26 @@ const A = require("../.journey.cjs").__t;
 
 let bad = 0;
 const found = [];
+// A check whose function returns a promise used to pass whatever it did: the
+// runner called fn(), caught nothing, printed "ok", and the rejection went off
+// into the void as an unhandled promise. One async check sat green here while
+// the behaviour it tested had been deleted. Promises are collected and settled
+// before the summary now, so an async check either passes or fails like every
+// other one.
+const pending = [];
 const check = (name, fn) => {
-  try { fn(); console.log("  ok   " + name); }
-  catch (e) { bad++; found.push(name + " — " + e.message); console.log("  FAIL " + name + "\n         " + e.message); }
+  const failed = (e) => {
+    bad++; found.push(name + " — " + e.message);
+    console.log("  FAIL " + name + "\n         " + e.message);
+  };
+  try {
+    const out = fn();
+    if (out && typeof out.then === "function") {
+      pending.push(out.then(() => console.log("  ok   " + name), failed));
+      return;
+    }
+    console.log("  ok   " + name);
+  } catch (e) { failed(e); }
 };
 
 const host = document.getElementById("root");
@@ -3067,6 +3084,49 @@ check("switching onto your own program copies it rather than sharing it", () => 
   if (A.clientOnDraft(client, null) !== client) throw new Error("no draft changed the client anyway");
 });
 
+check("a card about a shared program counts the program, not the claim", () => {
+  // The weeks and days on a browse card are derived from the program itself
+  // every time rather than stored alongside it, so a card cannot end up
+  // saying nine weeks about a twelve-week program the way the sign-up cards
+  // once did.
+  const p = A.blankProgram("Mine");
+  p.sessionsPerWeek = 2;
+  p.phases = [
+    { id: "a", name: "One", weekStart: 1, weekEnd: 4, days: [] },
+    { id: "b", name: "Two", weekStart: 5, weekEnd: 11, days: [] },
+  ];
+  const sum = A.sharedProgramSummary(p);
+  if (sum.weeks !== 11) throw new Error(`eleven weeks of phases summarised as ${sum.weeks}`);
+  if (sum.sessionsPerWeek !== 2) throw new Error(`two days summarised as ${sum.sessionsPerWeek}`);
+  // And nothing silly on nothing.
+  [null, undefined, {}, { phases: [] }].forEach((bad) => {
+    const r = A.sharedProgramSummary(bad);
+    if (typeof r.weeks !== "number" || typeof r.sessionsPerWeek !== "number") {
+      throw new Error(`${JSON.stringify(bad)} produced ${JSON.stringify(r)}`);
+    }
+  });
+});
+
+check("a program that fails its own rules cannot be shared", async () => {
+  // The button that offers to publish is disabled while anything is wrong,
+  // but the button is not the only way this function gets called. It checks
+  // again rather than trusting the screen that called it.
+  const broken = A.blankProgram("Broken");
+  broken.sessionsPerWeek = 3;   // one day, three sessions claimed
+  const res = await A.publishProgram("u", "Someone", broken, "A summary");
+  if (res.ok) throw new Error("a program with known problems was accepted for sharing");
+  // And it was refused for the RIGHT reason. Accepting "offline" here as well
+  // made this check pass even with the program check deleted, because the
+  // harness has no database — a gate that cannot tell the two apart is not
+  // gating anything.
+  if (res.reason !== "problems") {
+    throw new Error(`refused for "${res.reason}" rather than for the problems in it`);
+  }
+  if (!Array.isArray(res.problems) || !res.problems.length) {
+    throw new Error("refused without saying what to fix");
+  }
+});
+
 check("a program with nothing wrong with it publishes", () => {
   const probs = A.programProblems(okProgram());
   if (probs.length) {
@@ -4642,5 +4702,9 @@ check("only posts with a playable clip reach the wall", () => {
   no.forEach((p, i) => { if (A.isClip(p)) throw new Error(`non-clip ${i} was put on the wall`); });
 });
 
-console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
-process.exit(bad === 0 ? 0 : 1);
+(async () => {
+  // Nothing is reported until every async check has actually finished.
+  await Promise.all(pending);
+  console.log(bad === 0 ? "\nTwo athletes, no failures.\n" : `\n${bad} problem(s):\n` + found.map((f) => "  - " + f).join("\n") + "\n");
+  process.exit(bad === 0 ? 0 : 1);
+})();

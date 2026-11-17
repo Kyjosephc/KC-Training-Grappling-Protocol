@@ -1310,6 +1310,132 @@ let savesMissing = false;
 const savesReady = () => !savesMissing;
 const markSavesMissing = () => { savesMissing = true; };
 
+// =========================================================================
+// PROGRAMS ATHLETES BUILD AND SHARE
+// =========================================================================
+// A program leaves its author's account only after two things have happened:
+// it passed the app's own rules (programProblems is empty) and a human said
+// yes. The table enforces the second — nothing can be inserted as anything
+// but 'pending', and only the coach can move it off that.
+//
+// What another athlete takes is a copy, read once into their own record. The
+// author can keep editing their draft afterwards and it changes nothing for
+// anybody already running it, which is the whole reason it is a copy.
+const SHARED_MISSING = "shared-programs-missing";
+function isMissingSharedPrograms(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  if (code === "42P01" || code === "PGRST205" || code === "PGRST202") return true;
+  const msg = [error.message, error.details, error.hint].filter(Boolean).join(" ").toLowerCase();
+  return (msg.includes("shared_programs") || msg.includes("count_program_copy"))
+    && (msg.includes("does not exist") || msg.includes("could not find") || msg.includes("schema cache"));
+}
+let sharedMissing = false;
+const sharedProgramsReady = () => !sharedMissing;
+const markSharedMissing = () => { sharedMissing = true; };
+
+// What a browse card needs to show without opening the program. Derived here
+// rather than trusted from the row, so a card cannot say nine weeks about a
+// twelve-week program.
+function sharedProgramSummary(program) {
+  const phases = (program && program.phases) || [];
+  const weeks = phases.length ? Math.max(...phases.map((p) => Number(p.weekEnd) || 0)) : 0;
+  return { weeks, sessionsPerWeek: Number(program && program.sessionsPerWeek) || 0 };
+}
+
+async function publishProgram(userId, authorName, program, summary) {
+  // The program is judged before anything else is, including whether there is
+  // a database to send it to. Partly because the button is not the only way
+  // this gets called, and partly because "three of your days are empty" is
+  // worth hearing on a train with no signal — "check your connection" is not,
+  // when the real problem is the program.
+  const problems = programProblems(program);
+  if (problems.length) return { ok: false, reason: "problems", problems };
+  if (!supabase || !userId) return { ok: false, reason: "offline" };
+  if (!sharedProgramsReady()) return { ok: false, reason: SHARED_MISSING };
+  const { weeks, sessionsPerWeek } = sharedProgramSummary(program);
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("shared_programs").insert({
+      author_id: userId,
+      author_name: String(authorName || "An athlete").trim() || "An athlete",
+      title: String(program.name || "Untitled program").trim(),
+      summary: String(summary || "").trim(),
+      sessions_per_week: sessionsPerWeek,
+      weeks,
+      program,
+      status: "pending",
+    });
+    if (error) { if (isMissingSharedPrograms(error)) return SHARED_MISSING; throw error; }
+    return true;
+  });
+  if (outcome.ok && outcome.result === SHARED_MISSING) { markSharedMissing(); return { ok: false, reason: SHARED_MISSING }; }
+  return outcome.ok ? { ok: true } : { ok: false, reason: "failed" };
+}
+
+// Everything this person submitted, whatever state it is in — waiting,
+// approved or turned down. Somebody who hears nothing assumes it was lost.
+async function fetchMySubmittedPrograms(userId) {
+  if (!supabase || !userId) return LOAD_FAILED;
+  if (!sharedProgramsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("shared_programs")
+      .select("id, title, summary, status, review_note, copies, weeks, sessions_per_week, created_at")
+      .eq("author_id", userId).order("created_at", { ascending: false }).limit(50);
+    if (error) { if (isMissingSharedPrograms(error)) return SHARED_MISSING; throw error; }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === SHARED_MISSING) { markSharedMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function fetchApprovedPrograms() {
+  if (!supabase) return LOAD_FAILED;
+  if (!sharedProgramsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("shared_programs")
+      .select("id, author_name, title, summary, weeks, sessions_per_week, copies, created_at, program")
+      .eq("status", "approved").order("created_at", { ascending: false }).limit(100);
+    if (error) { if (isMissingSharedPrograms(error)) return SHARED_MISSING; throw error; }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === SHARED_MISSING) { markSharedMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function fetchPendingPrograms() {
+  if (!supabase) return LOAD_FAILED;
+  if (!sharedProgramsReady()) return [];
+  const outcome = await withRetry(async () => {
+    const { data, error } = await supabase.from("shared_programs")
+      .select("id, author_id, author_name, title, summary, weeks, sessions_per_week, created_at, program")
+      .eq("status", "pending").order("created_at", { ascending: true }).limit(50);
+    if (error) { if (isMissingSharedPrograms(error)) return SHARED_MISSING; throw error; }
+    return data || [];
+  });
+  if (outcome.ok && outcome.result === SHARED_MISSING) { markSharedMissing(); return []; }
+  return outcome.ok ? outcome.result : LOAD_FAILED;
+}
+
+async function decideSharedProgram(id, status, note, coachId) {
+  if (!supabase || !id) return { ok: false };
+  const outcome = await withRetry(async () => {
+    const { error } = await supabase.from("shared_programs")
+      .update({ status, review_note: String(note || ""), reviewed_by: coachId,
+        reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+    return true;
+  });
+  return { ok: !!outcome.ok };
+}
+
+// The tally is nice to have and the copy is not, so a failure here is
+// swallowed: nobody loses a program because a counter would not increment.
+async function countProgramCopy(id) {
+  if (!supabase || !id) return;
+  try { await supabase.rpc("count_program_copy", { p_id: id }); } catch (err) { /* ignore */ }
+}
+
 async function fetchMySaves(userId) {
   if (!supabase || !userId) return LOAD_FAILED;
   if (!savesReady()) return [];
@@ -8896,7 +9022,7 @@ function MainApp({ userId, onSignOut }) {
             onRefreshProgram={refreshProgramTemplate}
             onReloadClient={loadActiveClient} />
         )}
-        {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} />}
+        {tab === "program" && <ProgramTab client={client} isCoach={isCoach} onPersist={persistClient} userId={userId} />}
         {tab === "rules" && (
           <RulesGame
             belt={client.beltLevel}
@@ -13430,12 +13556,14 @@ function clientOnDraft(client, draft) {
   return { ...client, program: JSON.parse(JSON.stringify(draft)), sessionsCompleted: 0, blockNumber: 1 };
 }
 
-function ProgramBuilder({ client, onPersist }) {
+function ProgramBuilder({ client, onPersist, userId, isCoach }) {
   const drafts = Array.isArray(client.programDrafts) ? client.programDrafts : [];
   const [openId, setOpenId] = useState(null);
   const [editingDay, setEditingDay] = useState(null);
   const [editingWarmup, setEditingWarmup] = useState(false);
   const [confirmUse, setConfirmUse] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishNote, setPublishNote] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
   const open = drafts.find((d) => d.id === openId) || null;
 
@@ -13631,6 +13759,47 @@ function ProgramBuilder({ client, onPersist }) {
         </button>
       )}
 
+      {/* Sharing it. Two things have to be true before this does anything:
+          the program passes its own rules, and it says what it is for. The
+          second is not bureaucracy — somebody browsing decides off that one
+          sentence whether to give twelve weeks to it. */}
+      <div className="room-group" style={{ marginTop: 18 }}>
+        <div className="room-group-label"><span>Share it with the gym</span></div>
+        <DraftField label="What is this program for? One or two sentences."
+          value={open.shareSummary || ""} onCommit={(v) => setField({ shareSummary: v })} />
+        <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          Say who it suits and what it asks of them — how many days, roughly how long a session
+          takes, and what it is trying to build. The coach reads it before anybody else sees it,
+          and nothing goes out until they say yes.
+        </p>
+        <button className="btn-ghost wide" style={{ marginTop: 0 }}
+          disabled={publishing || problems.length > 0 || exerciseCount === 0 || !String(open.shareSummary || "").trim()}
+          onClick={async () => {
+            setPublishing(true); setPublishNote("");
+            const res = await publishProgram(userId, client.name || client.firstName, open, open.shareSummary);
+            setPublishing(false);
+            if (res.ok) {
+              setPublishNote("Sent to the coach. You will see it here once they have looked at it, and you can keep training on it in the meantime.");
+              emitToast({ kind: "info", autoDismissMs: 7000, message: "Sent to the coach for review." });
+            } else if (res.reason === SHARED_MISSING) {
+              setPublishNote(isCoach
+                ? "Sharing is not switched on in the database yet. Run supabase-shared-programs.sql in the Supabase SQL editor."
+                : "Sharing is not switched on yet. Kyle has one setup step left.");
+            } else if (res.reason === "problems") {
+              setPublishNote("Something in the program still needs fixing — check the list above.");
+            } else {
+              setPublishNote("Could not send it just now — check your connection and try again.");
+            }
+          }}>
+          {publishing ? "Sending…"
+            : exerciseCount === 0 ? "Add some exercises first"
+            : problems.length > 0 ? "Fix the list above to share this"
+            : !String(open.shareSummary || "").trim() ? "Say what it is for first"
+            : "Send to the coach to share"}
+        </button>
+        {publishNote && <p className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>{publishNote}</p>}
+      </div>
+
       {confirmDelete ? (
         <div className="adjust-box" style={{ marginTop: 10 }}>
           Delete “{open.name || "this program"}”? It cannot be undone.
@@ -13658,7 +13827,7 @@ function ProgramBuilder({ client, onPersist }) {
   );
 }
 
-function ProgramTab({ client, isCoach, onPersist }) {
+function ProgramTab({ client, isCoach, onPersist, userId }) {
   const [view, setView] = useState("overview"); // "overview" | "schedule"
   const [openPhase, setOpenPhase] = useState(client.program.phases[0]?.id);
   const [editingDay, setEditingDay] = useState(null);
@@ -13679,7 +13848,7 @@ function ProgramTab({ client, isCoach, onPersist }) {
     return (
       <div className="pad">
         {viewToggle}
-        <ProgramBuilder client={client} onPersist={onPersist} />
+        <ProgramBuilder client={client} onPersist={onPersist} userId={userId} isCoach={isCoach} />
       </div>
     );
   }
